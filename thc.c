@@ -10,31 +10,32 @@ u heapOn(u f, u x) {
   return hp - 2;
 }
 
-//char *s = "`I`I`#66``C.`#101``C.0";
 //char *s = "````:#B``:#eK0`T>";
 char *s = "`$``:#```:#```:#```:#```:#:``:##``:#B``:#```:#```:#:``:##``:#e``:#K``:#0``:#```:#T``:#>K";
-int readS() { return *s++; }
+u run();
 
-u parse(int (*next)()) {
-  u c = next();
-  printf("parsed: %c\n", c);
-  u t;
+u parseTerm() {
+  u c = run();
   switch(c) {
     case '0': return 0;
-    case '#': return heapOn('#', next());
+    case '#': return heapOn('#', run());
     case '`':
-      t = hp;
+      c = hp;
       hp += 2;
-      heap[t] = parse(next);
-      heap[t + 1] = parse(next);
-      return t;
+      heap[c] = parseTerm();
+      heap[c + 1] = parseTerm();
+      return c;
     default: return c;
   }
 }
 
-void reset(int (*next)()) {
+u parse() {
+  return parseTerm();
+}
+
+void reset(u root) {
   sp = heap + TOP - 3;
-  *sp = parse(next);
+  *sp = root;
 }
 
 u arg(u n) { return heap[sp [n] + 1]; }
@@ -49,7 +50,7 @@ void lazy(u height, u f, u x) {
 
 u harg(u i, u j) { return heapOn(arg(i), arg(j)); }
 
-int run() {
+u run() {
   int ch;
   for(;;) {
     u x = *sp;
@@ -59,13 +60,13 @@ int run() {
       case 'I': lazy(2, arg(1), arg(2)); break;
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
-      //case '.': putchar(num(1)); lazy(2, 'I', arg(2)); break;
       case ':': lazy(4, harg(4, 1), arg(2)); break;
       case '>': putchar(num(1)); lazy(2, harg(2, 0), heapOn('T', '>')); break;
-      case '<': ch = getchar(); ch < 0 ? lazy(1, 9, 8) : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
+      //case '<': ch = getchar(); ch < 0 ? lazy(1, 9, 8) : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
+      case '<': ch = *s++; ch <= 0 ? lazy(1, 9, 8) : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
       case '#': lazy(2, arg(2), sp[1]); break;
       case 1: ch = num(1); lazy(2, harg(2, 0), heapOn('T', 1)); return ch;
-      case '$': lazy(1, heapOn(arg(1), 0), heapOn('T', 1)); reset(run); break;
+      case '$': lazy(1, heapOn(arg(1), 0), heapOn('T', 1)); reset(parse()); break;
     } else {
       *--sp = heap[x];
     }
@@ -74,7 +75,7 @@ int run() {
 }
 
 int main() {
-  reset(readS);
-  for (u i = 128; i < hp; i++) printf(" %u", heap[i]); puts("");
+  reset(heapOn('$', heapOn('<', '0')));
+  //for (u i = 128; i < hp; i++) printf(" %u", heap[i]); puts("");
   return run();
 }
