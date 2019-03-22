@@ -118,19 +118,22 @@ void testCase(char *prog, char *want) {
   if (strcmp(testOut, want)) printf("FAIL: got '%s', want '%s'\n", testOut, want);
 }
 
+// ASCII 32.. = " !\"#$%&'()*"
 char *parenCompiler =
-    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-    "``SS``B`BK``B`BK``B`B`:#`@ ;"  // [add] = \acc p -> acc p ('`':acc ++ p)
-    "``C``BBB``B`C@!``C:K;"  // [atom] = \r h acc -> r ([add] acc ((:) h K))
-    "``S``BC``B`BB``B`BT``C``BBB@!`TK;"  // [sub] = \r acc -> uncurry ((r .) ([add] acc)) . r ""
-    "``S``BS``B`BB`T`#;=`T`#)=;"  // [term] = \h -> (';' == h) || (')' == h)
-    // Because of how we handle primitve functions, this is: \hxy.=#;hx(=#)xy)
-    "``S``BC``B`BB``B`BB@$`T`#(=;"  // [if3] = \hxyz.[term]hx(['(' ==]hyz)
-    "``BC``S``BS``B`C``C@%``BCT@#@\";"  // [switch] = \raht.[if3]h[pair]([sub]r)([atom]rh)at
-    "`Y``B`B`C`T?@&;"  // [parseParen] = fix \r acc s -> s undefined $ \h t -> [switch] r acc h t
-    "`Y``B`B`C`@'K``B`S``BS``B`BBT``B`B`B`BK``B`B`B`BK``C``BBB``C``BB@ `:#;;" // [parse] = fix \r pre s -> [parseParen] "" s (\p t -> p pre (\_ _ -> r (pre ++ ';':p) t))
-    "``B``C@ ``:#\nK`@(``:#>``:#IK"  // (++ "\n") . parse ">I"
-    ;
+  "`Y``B`CS``B`B`C``BB:C;"  // (++)
+  "``SS``B`BK``B`BK``B`B`:#`@ ;"  // [add] = \acc p -> acc p ('`':acc ++ p)
+  "``S``BS``B`BB`T`##=`T`#@=;"  // [isPre] = \h -> ('#' == h) || ('@' == h)
+  "``S``BS``B`BS``B`S``BB@\"``B`B`C`T?``C``BBB``C``BB:``C:K``CB``C:K;"  // [suffix] = \f h t -> isPre h (t undefined (\a b -> f (h:a:K) b)) (f (h:K) t)
+  "``BC``B`B@#``C``BBB@!;"  // [atom] = \r h acc t -> suffix (r . (add acc)) h t
+  "``S``BC``B`BB``B`BT``C``BBB@!`TK;"  // [sub] = \r acc -> uncurry ((r .) ([add] acc)) . r ""
+  "``S``BS``B`BB`T`#;=`T`#)=;"  // [term] = \h -> (';' == h) || (')' == h)
+  // Because of how we handle primitve functions, this is: \hxy.=#;hx(=#)xy)
+  "``S``BC``B`BB``B`BB@&`T`#(=;"  // [if3] = \hxyz.[term]hx(['(' ==]hyz)
+  "``BC``S``BS``B`C``C@'``BCT@%@$;"  // [switch] = \raht.[if3]h[pair]([sub]r)([atom]rh)at
+  "`Y``B`B`C`T?@(;"  // [parseParen] = fix \r acc s -> s undefined $ \h t -> [switch] r acc h t
+  "`Y``B`B`C`@)K``B`S``BS``B`BBT``B`B`B`BK``B`B`B`BK``C``BBB``C``BB@ `:#;;" // [parse] = fix \r pre s -> [parseParen] "" s (\p t -> p pre (\_ _ -> r (pre ++ ';':p) t))
+  "``B``C@ ``:#\nK`@*``:#>``:#IK"  // (++ "\n") . parse ">I"
+  ;
 
 char *cat3(char *a, char *b, char *c) {
   static char buf[1024];
@@ -159,11 +162,11 @@ void runTests() {
     "`@!``:#xK"
     "\ny",
     "`xy");
-  testCase(cat3(">", parenCompiler, ";`K```@\"I#x``:#fK\n"),  // atom id 'x' "f"
+  testCase(cat3(">", parenCompiler, ";`K```@$I#x``:#fK\n"),  // atom id 'x' "f"
     "`fx");
-  testCase(cat3(">", parenCompiler, ";`K````@%#)``:#1K``:#2K``:#3K\n"),  // if3 ')' "1" "2" "3"
+  testCase(cat3(">", parenCompiler, ";`K````@'#)``:#1K``:#2K``:#3K\n"),  // if3 ')' "1" "2" "3"
     "1");
-  testCase(cat3(">", parenCompiler, ";``B`TK`@'K\njust(one);not(two);"),  // fst . parseParen
+  testCase(cat3(">", parenCompiler, ";``B`TK`@)K\njust(one);not(two);"),  // fst . parseParen
     "````just``one");
   testCase(cat3(">", parenCompiler, "\npar(en);(t(he)(ses));K;;extra"),
     ">I;```par`en;``t`he``ses;K\n");
@@ -172,7 +175,7 @@ void runTests() {
 int main(int argc, char **argv) {
   char program[1024];
   strcpy(program, cat3("$", parenCompiler, "\n"));
-  strcat(program, "S(IK)K;;test passed\n");
+  strcat(program, "K(:#BK);;test passed\n");
   if (argc > 1) runTests(); else runWith(putchar, program);
   return 0;
 }
