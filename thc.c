@@ -3,10 +3,7 @@ typedef unsigned u;
 #include <stdlib.h>
 #include <string.h>
 
-void die(char *s) {
-  fprintf(stderr, "error: %s\n", s);
-  exit(1);
-}
+void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
 enum { TOP = 1<<26 };
 u heap[TOP], *sp, hp, tab[256], tabn;
@@ -80,14 +77,15 @@ u run() {
       case 'S': lazy(3, harg(1, 3), harg(2, 3)); break;
       case 'B': lazy(3, arg(1), harg(2, 3)); break;
       case 'C': lazy(3, harg(1, 3), arg(2)); break;
+      case 'R': lazy(3, harg(2, 3), arg(1)); break;
       case 'I': lazy(2, arg(1), arg(2)); break;
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
       case ':': lazy(4, harg(4, 1), arg(2)); break;
       case '<': ch = *inp++; ch <= 0 ? lazy(1, 'I', 'K') : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
       case '#': lazy(2, arg(2), sp[1]); break;
-      case 1: ch = num(1); lazy(2, harg(2, 0), heapOn('T', 1)); return ch;
-      case 2: ouch(num(1)); lazy(2, harg(2, 0), heapOn('T', 2)); break;
+      case 1: ch = num(1); lazy(2, heapOn(arg(2), 0), heapOn('T', 1)); return ch;
+      case 2: ouch(num(1)); lazy(2, heapOn(arg(2), 0), heapOn('T', 2)); break;
       case '$': lazy(1, heapOn(arg(1), 0), heapOn('T', 1)); reset(parse()); break;
       case '>': lazy(1, heapOn(arg(1), 0), heapOn('T', 2)); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
@@ -135,8 +133,72 @@ char *parenCompiler =
   "``B``C@ ``:#\nK`@*``:#>``:#IK"  // (++ "\n") . parse ">I"
   ;
 
+char *skiCompiler =
+/*
+flip f x y = f y x;
+id x = x;
+const x _ = x;
+(&) x f = f x;
+Nothing x _ = x;
+(++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
+P x y f = f x y;
+Just x f g = g x;
+pure x inp = Just (P x inp);
+sat f inp = inp Nothing (\h t -> f h (pure h t) Nothing);
+bind f m = m Nothing (\x -> x f);
+(<*>) x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+(<$>) f x = pure f <*> x;
+(*>) p q = (\_ x -> x) <$> p <*> q;
+(<*) p q = (\x _ -> x) <$> p <*> q;
+(<|>) x y = \inp -> (x inp) (y inp) Just;
+char c = sat (\x -> x(c(==)));
+R s   = \a b c d -> a s;
+V v   = \a b c d -> b v;
+A x y = \a b c d -> c x y;
+L x y = \a b c d -> d x y;
+(||) f g x y = f x (g x y);
+var = sat (\c -> flip (c(';'(==)) || c(')'(==))));
+atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (V <$> var);
+apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
+expr = ((&) <$> atom expr) <*> apps expr;
+undefined x = x;
+-- Last field should be undefined. We only print lambdas when debugging.
+show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) (\x y -> '\\' : (x : ('.' : show y)));
+fix x = x (fix x);
+unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
+babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
+prog pre s = (expr <* char ';') s pre (\p -> p(\x t -> prog (pre ++ (show (babs x) ++ ";")) t));
+main s = prog "" s;
+*/
+"Y(B(CS)(B(B(C(BB:)))C));"
+"BCT;"
+"BKT;"
+"B(B@#)@\";"
+"B(C(TK))(B(B(RK))(R@$(BS(BB))));"
+"B(C(TK))T;"
+"C(BB(B@&(C(BB(B@&(B@$))))));"
+"B@'@$;"
+"B@'(@((KI));"
+"B@'(@(K);"
+"B(B(R@#))S;"
+"B@%(BT(T=));"
+"B(BK)(B(BK)(B(BK)T));"
+"BK(B(BK)(B(BK)T));"
+"B(BK)(B(BK)(B(B(BK))(BCT)));"
+"B(BK)(B(BK)(B(BK)(BCT)));"
+"BS(BB);"
+"@%(BC(S(B@1(T(#;=)))(T(#)=))));"
+"R(@(@.@2)(B@+(S(B@+(B(@)(@,#())(R(@,#))@*)))(B(@'(@)(@,#\\)(@(@0@2)))(@)(@,#.)))));"
+"Y(B(R(@$I))(B(B@+)(B(S(B@'(B(@(T)@3)))(B(@((R(C@/)(BBB)))))));"
+"Y(S(B@'(B(@(T)@3))@4);"
+"Y(S(BC(B(C(R(RK:)(TI)))(B(B(B(:#`)))(S(BC(B(BB)(B@!)))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
+"BY(B(B(RI))(R(S(BC(B(BB)(B(B@/)(B(@/(@.#S))))))I)(BB(BC(B(C(T(B(@/(@.#K))@-)))(R(B(@/(@.#K))@.)(BS(B(R(@.#I))(BT(T=))))))))));"
+"Y(S(BC(B(C(R@.(T@-)))(S(BC(B(BB)(B@/)))I)))(C(BB@7)));"
+"Y(B(S(BC(C(@*@5(@,#;)))))(B(BT)(R(R(R(:#;K)(B@!(B@6@8)))(BB@!))(BBB))));"
+"@9K;"
+;
 char *cat3(char *a, char *b, char *c) {
-  static char buf[1024];
+  static char buf[16384];
   strcpy(buf, a);
   strcat(buf, b);
   strcat(buf, c);
@@ -172,10 +234,12 @@ void runTests() {
     ">I;```par`en;``t`he``ses;K\n");
 }
 
+int pc(int c) { int r = putchar(c); fflush(stdout); return r; }
 int main(int argc, char **argv) {
-  char program[1024];
+  char program[16384];
   strcpy(program, cat3("$", parenCompiler, "\n"));
-  strcat(program, "K(:#BK);;test passed\n");
-  if (argc > 1) runTests(); else runWith(putchar, program);
+  strcat(program, skiCompiler);
+  strcat(program, ";\\x.\\y.x;\\x.x;\\x.\\y.\\z.xz(yz);\necho");
+  if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }
