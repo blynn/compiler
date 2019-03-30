@@ -82,7 +82,7 @@ u run() {
       case ':': lazy(4, harg(4, 1), arg(2)); break;
       case '<': ch = *inp++; ch <= 0 ? lazy(1, 'I', 'K') : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
       case '#': lazy(2, arg(2), sp[1]); break;
-      case 1: ch = num(1); lazy(2, heapOn(arg(2), 0), heapOn('T', 1)); return ch;
+      case 1: ch = num(1); lazy(2, heapOn(arg(2), 0), heapOn('T', 1)); if (ch == '\n') break; else return ch;
       case 2: ouch(num(1)); lazy(2, heapOn(arg(2), 0), heapOn('T', 2)); break;
       case '$': lazy(1, heapOn(arg(1), 0), heapOn('T', 1)); reset(parse()); break;
       case '>': lazy(1, heapOn(arg(1), 0), heapOn('T', 2)); break;
@@ -148,7 +148,7 @@ main = (++ ";") . parse ">";
 "``BC``S``BS``B`C``R@ @)@'@&;"
 "`Y``B`B`C`T?@*;"
 "`Y``B`B`C`@+K``B`S``BS``B`BBT``B`B`B`BK``B`B`B`BK``R``R``R``:#;K@\"``BB@\"``BBB;"
-"``R``:#;K``B@\"`@,``:#>K;"
+"``R``:#;K``B@\"`@,``:#$K;"
 ;
 
 char *skiCompiler =
@@ -176,7 +176,8 @@ A x y = \a b c d -> c x y;
 L x y = \a b c d -> d x y;
 (||) f g x y = f x (g x y);
 var = sat (\c -> flip (c(';'(==)) || c(')'(==))));
-atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (V <$> var);
+pre = (:) <$> (char '#' <|> char '@') <*> (sat (const const));
+atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (R <$> pre) <|> (V <$> var);
 apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
 expr = ((&) <$> atom expr) <*> apps expr;
 show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) (\x y -> '\\' : (x : ('.' : show y)));
@@ -204,14 +205,53 @@ main s = prog ">" s ++ ";";
 "B(BK)(B(BK)(B(BK)(BCT)));"
 "BS(BB);"
 "@$(BC(S(B@0(T(#;=)))(T(#)=))));"
-"R(@'@-@1)(B@*(S(B@*(B(@((@+#())(R(@+#))@))))(B(@&(@((@+#\\)(@'@/@1)))(@((@+#.)))));"
-"Y(B(R(@#I))(B(B@*)(B(S(B@&(B(@'T)@2)))(B(@'(R(C@.)(BBB)))))));"
-"Y(S(B@&(B(@'T)@2))@3);"
+"@&(@':(@*(@+##)(@+#@)))(@'(C:K)(@$(KK)));"
+"R(@'@-@1)(B@*(R(@'@,@2)(B@*(S(B@*(B(@((@+#())(R(@+#))@))))(B(@&(@((@+#\\)(@'@/@1)))(@((@+#.)))))));"
+"Y(B(R(@#I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(R(C@.)(BBB)))))));"
+"Y(S(B@&(B(@'T)@3))@4);"
 "Y(S(BC(B(C(R(RK:)(TI)))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
 "BY(B(B(R?))(R(S(BC(B(BB)(B(B@.)(B(@.(@-#S))))))I)(BB(BC(B(C(T(B(@.(@-#K))@,)))(R(B(@.(@-#K))@-)(BS(B(R(@-#I))(BT(T=))))))))));"
-"Y(S(BC(B(C(R@-(T@,)))(S(BC(B(BB)(B@.)))I)))(C(BB@6)));"
-"Y(B(S(BC(C(@)@4(@+#;)))))(B(BT)(R(R(R(:#;K)(B@ (B@5@7)))(BB@ ))(BBB))));"
-"R(:#;K)(B@ (@8(:#>K)));"
+"Y(S(BC(B(C(R@-(T@,)))(S(BC(B(BB)(B@.)))I)))(C(BB@7)));"
+"Y(B(S(BC(C(@)@5(@+#;)))))(B(BT)(R(R(R(:#;K)(B@ (B@6@8)))(BB@ ))(BBB))));"
+"R(:#;K)(B@ (@9(:#>K)));"
+;
+
+char *ski1Compiler =
+// Same as above, except:
+/*
+isFree v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> isFree v x || isFree v y) (\x y -> flip(x(v(==)) || flip(isFree v y)));
+unlam v t = isFree v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) (\x y -> unlam v y)) (A (V 'K') t);
+*/
+"Y(B(CS)(B(B(C(BB:)))C));"
+"BCT;"
+"BKT;"
+"B(B@\")@!;"
+"B(C(TK))(B(B(RK))(R@#(BS(BB))));"
+"B(C(TK))T;"
+"C(BB(B@%(C(BB(B@%(B@#))))));"
+"B@&@#;"
+"B@&(@'(KI));"
+"B@&(@'K);"
+"B(B(R@\"))S;"
+"B@$(BT(T=));"
+"B(BK)(B(BK)(B(BK)T));"
+"BK(B(BK)(B(BK)T));"
+"B(BK)(B(BK)(B(B(BK))(BCT)));"
+"B(BK)(B(BK)(B(BK)(BCT)));"
+"BS(BB);"
+"@$(BC(S(B@0(T(#;=)))(T(#)=))));"
+"@&(@':(@*(@+##)(@+#@)))(@'(C:K)(@$(KK)));"
+"R(@'@-@1)(B@*(R(@'@,@2)(B@*(S(B@*(B(@((@+#())(R(@+#))@))))(B(@&(@((@+#\\)(@'@/@1)))(@((@+#.)))))));"
+"Y(B(R(@#I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(R(C@.)(BBB)))))));"
+"Y(S(B@&(B(@'T)@3))@4);"
+"Y(S(BC(B(C(R(RK:)(TI)))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
+//"Y(S(BS(B(BC)(B(S(BC(B(C(T(K(KI))))(BT(T=)))))(S(BS(B(BC)(B(B(BB))(B(B@0)))))I))))(B(B(B(BC)))(B(S(BC(B(BB)(B(B@0)(BT(T=))))))(B(BC)))));"
+"Y\\r.\\v.\\t.t(\\x.KI)(\\x.x(v=))(\\x.\\y.@0(rvx)(rvy))(\\x.\\y.@0(C(x(v=)))(C(rvy)));"
+//"Y(B(R(@.(@-#K)))(B(BS)(B(S(BS@7))(S(BS(B(BC)(B(B(C(R(K(@-#I))(T?))))(S(BS(B(BC)(B(B(BB))(B(B(B@.))(B(B(@.(@-#S))))))))I))))(BK)))));"
+"Y\\r.\\v.\\t.@7vt(t?(K(@-#I))(\\x.\\y.@.(@.(@-#S)(rvx))(rvy))(\\x.\\y.rvy))(@.(@-#K)t);"
+"Y(S(BC(B(C(R@-(T@,)))(S(BC(B(BB)(B@.)))I)))(C(BB@8)));"
+"Y(B(S(BC(C(@)@5(@+#;)))))(B(BT)(R(R(R(:#;K)(B@ (B@6@9)))(BB@ ))(BBB))));"
+"R(:#;K)(B@ (@:(:#>K)));"
 ;
 
 char *cat3(char *a, char *b, char *c) {
@@ -250,16 +290,19 @@ void runTests() {
   testCase(cat3(">", parenCompiler, "``B`TK`@+K;;just(one);not(two);"),  // fst . parseParen
     "````just``one");
   testCase(cat3(">", parenCompiler, ";par(en);(t(he)(ses));K;;extra"),
-    ">```par`en;``t`he``ses;K;");
+    "$```par`en;``t`he``ses;K;;");
 }
 
 int pc(int c) { int r = putchar(c); fflush(stdout); return r; }
 int main(int argc, char **argv) {
   char program[16384];
-  strcpy(program, cat3("$", parenCompiler, ";"));
-  strcat(program, skiCompiler);
-  //strcat(program, ";\\x.\\y.x;\\x.x;\\x.\\y.\\z.xz(yz);;");
-  strcat(program, ";\\x.x;;pass");
+  strcpy(program, "$");
+  strcat(program, parenCompiler); strcat(program, ";");
+  strcat(program, skiCompiler); strcat(program, ";");
+  strcat(program, ski1Compiler); strcat(program, ";");
+  //strcat(program, "\\x.\\y.x;\\x.x;\\x.\\y.\\z.xz(yz);;");
+  strcat(program, "Y\\r.\\c.\\n.\\l.ln(\\h.\\t.ch(rcnt));");
+  //strcat(program, "\\h.\\t.\\c.\\n.ch(tcn);");
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }
