@@ -39,7 +39,10 @@ u parse() {
   tabn = 0;
   for(;;) {
     u c = parseTerm();
-    if (c == ',' || c == '.') return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', 0)));
+    if (c == ';') {
+      c = *inp++;
+      return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', 0)));
+    }
     tab[tabn++] = c;
     //if (run() != ';') die("expected ';'");
     c = run(); if (c != ';') printf("!%u(%c)\n",c,c), die("expected ';'");
@@ -132,8 +135,7 @@ closes h = h(';'(==)) || h(')'(==));
 if3 h x y z = closes h x (h('('(==)) y z);
 switch r a h t = if3 h pair (sub r) (atom r h) a t;
 parseParen acc s = s undefined (\h t -> switch parseParen acc h t);
-term h = h('.'(==)) || h(','(==));
-parse s = s undefined (\h _ -> term h (h:[]) (parseParen "" s (\p t -> p ++ ";" ++ parse t)));
+parse s = parseParen "" s (\p t -> p ";" (\_ _ -> p ++ (';':parse t)));
 */
 "``BCT;"
 "``BS`BB;"
@@ -147,8 +149,7 @@ parse s = s undefined (\h _ -> term h (h:[]) (parseParen "" s (\p t -> p ++ ";" 
 "``S``BC``B`BB``B`BB@(`T`#(=;"
 "``BC``S``BS``B`C``C@)@ @'@&;"
 "`Y``B`B`C`T?@*;"
-"``S``B@!`T`#.=`T`#,=;"
-"`Y``B`S`T?``B`B`BK``B`B`C``S@,``C:K``B`C`@+K`C``BB``B@\"``C@\"``:#;K;"
+"`Y``B`C`@+K``B`S``BB`T``:#;K``B`B`BK``B`B`BK``B`C``BB@\"`B`:#;;"
 ;
 
 char *skiCompiler =
@@ -184,8 +185,7 @@ show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) (\x y -> '\\' : (x : 
 fix x = x (fix x);
 unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
 babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
-term h = h('.'(==)) || h(','(==));
-main s = s undefined (\h _ -> term h (h:[]) ((expr <* char ';') s undefined (\p -> p (\x t -> show (babs x) ++ ";" ++ main t))));
+main s = (expr <* char ';') s ";" (\p -> p (\x t -> show (babs x) ++ ";" ++ main t)));
 */
 "Y(B(CS)(B(B(C(BB:)))C));"
 "BCT;"
@@ -212,10 +212,8 @@ main s = s undefined (\h _ -> term h (h:[]) ((expr <* char ';') s undefined (\p 
 "Y(S(BC(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
 "BY(B(B(R?))(C(BB(BC(B(C(T(B(@.(@-#K))@,)))(C(BS(B(R(@-#I))(BT(T=))))(B(@.(@-#K))@-)))))(S(BC(B(BB)(B(B@.)(B(@.(@-#S))))))I)));"
 "Y(S(BC(B(C(C(T@,)@-))(S(BC(B(BB)(B@.)))I)))(C(BB@7)));"
-"S(B@0(T(#.=)))(T(#,=));"
-"Y(B(S(T?))(B(B(BK))(B(B(C(S@9(C:K))))(B(C(C(@)@5(@+#;))?))(BT(C(BB(B@ (C(B@ (B@6@8))(:#;K))))))))));"
+"Y(B(C(C(@)@5(@+#;))(:#;K)))(BT(C(BB(B@ (C(B@ (B@6@8))(:#;K)))))));"
 ;
-
 char *ski1Compiler =
 // Same as above, except:
 /*
@@ -245,10 +243,10 @@ unlam v t = isFree v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam
 "Y(B(R(@#I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@.)))))));"
 "Y(S(B@&(B(@'T)@3))@4);"
 "Y(S(BC(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
-"BY(B(B(R?))(C(BB(BC(B(C(T(B(@.(@-#K))@,)))(C(BS(B(R(@-#I))(BT(T=))))(B(@.(@-#K))@-)))))(S(BC(B(BB)(B(B@.)(B(@.(@-#S))))))I)));"
-"Y(S(BC(B(C(C(T@,)@-))(S(BC(B(BB)(B@.)))I)))(C(BB@7)));"
-"S(B@0(T(#.=)))(T(#,=));"
-"Y(B(S(T?))(B(B(BK))(B(B(C(S@9(C:K))))(B(C(C(@)@5(@+#;))?))(BT(C(BB(B@ (C(B@ (B@6@8))(:#;K))))))))));"
+"Y(S(BS(B(BC)(B(S(BC(B(C(T(K(KI))))(BT(T=)))))(S(BS(B(BC)(B(B(BB))(B(B@0)))))I))))(B(B(B(BC)))(B(S(BC(B(BB)(B(B@0)(BT(T=))))))(B(BC)))));"
+"Y(B(R(@.(@-#K)))(B(BS)(B(S(BS@7))(S(BS(B(BC)(B(B(C(C(T?)(K(@-#I)))))(S(BS(B(BC)(B(B(BB))(B(B(B@.))(B(B(@.(@-#S))))))))I))))(BK)))));"
+"Y(S(BC(B(C(C(T@,)@-))(S(BC(B(BB)(B@.)))I)))(C(BB@8)));"
+"Y(B(C(C(@)@5(@+#;))(:#;K)))(BT(C(BB(B@ (C(B@ (B@6@9))(:#;K)))))));"
 ;
 
 char *semantically =
@@ -342,8 +340,7 @@ showCNW t = t (show) (\e -> "[N]" ++ showCNW e) (\e -> "[W]" ++ showCNW e);
 
 showDeb t = t "Z" (\v -> 'S':showDeb v)(\s -> show s)(\x -> '\\':showDeb x) (\x y -> '`':(showDeb x ++ showDeb y));
 
-term h = h('.'(==)) || h(','(==));
-main s = s undefined (\h _ -> term h (h:[]) ((expr <* char ';') s undefined (\p -> p (\x t -> show (nolam x) ++ ";" ++ main t))));
+main s = (expr <* char ';') s ";" (\p -> p (\x t -> show (nolam x) ++ ";" ++ main t));
 */
 "Y(B(CS)(B(B(C(BB:)))C));"
 "BCT;"
@@ -385,8 +382,7 @@ main s = s undefined (\h _ -> term h (h:[]) ((expr <* char ';') s undefined (\p 
 "C(C(C(B@D(@<(B@9@-)))I)?)?;"
 "Y(S(BC(B(C(T@6))(B(@ (:#[(:#N(:#]K)))))))(B(@ (:#[(:#W(:#]K))))));"
 "Y(S(BC(S(BC(B(R@6)(B(C(T(:#ZK)))(B(:#S)))))(B(:#\\))))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I)));"
-"S(B@0(T(#.=)))(T(#,=));"
-"Y(B(S(T?))(B(B(BK))(B(B(C(S@H(C:K))))(B(C(C(@)@5(@+#;))?))(BT(C(BB(B@ (C(B@ (B@6@E))(:#;K))))))))));"
+"Y(B(C(C(@)@5(@+#;))(:#;K)))(BT(C(BB(B@ (C(B@ (B@6@E))(:#;K)))))));"
 ;
 
 char *cat3(char *a, char *b, char *c) {
@@ -398,9 +394,9 @@ char *cat3(char *a, char *b, char *c) {
 }
 
 void runTests() {
-  testCase("I;.Hello, World!\n", "Hello, World!\n");
-  testCase("`K``:#O``:#KK;.", "OK");
-  testCase("I;,I;.compile then run", "compile then run");
+  testCase("I;;.Hello, World!\n", "Hello, World!\n");
+  testCase("`K``:#O``:#KK;;.", "OK");
+  testCase("I;;,I;;.compile then run", "compile then run");
   testCase(
 // xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys }
 // f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))
@@ -408,35 +404,35 @@ void runTests() {
 // Sub-term B(B(C(BB(:))))C = \r ys -> \x xt -> (:) x (r xt ys)
     "`Y``B`CS``B`B`C``BB:C;"  // (++)
     "`K``@ " "``:#B``:#eK" "``:#nK;"
-    ".",
+    ";.",
     "Ben");
   testCase(
     "`Y``B`CS``B`B`C``BB:C;"  // (++)
     "``SS``B`BK``B`BK``B`B`:#`@ ;"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
     "`@!``:#xK;"
-    "."
+    ";."
     "y",
     "`xy");
-  testCase(cat3(parenCompiler, "`K``:#f``:#xK;", "."),  // atom id 'x' "f"
+  testCase(cat3(parenCompiler, "`K``:#f``:#xK;;", "."),  // atom id 'x' "f"
     "fx");
-  testCase(cat3(parenCompiler, "`K```@&I#x``:#fK;", "."),  // atom id 'x' "f"
+  testCase(cat3(parenCompiler, "`K```@&I#x``:#fK;;", "."),  // atom id 'x' "f"
     "`fx");
-  testCase(cat3(parenCompiler, "`K````@)#)``:#1K``:#2K``:#3K;", "."),  // if3 ')' "1" "2" "3"
+  testCase(cat3(parenCompiler, "`K````@)#)``:#1K``:#2K``:#3K;;", "."),  // if3 ')' "1" "2" "3"
     "1");
-  testCase(cat3(parenCompiler, "``B`TK`@+K;", ".just(one);not(two);"),  // fst . parseParen
+  testCase(cat3(parenCompiler, "``B`TK`@+K;;", ".just(one);not(two);"),  // fst . parseParen
     "````just``one");
-  testCase(cat3(parenCompiler, "", ".par(en);(t(he)(ses));K;.extra"),
-    "```par`en;``t`he``ses;K;.");
+  testCase(cat3(parenCompiler, ";", ".par(en);(t(he)(ses));K;;.extra"),
+    "```par`en;``t`he``ses;K;;");
 }
 
 int pc(int c) { int r = putchar(c); fflush(stdout); return r; }
 int main(int argc, char **argv) {
   char program[16384];
   strcpy(program, "");
-  strcat(program, parenCompiler); strcat(program, ",");
-  strcat(program, skiCompiler); strcat(program, ",");
-  strcat(program, ski1Compiler); strcat(program, ",");
-  strcat(program, semantically); strcat(program, ".");
+  strcat(program, parenCompiler); strcat(program, ";,");
+  strcat(program, skiCompiler); strcat(program, ";,");
+  strcat(program, ski1Compiler); strcat(program, ";,");
+  strcat(program, semantically); strcat(program, ";.");
   //strcat(program, "\\x.\\y.x;\\x.x;\\x.\\y.\\z.xz(yz);;");
   //strcat(program, "Y\\r.\\c.\\n.\\l.ln(\\h.\\t.ch(rcnt));");
   //strcat(program, "\\h.\\t.\\c.\\n.ch(tcn);");
