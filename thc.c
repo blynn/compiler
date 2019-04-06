@@ -44,8 +44,7 @@ u parse() {
       return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', 0)));
     }
     tab[tabn++] = c;
-    //if (run() != ';') die("expected ';'");
-    c = run(); if (c != ';') printf("!%u(%c)\n",c,c), die("expected ';'");
+    if (run() != ';') die("expected ';'");
   }
 }
 
@@ -335,14 +334,6 @@ babs = Y (\r t -> t
 
 nolam x = babs (toDeb (B Pass V) x) I undefined undefined;
 
-showCNW t = t (show) (\e -> "[N]" ++ showCNW e) (\e -> "[W]" ++ showCNW e);
-
-showDeb t = t "Z" (\v -> 'S':showDeb v)(\s -> show s)(\x -> '\\':showDeb x) (\x y -> '`':(showDeb x ++ showDeb y));
-
---prog pre s = (expr <* char ';') s pre (\p -> p(\x t -> prog (pre ++ (show (nolam x) ++ ";")) t));
---prog pre s = (expr <* char ';') s pre (\p -> p(\x t -> prog (pre ++ (showDeb (toDeb (B Pass V) x) ++ ";")) t));
---main s = prog ">" s ++ ";";
-
 main s = (expr <* char ';') s ";" (\p -> p (\x t -> show (nolam x) ++ ";" ++ main t));
 */
 "Y\\a.\\b.\\c.bc\\d.\\e.:d(aec);"
@@ -383,75 +374,162 @@ main s = (expr <* char ';') s ";" (\p -> p (\x t -> show (nolam x) ++ ";" ++ mai
 "Y\\a.\\b.\\c.b(\\d.@@adc)(\\d.@Aadc)\\d.@Badc;"
 "Y\\a.\\b.b(@>(@=(@-#I)))(B@?a)@=(\\c.ac(\\d.@=(@.(@-#K)d))I(@C(@=(@-#K))))\\c.\\d.@C(ac)(ad);"
 "\\a.@D(@<(B@9@-)a)I??;"
-"Y\\a.\\b.b@6(\\c.@ (:#[(:#N(:#]K)))(ac))\\c.@ (:#[(:#W(:#]K)))(ac);"
-"Y\\a.\\b.b(:#ZK)(\\c.:#S(ac))(\\c.@6c)(\\c.:#\\(ac))\\c.\\d.:#`(@ (ac)(ad));"
 "Y\\a.\\b.@)@5(@+#;)b(:#;K)\\c.c\\d.\\e.@ (@ (@6(@Ed))(:#;K))(ae);"
 ;
 
+/*
+(||) f g x y = f x (g x y);
+lstEq = \xs ys a b -> xs (ys a (\_ _ -> b)) (\h1 t1 -> ys b (\h2 t2 -> h1(h2(==)) (lstEq t1 t2 a b) b));
+(++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
+P x y f = f x y;
+Just x f g = g x;
+pure x inp = Just (P x inp);
+sat f inp = inp K (\h t -> f h (pure h t) K);
+bind f m = m K (\x -> x f);
+(<*>) x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+(<$>) f x = pure f <*> x;
+(*>) p q = (\_ x -> x) <$> p <*> q;
+(<*) p q = (\x _ -> x) <$> p <*> q;
+(<|>) x y = \inp -> (x inp) (y inp) Just;
+
+foldr = \c n l -> l n (\h t -> c h(foldr c n t));
+many p = ((:) <$> p <*> many p) <|> pure [];
+some p = (:) <$> p <*> many p;
+
+char c = sat (\x -> x(c(==)));
+com = char '-' *> (char '-' *> (many (sat (\c -> C (c('\n'(==))))) *> char '\n'));
+sp = many (sat (\c -> c(' '(==)) || c('\n'(==))) <|> com);
+spc f = f <* sp;
+spch = B spc char;
+(&&) f g x y = C f y (g x y);
+var = spc ( some (sat (\x -> ('z'(x(<=)) && x('a'(<=))))));
+R s   = \a b c d -> a s;
+V v   = \a b c d -> b v;
+A x y = \a b c d -> c x y;
+L x y = \a b c d -> d x y;
+
+anyOne = C (:) K <$> spc (sat (K K));
+pre = (char '@' *> anyOne) <|> ((:) <$> char '#' <*> anyOne);
+atom r = (spch '(' *> (r <* spch ')')) <|> (spch '\\' *> (C (foldr L) <$> some var) <*> (char '-' *> (spch '>' *> r))) <|> (R <$> pre) <|> (V <$> var);
+apps r = ((T <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure I;
+expr = T <$> atom expr <*> apps expr;
+def = P <$> var <*> (C (foldr L) <$> many var <*> (spch '=' *> expr));
+program = sp *> some (def <* spch ';');
+
+refOrRaw v ds = foldr (\d t -> lstEq v (d K) (\n -> '@':(n:[])) (B t \n -> 32(33(-))(n(+)) )) (K v) ds 32;
+show ds t = t I (\v -> refOrRaw v ds) (\x y -> '`':(show ds x ++ show ds y)) (\x y -> '\\' : (x ++ (" -> " ++ show ds y)));
+
+Ze   = \a b c d e -> a;
+Su   = \x a b c d e -> b x;
+Pass = \x a b c d e -> c x;
+La = \x a b c d e -> d x;
+Ap = \x y a b c d e -> e x y;
+
+toDeb = Y (\r n e -> e
+  (\s -> Pass (R s))
+  (\v -> foldr (\h m -> lstEq h v Ze (Su m)) (Pass (V v)) n)
+  (\x y -> Ap (r n x) (r n y))
+  (\s t -> La (r ((:) s n) t))
+  );
+
+Closed = \t a b c -> a t;
+Need = \x a b c -> b x;
+Weak = \x a b c -> c x;
+
+lClo = \r d y -> y
+  (\d2 -> Closed (A d d2))
+  (\e -> Need (r (Closed (A (R "B") d)) e))
+  (\e -> Weak (r (Closed d) e))
+  ;
+
+lNee = \r e y -> y
+  (\d -> Need (r (Closed (A (R "R") d)) e))
+  (\e2 -> Need (r (r (Closed (R "S")) e) e2))
+  (\e2 -> Need (r (r (Closed (R "C")) e) e2))
+  ;
+
+lWea = \r e y -> y
+  (\d -> Weak (r e (Closed d)))
+  (\e2 -> Need (r (r (Closed (R "B")) e) e2))
+  (\e2 -> Weak (r e e2))
+  ;
+
+babsA = Y (\r x y -> x
+  (\d -> lClo r d y)
+  (\e -> lNee r e y)
+  (\e -> lWea r e y)
+  );
+
+babs = Y (\r t -> t
+  (Need (Closed (R "I")))
+  (B Weak r)
+  (Closed)
+  (\t -> r t
+    (\d -> Closed (A (R "K") d))
+    I
+    (babsA (Closed (R "K"))))
+  (\x y -> babsA (r x) (r y))
+  );
+
+nolam x = babs (toDeb [] x) I undefined undefined;
+
+dump tab ds = ds ";" (\h t -> show tab (nolam (h(K I))) ++ (';':dump tab t));
+main s = program s "?" (B (\ds -> dump ds ds) (T K));
+*/
 char *wordy =
-"\\a.\\b.\\c.a(bc);"
-"Y\\a.\\b.b(ab);"
-"\\a.\\b.\\c.acb;"
-"\\a.a;"
-"\\a.\\b.a;"
-"\\a.\\b.ba;"
-"\\a.\\b.a;"
-"@%@$;"
-"@%(@$@#);"
 "\\a.\\b.\\c.\\d.ac(bcd);"
 "Y\\a.\\b.\\c.\\d.\\e.b(cd\\f.\\g.e)\\f.\\g.ce\\h.\\i.f(h=)(agide)e;"
 "Y\\a.\\b.\\c.bc\\d.\\e.:d(aec);"
 "\\a.\\b.\\c.cab;"
 "\\a.\\b.\\c.ca;"
-"\\a.\\b.@-(@,ab);"
-"\\a.\\b.b@&\\c.\\d.ac(@.cd)@&;"
-"\\a.\\b.b@&\\c.ca;"
-"\\a.\\b.\\c.@0(\\d.\\e.@0(\\f.\\g.@.(df)g)(be))(ac);"
-"\\a.\\b.@1(@.a)b;"
-"\\a.\\b.@1(@2(\\c.\\d.d)a)b;"
-"\\a.\\b.@1(@2(\\c.\\d.c)a)b;"
-"\\a.\\b.\\c.ac(bc)@-;"
+"\\a.\\b.@$(@#ab);"
+"\\a.\\b.bK\\c.\\d.ac(@%cd)K;"
+"\\a.\\b.bK\\c.ca;"
+"\\a.\\b.\\c.@'(\\d.\\e.@'(\\f.\\g.@%(df)g)(be))(ac);"
+"\\a.\\b.@((@%a)b;"
+"\\a.\\b.@((@)(\\c.\\d.d)a)b;"
+"\\a.\\b.@((@)(\\c.\\d.c)a)b;"
+"\\a.\\b.\\c.ac(bc)@$;"
 "Y\\a.\\b.\\c.\\d.dc\\e.\\f.be(abcf);"
-"Y\\a.\\b.@5(@1(@2:b)(ab))(@.K);"
-"\\a.@1(@2:a)(@7a);"
-"\\a.@/\\b.b(a=);"
-"@3(@9#-)(@3(@9#-)(@3(@7(@/\\a.@\"(a(#\n=))))(@9#\n)));"
-"@7(@5(@/\\a.@)(a(# =))(a(#\n=)))@:);"
-"\\a.@4a@;;"
-"@ @<@9;"
-"\\a.\\b.\\c.\\d.@\"ad(bcd);"
-"@<(@8(@/\\a.@>(#z(aL))(a(#aL))));"
+"Y\\a.\\b.@,(@((@):b)(ab))(@%K);"
+"\\a.@((@):a)(@.a);"
+"\\a.@&\\b.b(a=);"
+"@*(@0#-)(@*(@0#-)(@*(@.(@&\\a.C(a(#\n=))))(@0#\n)));"
+"@.(@,(@&\\a.@ (a(# =))(a(#\n=)))@1);"
+"\\a.@+a@2;"
+"B@3@0;"
+"\\a.\\b.\\c.\\d.Cad(bcd);"
+"@3(@/(@&\\a.@5(#z(aL))(a(#aL))));"
 "\\a.\\b.\\c.\\d.\\e.ba;"
 "\\a.\\b.\\c.\\d.\\e.ca;"
 "\\a.\\b.\\c.\\d.\\e.\\f.eab;"
 "\\a.\\b.\\c.\\d.\\e.\\f.fab;"
-"@5(@3(@9#@)(@2(@\":@$)(@<(@/(@$@$)))))(@1(@2:(@9##))(@2(@\":@$)(@<(@/(@$@$)))));"
-"\\a.@5(@5(@5(@3(@=#()(@4a(@=#))))(@1(@3(@=#\\)(@2@C@?))(@3(@9#-)(@3(@=#>)a))))(@2@@@D))(@2@A@?);"
-"Y\\a.\\b.@5(@1(@2@%(@Eb))(@2(\\c.\\d.\\e.c(@Bed))(ab)))(@.@#);"
-"Y\\a.@1(@2@%(@Ea))(@Fa);"
-"@1(@2@,@?)(@1(@2(@\"(@6@C))(@7@?))(@3(@=#=)@G));"
-"@3@;(@8(@4@H(@=#;)));"
-"\\a.\\b.@6(\\c.\\d.@*a(@'c)(\\e.:#@(:eK))(@ d\\e.# (#!-)(e+)))(@$a)b# ;"
-"Y\\a.\\b.\\c.c@#(\\d.@Jdb)(\\d.\\e.:#`(@+(abd)(abe)))\\d.\\e.:#\\(@+d(@+(:# (:#-(:#>(:# K))))(abe)));"
+"@)(C:K)(@3(@&(KK)));"
+"@,(@*(@0#@)@;)(@((@):(@0##))@;);"
+"\\a.@,(@,(@,(@*(@4#()(@+a(@4#))))(@((@*(@4#\\)(@)(C(@-@:))(@/@6)))(@*(@0#-)(@*(@4#>)a))))(@)@7@<))(@)@8@6);"
+"Y\\a.\\b.@,(@((@)T(@=b))(@)(\\c.\\d.\\e.c(@9ed))(ab)))(@%I);"
+"Y\\a.@((@)T(@=a))(@>a);"
+"@((@)@#@6)(@((@)(C(@-@:))(@.@6))(@*(@4#=)@?));"
+"@*@2(@/(@+@@(@4#;)));"
+"\\a.\\b.@-(\\c.\\d.@!a(cK)(\\e.:#@(:eK))(Bd\\e.# (#!-)(e+)))(Ka)b# ;"
+"Y\\a.\\b.\\c.cI(\\d.@Bdb)(\\d.\\e.:#`(@\"(abd)(abe)))\\d.\\e.:#\\(@\"d(@\"(:# (:#-(:#>(:# K))))(abe)));"
 "\\a.\\b.\\c.\\d.\\e.a;"
 "\\a.\\b.\\c.\\d.\\e.\\f.ca;"
 "\\a.\\b.\\c.\\d.\\e.\\f.da;"
 "\\a.\\b.\\c.\\d.\\e.\\f.ea;"
 "\\a.\\b.\\c.\\d.\\e.\\f.\\g.gab;"
-"@!\\a.\\b.\\c.c(\\d.@N(@@d))(\\d.@6(\\e.\\f.@*ed@L(@Mf))(@N(@Ad))b)(\\d.\\e.@P(abd)(abe))\\d.\\e.@O(a(:db)e);"
+"Y\\a.\\b.\\c.c(\\d.@F(@7d))(\\d.@-(\\e.\\f.@!ed@D(@Ef))(@F(@8d))b)(\\d.\\e.@H(abd)(abe))\\d.\\e.@G(a(:db)e);"
 "\\a.\\b.\\c.\\d.ba;"
 "\\a.\\b.\\c.\\d.ca;"
 "\\a.\\b.\\c.\\d.da;"
-"\\a.\\b.\\c.c(\\d.@R(@Bbd))(\\d.@S(a(@R(@B(@A(:#BK))b))d))\\d.@T(a(@Rb)d);"
-"\\a.\\b.\\c.c(\\d.@S(a(@R(@B(@A(:#RK))d))b))(\\d.@S(a(a(@R(@A(:#SK)))b)d))\\d.@S(a(a(@R(@A(:#CK)))b)d);"
-"\\a.\\b.\\c.c(\\d.@T(ab(@Rd)))(\\d.@S(a(a(@R(@A(:#BK)))b)d))\\d.@T(abd);"
-"@!\\a.\\b.\\c.b(\\d.@Uadc)(\\d.@Vadc)\\d.@Wadc;"
-"@!\\a.\\b.b(@S(@R(@A(:#IK))))(@ @Ta)@R(\\c.ac(\\d.@R(@B(@A(:#KK))d))@#(@X(@R(@A(:#KK)))))\\c.\\d.@X(ac)(ad);"
-"\\a.@Y(@QKa)@#??;"
-"Y\\a.\\b.b@K(\\c.@+(:#[(:#N(:#]K)))(ac))\\c.@+(:#[(:#W(:#]K)))(ac);"
-"Y\\a.\\b.b(:#ZK)(\\c.:#S(ac))(\\c.@Kc)(\\c.:#\\(ac))\\c.\\d.:#`(@+(ac)(ad));"
-"Y\\a.\\b.\\c.c(:#;K)\\d.\\e.@+(@Kb(@Z(@(d)))(:#;(abe));"
-"\\a.@Ia(:#e(:#r(:#r(:#o(:#rK)))))(@ (\\b.@]bb)@');"
+"\\a.\\b.\\c.c(\\d.@J(@9bd))(\\d.@K(a(@J(@9(@7(:#BK))b))d))\\d.@L(a(@Jb)d);"
+"\\a.\\b.\\c.c(\\d.@K(a(@J(@9(@7(:#RK))d))b))(\\d.@K(a(a(@J(@7(:#SK)))b)d))\\d.@K(a(a(@J(@7(:#CK)))b)d);"
+"\\a.\\b.\\c.c(\\d.@L(ab(@Jd)))(\\d.@K(a(a(@J(@7(:#BK)))b)d))\\d.@L(abd);"
+"Y\\a.\\b.\\c.b(\\d.@Madc)(\\d.@Nadc)\\d.@Oadc;"
+"Y\\a.\\b.b(@K(@J(@7(:#IK))))(B@La)@J(\\c.ac(\\d.@J(@9(@7(:#KK))d))I(@P(@J(@7(:#KK)))))\\c.\\d.@P(ac)(ad);"
+"\\a.@Q(@IKa)I??;"
+"Y\\a.\\b.\\c.c(:#;K)\\d.\\e.@\"(@Cb(@R(d(KI))))(:#;(abe));"
+"\\a.@Aa(:#?K)(B(\\b.@Sbb)(TK));"
 ;
 
 char *cat3(char *a, char *b, char *c) {
@@ -505,10 +583,11 @@ int main(int argc, char **argv) {
   strcat(program, wordy); strcat(program, ";.");
   strcat(program,
     "-- Comments supported.\n"
-    "foo = \\x -> x; -- Another comment.\n"
-    "bar x y = x;"
-    "baz xx yy = yy;"
-    "main s = bar baz foo @:#B@K;"
+"fst = @T @K;"
+"snd = @T (@K @I);"
+"or f g x y = f x (g x y);"
+"lsteq = @Y(\\r xs ys a b -> xs (ys a (\\u u -> b)) (\\x xt -> ys b (\\y yt -> x(y(@=)) (r xt yt a b) b)));"
+"foo = \\y x -> x; -- Another comment.\n"
     );
   strcat(program, ";.");
   if (argc > 1) runTests(); else runWith(pc, program);
