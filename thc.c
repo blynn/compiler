@@ -223,7 +223,7 @@ char *ski1Compiler =
 // Same as above, except:
 /*
 isFree v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> isFree v x || isFree v y) (\x y -> flip(x(v(==)) || flip(isFree v y)));
-unlam v t = isFree v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) (\x y -> unlam v y)) (A (V 'K') t);
+unlam v t = isFree v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
 */
 "Y(B(CS)(B(B(C(BB:)))C));"
 "BCT;"
@@ -249,7 +249,7 @@ unlam v t = isFree v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam
 "Y(S(B@&(B(@'T)@3))@4);"
 "Y(S(BC(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@ )))I))))(B(B(B(:#\\)))(B(C(BB:))(B(:#.)))));"
 "Y\\a.\\b.\\c.c(\\d.KI)(\\d.d(b=))(\\d.\\e.@0(abd)(abe))\\d.\\e.C(@0(d(b=))(C(abe)));"
-"Y\\a.\\b.\\c.@7bc(c?(K(@-#I))(\\d.\\e.@.(@.(@-#S)(abd))(abe))\\d.\\e.abe)(@.(@-#K)c);"
+"Y\\a.\\b.\\c.@7bc(c?(K(@-#I))(\\d.\\e.@.(@.(@-#S)(abd))(abe))?)(@.(@-#K)c);"
 "Y(S(BC(B(C(C(T@,)@-))(S(BC(B(BB)(B@.)))I)))(C(BB@8)));"
 "Y(B(C(C(@)@5(@+#;))(:#;K)))(BT(C(BB(B@ (C(B@ (B@6@9))(:#;K)))))));"
 ;
@@ -474,9 +474,9 @@ babs = Y (\r t -> t
 nolam x = babs (toDeb [] x) I undefined undefined;
 
 dump tab ds = ds ";" (\h t -> show tab (nolam (h(K I))) ++ (';':dump tab t));
-main s = program s "?" (B (\ds -> dump ds ds) (T K));
+main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
 */
-char *wordy =
+char *singularity =
 "\\a.\\b.\\c.\\d.ac(bcd);"
 "Y\\a.\\b.\\c.\\d.\\e.b(cd\\f.\\g.e)\\f.\\g.ce\\h.\\i.f(h=)(agide)e;"
 "Y\\a.\\b.\\c.bc\\d.\\e.:d(aec);"
@@ -573,113 +573,26 @@ void runTests() {
 }
 
 int pc(int c) { int r = putchar(c); fflush(stdout); return r; }
+
+void catfile(char *s, char *f) {
+  char *p = s + strlen(s);
+  FILE *fp = fopen(f, "r");
+  p += fread(p, 1, 16384, fp);
+  fclose(fp);
+  *p = 0;
+}
+
 int main(int argc, char **argv) {
-  char program[16384];
+  char program[65536];
   strcpy(program, "");
   strcat(program, parenCompiler); strcat(program, ";,");
   strcat(program, skiCompiler); strcat(program, ";,");
   strcat(program, ski1Compiler); strcat(program, ";,");
   strcat(program, semantically); strcat(program, ";,");
-  strcat(program, wordy); strcat(program, ";,");
-  strcat(program,
-"-- Comments supported.\n"
-"or f g x y = f x (g x y);"
-"lsteq = @Y \\r xs ys a b -> xs (ys a (\\u u -> b)) (\\x xt -> ys b (\\y yt -> x(y(@=)) (r xt yt a b) b));"
-"append = @Y \\r xs ys -> xs ys (\\x xt -> @: x (r xt ys));"
-"pair x y f = f x y;"
-"just x f g = g x;"
-"pure x inp = just (pair x inp);"
-"sat f inp = inp @K (\\h t -> f h (pure h t) @K);"
-"bind f m = m @K (\\x -> x f);"
-"ap x y = \\inp -> bind (\\a t -> bind (\\b u -> pure (a b) u) (y t)) (x inp);"
-"fmap f x = ap (pure f) x;"
+  strcat(program, singularity); strcat(program, ";,");
 
-"alt x y = \\inp -> (x inp) (y inp) just;"
-"foldr = @Y \\r c n l -> l n (\\h t -> c h(r c n t));"
-"liftaa f x y = ap (fmap f x) y;"
-"many = @Y \\r p -> alt (liftaa @: p (r p)) (pure @K);"
-"some p = liftaa @: p (many p);"
-
-"char c = sat (\\x -> x(c(@=)));"
-"liftki = liftaa (@K @I);"
-"liftk = liftaa @K;"
-"com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\\c -> @C (c(#\n"
-"(@=)))))) (char #\n"
-")));"
-"sp = many (alt (sat (\\c -> or (c(# (@=))) (c(#\n"
-"(@=))))) com);"
-"spc f = liftk f sp;"
-"spch = @B spc char;"
-"and f g x y = @C f y (g x y);"
-"var = spc ( some (sat (\\x -> and (#z(x(@L))) (x(#a(@L))) )));"
-"lcr s   = \\a b c d -> a s;"
-"lcv v   = \\a b c d -> b v;"
-"lca x y = \\a b c d -> c x y;"
-"lcl x y = \\a b c d -> d x y;"
-
-"anyone = fmap (@C @: @K) (spc (sat (@K @K)));"
-"pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);"
-"lam r = liftki (spch #\\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));"
-"atom r = alt (alt (alt (liftki (spch #() (liftk r (spch #)))) (lam r)) (fmap lcr pre)) (fmap lcv var);"
-"apps = @Y \\rr r -> alt (liftaa @T (atom r) (fmap (\\vs v x -> vs (lca x v)) (rr r))) (pure @I);"
-"expr = @Y \\r -> liftaa @T (atom r) (apps r);"
-"def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));"
-"program = liftki sp (some (liftk def (spch #;)));"
-
-"rank v ds = foldr (\\d t -> lsteq v (d @K) (\\n -> @: #@ (@: n @K)) (@B t \\n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;"
-"show = @Y \\r ds t -> t @I (\\v -> rank v ds) (\\x y -> @:#`(append (r ds x) (r ds y)))  (\\x y -> @: #\\ (append x (append (@:#-(@:#>@K)) (r ds y))));"
-"ze   = \\a b c d e -> a;"
-"su   = \\x a b c d e -> b x;"
-"pass = \\x a b c d e -> c x;"
-"la = \\x a b c d e -> d x;"
-"app = \\x y a b c d e -> e x y;"
-
-"debruijn = @Y (\\r n e -> e"
-"  (\\s -> pass (lcr s))"
-"  (\\v -> foldr (\\h m -> lsteq h v ze (su m)) (pass (lcv v)) n)"
-"  (\\x y -> app (r n x) (r n y))"
-"  (\\s t -> la (r (@: s n) t))"
-"  );"
-
-"closed = \\t a b c -> a t;"
-"need = \\x a b c -> b x;"
-"weak = \\x a b c -> c x;"
-
-"lclo = \\r d y -> y"
-"  (\\dd -> closed (lca d dd))"
-"  (\\e -> need (r (closed (lca (lcr (@:#B@K)) d)) e))"
-"  (\\e -> weak (r (closed d) e))"
-"  ;"
-"lnee = \\r e y -> y"
-"  (\\d -> need (r (closed (lca (lcr (@:#R@K)) d)) e))"
-"  (\\ee -> need (r (r (closed (lcr (@:#S@K))) e) ee))"
-"  (\\ee -> need (r (r (closed (lcr (@:#C@K))) e) ee))"
-"  ;"
-"lwea = \\r e y -> y"
-"  (\\d -> weak (r e (closed d)))"
-"  (\\ee -> need (r (r (closed (lcr (@:#B@K))) e) ee))"
-"  (\\ee -> weak (r e ee))"
-"  ;"
-"babsa = @Y (\\r x y -> x"
-"  (\\d -> lclo r d y)"
-"  (\\e -> lnee r e y)"
-"  (\\e -> lwea r e y)"
-"  );"
-"babs = @Y (\\r t -> t"
-"  (need (closed (lcr (@:#I@K))))"
-"  (@B weak r)"
-"  (closed)"
-"  (\\t -> r t"
-"    (\\d -> closed (lca (lcr (@:#K@K)) d))"
-"    @I"
-"    (babsa (closed (lcr (@:#K@K)))))"
-"  (\\x y -> babsa (r x) (r y))"
-"  );"
-"nolam x = babs (debruijn @K x) @I @? @?;"
-"dump = @Y \\r tab ds -> ds (@:#;@K) \\h t -> append (show tab (nolam (h (@K @I)))) (@: #; (r tab t));"
-"main s = program s (@:#?@K) (@B (\\ds -> dump ds ds) (@T @K));"
-    );
-  strcat(program, ";.foo x y = x; bar = foo @S (\\what ever -> ever);;.");
+  catfile(program, "singularity"); strcat(program, ";,");
+  catfile(program, "stringy");
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }
