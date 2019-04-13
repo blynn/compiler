@@ -43,7 +43,7 @@ lca x y = \a b c d -> c x y;
 lcl x y = \a b c d -> d x y;
 
 anyone = fmap (@C @: @K) (spc (sat (@K @K)));
-pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);
+pre = liftki (char #@) anyone;
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
 
 rawcom x = lcr (@: x @K);
@@ -64,8 +64,8 @@ expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
-rank v ds = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
-show = @Y \r ds t -> t @I (\v -> rank v ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
+rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
+show = @Y \r ds t -> t @I (rank ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
 
 ze   = \    a b c d e -> a;
 su   = \x   a b c d e -> b x;
@@ -73,12 +73,12 @@ pass = \x   a b c d e -> c x;
 la   = \x   a b c d e -> d x;
 app  = \x y a b c d e -> e x y;
 
-debruijn = @Y (\r n e -> e
+debruijn = @Y \r n e -> e
   (\s -> pass (lcr s))
   (\v -> foldr (\h m -> lsteq h v ze (su m)) (pass (lcv v)) n)
   (\x y -> app (r n x) (r n y))
   (\s t -> la (r (@: s n) t))
-  );
+  ;
 
 defer = \a b c d -> a;
 closed = \t a b c d -> b t;
@@ -113,14 +113,14 @@ lwea = \r e y -> y
   (\ee -> weak (r e ee))
   ;
 
-babsa = @Y (\r x y -> x
+babsa = @Y \r x y -> x
   (ldef r y)
   (\d -> lclo r d y)
   (\e -> lnee r e y)
   (\e -> lwea r e y)
-  );
+  ;
 
-babs = @Y (\r t -> t
+babs = @Y \r t -> t
   defer
   (@B weak r)
   closed
@@ -130,11 +130,8 @@ babs = @Y (\r t -> t
     @I
     (babsa (closed (rawcom #K))))
   (\x y -> babsa (r x) (r y))
-  );
+  ;
 
 nolam x = babs (debruijn @K x) @? @I @? @?;
 dump = @Y \r tab ds -> ds (@:#;@K) \h t -> append (show tab (nolam (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
-
-;.
-foo x y = y x; bar = foo @S '\\' "n\now" #X (\baz qux -> qux);;.

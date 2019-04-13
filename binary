@@ -1,0 +1,147 @@
+------------------------------------------------------------------------------
+-- Operators. Lists.
+------------------------------------------------------------------------------
+
+or f g x y = f x (g x y);
+lstEq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
+append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
+pair x y f = f x y;
+Just x f g = g x;
+Nothing f g = f;
+pure x inp = Just (pair x inp);
+sat f inp = inp @K (\h t -> f h (pure h t) @K);
+bind f m = m @K (\x -> x f);
+ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+fmap f x = ap (pure f) x;
+alt x y = \inp -> (x inp) (y inp) Just;
+
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+foldl = \f a bs -> foldr (\b g x -> g (f x b)) @I bs a;
+foldlOne = \f bs -> bs @? (\h t -> foldl f h t);
+liftaa f x y = ap (fmap f x) y;
+many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
+some p = liftaa @: p (many p);
+elem k xs = \a b -> foldr (\x t -> (x(k(@=))) a t) b xs;
+
+char c = sat (\x -> x(c(@=)));
+liftKI = liftaa (@K @I);
+liftK = liftaa @K;
+between x y p = liftKI x (liftK p y);
+com = liftKI (char '-') (between (char '-') (char '\n') (many (sat (\c -> @C (c('\n'(@=)))))));
+sp = many (alt (sat (\c -> or (c(' '(@=))) (c('\n'(@=))))) com);
+spc f = liftK f sp;
+spch = @B spc char;
+and f g x y = @C f y (g x y);
+
+paren = between (spch '(') (spch ')');
+letter = sat (\x -> or
+  (and ('z'(x(@L))) (x('a'(@L))))
+  (and ('Z'(x(@L))) (x('A'(@L))))
+  );
+digit = sat (\x -> and ('9'(x(@L))) (x('0'(@L))));
+varId = liftaa @: letter (many (alt letter digit));
+syms = some (sat (@C elem ":!#$%&*+./<=>?@\\^|-~"));
+op = alt (spc syms) (between (spch '`') (spch '`') (spc varId));
+var = alt (spc varId) (paren (spc syms));
+
+R s   = \a b c d -> a s;
+V v   = \a b c d -> b v;
+A x y = \a b c d -> c x y;
+L x y = \a b c d -> d x y;
+
+anyOne = fmap (@C @: @K) (spc (sat (@K @K)));
+pre = liftKI (char '@') anyOne;
+lam r = liftKI (spch '\\') (liftaa (@C (foldr L)) (some var) (liftKI (char '-') (liftKI (spch '>') r)));
+
+listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
+
+escchar = liftKI (char '\\') (alt (sat (\c -> or (c('"'(@=))) (or (c('\\'(@=))) (c('\''(@=)))))) (fmap (@K '\n') (char 'n')));
+litOne delim = fmap (@B R (@B (@: '#') (@C @: @K))) (alt escchar (sat (\c -> @C (delim(c(@=))))));
+litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
+litChar = between (char '\'') (spch '\'') (litOne '\'');
+lit = alt litStr litChar;
+sepByOne p sep = liftaa (@:) p (many (liftKI sep p));
+sepBy p sep = alt (sepByOne p sep) (pure @K);
+sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
+atom r = alt (alt (alt (alt (alt (sqLst r) (paren r)) (lam r)) (fmap R pre)) (fmap V var)) lit;
+aexp r = fmap (foldlOne A) (some (atom r));
+expr = @Y \r -> liftaa (foldl @T) (aexp r) (many (liftaa (\f b a -> A (A (V f) a) b) op (aexp r)));
+
+def = liftaa pair var (liftaa (@C (foldr L)) (many var) (liftKI (spch '=') expr));
+program = liftKI sp (some (liftK def (spch ';')));
+
+lstLookup = \s -> foldr (\h t -> h (\k v -> lstEq s k (Just v) t)) Nothing;
+
+primTab = @: (pair "<=" "L") (@: (pair "==" "=") @K);
+prim s = lstLookup s primTab s (append "``BT`T");
+rank ds v = foldr (\d t -> lstEq v (d @K) (\n -> @: '@' (@: n @K)) (@B t \n -> ' '('!'(@-))(n(@+)) )) (@K (prim v)) ds ' ';
+show = @Y \r ds t -> t @I (rank ds) (\x y -> @:'`'(append (r ds x) (r ds y))) @?;
+
+Ze   = \    a b c d e -> a;
+Su   = \x   a b c d e -> b x;
+Pass = \x   a b c d e -> c x;
+La   = \x   a b c d e -> d x;
+App  = \x y a b c d e -> e x y;
+
+debruijn = @Y \r n e -> e
+  (\s -> Pass (R s))
+  (\v -> foldr (\h m -> lstEq h v Ze (Su m)) (Pass (V v)) n)
+  (\x y -> App (r n x) (r n y))
+  (\s t -> La (r (@: s n) t))
+  ;
+
+Defer = \a b c d -> a;
+Closed = \t a b c d -> b t;
+Need = \x a b c d -> c x;
+Weak = \x a b c d -> d x;
+
+ldef = \r y -> y
+  (Need (Closed (A (A (R "S") (R "I")) (R "I"))))
+  (\d -> Need (Closed (A (R "T") d)))
+  (\e -> Need (r (Closed (A (R "S") (R "I"))) e))
+  (\e -> Need (r (Closed (R "T")) e))
+  ;
+
+lclo = \r d y -> y
+  (Need (Closed d))
+  (\dd -> Closed (A d dd))
+  (\e -> Need (r (Closed (A (R "B") d)) e))
+  (\e -> Weak (r (Closed d) e))
+  ;
+
+lnee = \r e y -> y
+  (Need (r (r (Closed (R "S")) e) (Closed (R "I"))))
+  (\d -> Need (r (Closed (A (R "R") d)) e))
+  (\ee -> Need (r (r (Closed (R "S")) e) ee))
+  (\ee -> Need (r (r (Closed (R "C")) e) ee))
+  ;
+
+lwea = \r e y -> y
+  (Need e)
+  (\d -> Weak (r e (Closed d)))
+  (\ee -> Need (r (r (Closed (R "B")) e) ee))
+  (\ee -> Weak (r e ee))
+  ;
+
+babsa = @Y \r x y -> x
+  (ldef r y)
+  (\d -> lclo r d y)
+  (\e -> lnee r e y)
+  (\e -> lwea r e y)
+  ;
+
+babs = @Y \r t -> t
+  Defer
+  (@B Weak r)
+  Closed
+  (\t -> r t
+    (Closed (R "I"))
+    (\d -> Closed (A (R "K") d))
+    @I
+    (babsa (Closed (R "K"))))
+  (\x y -> babsa (r x) (r y))
+  ;
+
+nolam x = babs (debruijn @K x) @? @I @? @?;
+dump = @Y \r tab ds -> ds ";" \h t -> append (show tab (nolam (h (@K @I)))) (@: ';' (r tab t));
+main s = program s "?" (@B (\ds -> dump ds ds) (@T @K));

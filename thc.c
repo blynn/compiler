@@ -512,7 +512,7 @@ char *singularity =
 "@((@)@#@6)(@((@)(C(@-@:))(@.@6))(@*(@4#=)@?));"
 "@*@2(@/(@+@@(@4#;)));"
 "\\a.\\b.@-(\\c.\\d.@!a(cK)(\\e.:#@(:eK))(Bd\\e.# (#!-)(e+)))(Ka)b# ;"
-"Y\\a.\\b.\\c.cI(\\d.@Bdb)(\\d.\\e.:#`(@\"(abd)(abe)))\\d.\\e.:#\\(@\"d(@\"(:# (:#-(:#>(:# K))))(abe)));"
+"Y\\a.\\b.\\c.cI(\\d.@Bdb)(\\d.\\e.:#`(@\"(abd)(abe)))?;"
 "\\a.\\b.\\c.\\d.\\e.a;"
 "\\a.\\b.\\c.\\d.\\e.\\f.ca;"
 "\\a.\\b.\\c.\\d.\\e.\\f.da;"
@@ -592,7 +592,9 @@ int main(int argc, char **argv) {
   strcat(program, singularity); strcat(program, ";,");
 
   catfile(program, "singularity"); strcat(program, ";,");
-  catfile(program, "stringy");
+  catfile(program, "stringy"); strcat(program, ";,");
+  catfile(program, "binary"); strcat(program, ";,");
+  strcat(program, "main s = 'H' : ('e' : ( 'l' : \"lo, World!\\n\"));;.");
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }
