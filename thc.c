@@ -5,7 +5,7 @@ typedef unsigned u;
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<26 };
+enum { TOP = 1<<28 };
 u heap[TOP], *sp, hp, tab[256], tabn;
 char *inp;
 
@@ -594,7 +594,17 @@ int main(int argc, char **argv) {
   catfile(program, "singularity"); strcat(program, ";,");
   catfile(program, "stringy"); strcat(program, ";,");
   catfile(program, "binary"); strcat(program, ";,");
-  strcat(program, "main s = 'H' : ('e' : ( 'l' : \"lo, World!\\n\"));;.");
+  catfile(program, "adt"); strcat(program, ";,");
+  catfile(program, "parity"); strcat(program, ";,");
+  catfile(program, "parity"); strcat(program, ";,");
+  strcat(program,
+"data Bool = True | False;"
+"ife a b c = case a of { True -> b ; False -> c };"
+"flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
+"foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
+"elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
+"go s = ife (elem 'x' \"wxyz\") \"success\n\" \"FAIL\n\";;."
+);
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }

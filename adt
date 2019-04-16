@@ -1,0 +1,183 @@
+------------------------------------------------------------------------------
+-- ADTs. Recursion. Case expressions. Sections.
+------------------------------------------------------------------------------
+
+(.) f g x = f (g x);
+(||) f g x y = f x (g x y);
+(&&) f g x y = @C f y (g x y);
+lstEq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> (x == y) (r xt yt a b) b));
+(++) = @Y \r xs ys -> xs ys (\x xt -> x:r xt ys);
+pair x y f = f x y;
+Just x f g = g x;
+Nothing f g = f;
+pure x inp = Just (pair x inp);
+sat f inp = inp @K (\h t -> f h (pure h t) @K);
+bind f m = m @K (\x -> x f);
+ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+(<*>) = ap;
+fmap f x = ap (pure f) x;
+(<$>) = fmap;
+(<|>) x y = \inp -> (x inp) (y inp) Just;
+
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+foldl = \f a bs -> foldr (\b g x -> g (f x b)) @I bs a;
+foldl1 f bs = bs @? (\h t -> foldl f h t);
+elem k xs = \a b -> foldr (\x t -> (x == k) a t) b xs;
+concat = foldr (++) [];
+
+liftA2 f x y = ap (fmap f x) y;
+(*>) = liftA2 (@K @I);
+(<*) = liftA2 @K;
+many = @Y \r p -> liftA2 (:) p (r p) <|> pure @K;
+some p = liftA2 (:) p (many p);
+sepBy1 p sep = liftA2 (:) p (many (sep *> p));
+sepBy p sep = sepBy1 p sep <|> pure [];
+
+char c = sat \x -> x == c;
+between x y p = x *> (p <* y);
+com = char '-' *> between (char '-') (char '\n') (many (sat (\c -> @C (c == '\n'))));
+sp = many ((sat (\c -> (c == ' ') || (c == '\n'))) <|> com);
+spc f = f <* sp;
+spch = @B spc char;
+
+satHelper f = \h t -> f h (pure h t) Nothing;
+wantWith pred f inp = bind (satHelper pred) (f inp);
+want f s inp = wantWith (lstEq s) f inp;  -- bind (satHelper (lstEq s)) (f inp);
+
+paren = between (spch '(') (spch ')');
+letter = sat \x -> ((x <= 'z') && ('a' <= x)) || ((x <= 'Z') && ('A' <= x));
+digit = sat \x -> (x <= '9') && ('0' <= x);
+varLex = liftA2 (:) letter (many (letter <|> digit)); 
+keyword s = spc (want varLex s);
+varId = spc (wantWith (@C . lstEq "of") varLex);
+opLex = some (sat (@C elem ":!#$%&*+./<=>?@\\^|-~"));
+op = spc opLex <|> between (spch '`') (spch '`') varId;
+var = varId <|> paren (spc opLex);
+
+R s   = \a b c d -> a s;
+V v   = \a b c d -> b v;
+A x y = \a b c d -> c x y;
+L x y = \a b c d -> d x y;
+
+itemize c = c:[];
+anyOne = fmap itemize (spc (sat (@K @K)));
+pre = char '@' *> anyOne;
+lam r = spch '\\' *> liftA2 (@C (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
+
+listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
+
+escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> (@K '\n' <$> char 'n'));
+litOne delim = fmap (@B R (@B (@: '#') itemize)) (escChar <|> sat (\c -> @C (c == delim)));
+litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
+litChar = between (char '\'') (spch '\'') (litOne '\'');
+lit = litStr <|> litChar;
+sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
+
+alt r = (var <|> sqLst r) *> (@C (foldr L) <$> many varId <*> (want op "->" *> r));
+alts r = between (spch '{') (spch '}') (sepBy (alt r) (spch ';'));
+altize h t = foldl A h t;
+cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
+
+singleOrLeftSect r = @T <$> r <*> (((\v a -> A (V v) a) <$> op) <|> pure @I);
+rightSect r = (\v a -> A (A (R "C") (V v)) a) <$> op <*> r;
+section r = paren (singleOrLeftSect r <|> rightSect r);
+
+atom r = sqLst r <|> section r <|> cas r <|> lam r <|> fmap R pre <|> fmap V var <|> lit;
+aexp r = fmap (foldl1 A) (some (atom r));
+expr = @Y \r -> liftA2 (foldl @T) (aexp r) (many (liftA2 (\f b a -> A (A (V f) a) b) op (aexp r)));
+
+isFree = @Y \r v expr -> expr
+  (\s -> @K @I)
+  (\s -> lstEq s v)
+  (\x y -> r v x || r v y)
+  (\w t -> @C ((lstEq v w) || @C (r v t)))
+  ;
+maybeFix s x = pair s (isFree s x (A (R "Y") (L s x)) x);
+def = liftA2 maybeFix var (liftA2 (@C (foldr L)) (many var) (spch '=' *> expr));
+
+fst p = p (\x y -> x);
+snd p = p (\x y -> y);
+
+aType = paren (some var) <|> var <|> sqLst expr;
+map = @C (foldr . ((.) (:))) [];
+dataDefs cs = map (\cas -> cas (\c as -> pair c (foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
+
+dataArgs = (snd . foldl (\p u -> p (\s l -> pair (s ++ s) (s : l))) (pair "x" [])) <$> many aType;
+adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (pair <$> var <*> dataArgs) (spch '|')));
+program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
+lstLookup s = foldr (\h t -> h (\k v -> lstEq s k (Just v) t)) Nothing;
+second f p = p \x y -> pair x (f y);
+primTab = pair "succ" "`T``# `#!-+" : map (second ((++) "``BT`T")) [pair "<=" "L", pair "==" "=", pair "-" "-", pair "+" "+"];
+prim s = lstLookup s primTab s (\x -> x);
+
+rank ds v = foldr (\d t -> lstEq v (d @K) (\n -> '@':(n:[])) (@B t \n -> ' '('!'(@-))(n(@+)) )) (@K (prim v)) ds ' ';
+show = @Y \r ds t -> t @I (rank ds) (\x y -> '`':(r ds x ++ r ds y)) @?;
+
+Ze   = \    a b c d e -> a;
+Su   = \x   a b c d e -> b x;
+Pass = \x   a b c d e -> c x;
+La   = \x   a b c d e -> d x;
+App  = \x y a b c d e -> e x y;
+
+debruijn = @Y \r n e -> e
+  (\s -> Pass (R s))
+  (\v -> foldr (\h m -> lstEq h v Ze (Su m)) (Pass (V v)) n)
+  (\x y -> App (r n x) (r n y))
+  (\s t -> La (r (s:n) t))
+  ;
+
+Defer = \a b c d -> a;
+Closed = \t a b c d -> b t;
+Need = \x a b c d -> c x;
+Weak = \x a b c d -> d x;
+
+ldef = \r y -> y
+  (Need (Closed (A (A (R "S") (R "I")) (R "I"))))
+  (\d -> Need (Closed (A (R "T") d)))
+  (\e -> Need (r (Closed (A (R "S") (R "I"))) e))
+  (\e -> Need (r (Closed (R "T")) e))
+  ;
+
+lclo = \r d y -> y
+  (Need (Closed d))
+  (\dd -> Closed (A d dd))
+  (\e -> Need (r (Closed (A (R "B") d)) e))
+  (\e -> Weak (r (Closed d) e))
+  ;
+
+lnee = \r e y -> y
+  (Need (r (r (Closed (R "S")) e) (Closed (R "I"))))
+  (\d -> Need (r (Closed (A (R "R") d)) e))
+  (\ee -> Need (r (r (Closed (R "S")) e) ee))
+  (\ee -> Need (r (r (Closed (R "C")) e) ee))
+  ;
+
+lwea = \r e y -> y
+  (Need e)
+  (\d -> Weak (r e (Closed d)))
+  (\ee -> Need (r (r (Closed (R "B")) e) ee))
+  (\ee -> Weak (r e ee))
+  ;
+
+babsa = @Y \r x y -> x
+  (ldef r y)
+  (\d -> lclo r d y)
+  (\e -> lnee r e y)
+  (\e -> lwea r e y)
+  ;
+
+babs = @Y \r t -> t
+  Defer
+  (@B Weak r)
+  Closed
+  (\t -> r t
+    (Closed (R "I"))
+    (\d -> Closed (A (R "K") d))
+    @I
+    (babsa (Closed (R "K"))))
+  (\x y -> babsa (r x) (r y))
+  ;
+
+nolam x = babs (debruijn [] x) @? @I @? @?;
+dump = @Y \r tab ds -> ds ";" \h t -> show tab (nolam (h (@K @I))) ++ (';':r tab t);
+main s = program s "?" (@B (\ds -> dump ds ds) fst);
