@@ -98,7 +98,7 @@ def = liftA2 maybeFix var (liftA2 (@C (foldr L)) (many var) (spch '=' *> expr));
 fst p = p (\x y -> x);
 snd p = p (\x y -> y);
 
-aType = paren (some var) <|> var <|> sqLst expr;
+aType = paren (some var) <|> var <|> between (spch '[') (spch ']') aType;
 map = @C (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> cas (\c as -> pair c (foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
 
@@ -107,7 +107,7 @@ adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (pa
 program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
 lstLookup s = foldr (\h t -> h (\k v -> lstEq s k (Just v) t)) Nothing;
 second f p = p \x y -> pair x (f y);
-primTab = pair "succ" "`T``# `#!-+" : map (second ((++) "``BT`T")) [pair "<=" "L", pair "==" "=", pair "-" "-", pair "+" "+"];
+primTab = pair "succ" "`T`(1)+" : map (second ((++) "``BT`T")) [pair "<=" "L", pair "==" "=", pair "-" "-", pair "+" "+"];
 prim s = lstLookup s primTab s (\x -> x);
 
 rank ds v = foldr (\d t -> lstEq v (d @K) (\n -> '@':(n:[])) (@B t \n -> ' '('!'(@-))(n(@+)) )) (@K (prim v)) ds ' ';

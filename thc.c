@@ -19,7 +19,7 @@ u heapOn(u f, u x) {
 u run();
 
 u parseTerm() {
-  u c;
+  u c, n;
   do c = run(); while (c == '\n');
   switch(c) {
     case '0': return 0;
@@ -31,6 +31,10 @@ u parseTerm() {
       heap[c] = parseTerm();
       heap[c + 1] = parseTerm();
       return c;
+    case '(':
+      n = 0;
+      while ((c = run()) != ')') n = 10*n + c - '0';
+      return heapOn('#', n);
     default: return c;
   }
 }
@@ -596,7 +600,7 @@ int main(int argc, char **argv) {
   catfile(program, "binary"); strcat(program, ";,");
   catfile(program, "adt"); strcat(program, ";,");
   catfile(program, "parity"); strcat(program, ";,");
-  catfile(program, "parity"); strcat(program, ";,");
+  catfile(program, "fixity"); strcat(program, ";,");
   strcat(program,
 "data Bool = True | False;"
 "ife a b c = case a of { True -> b ; False -> c };"

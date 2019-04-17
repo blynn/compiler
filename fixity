@@ -1,5 +1,5 @@
 ------------------------------------------------------------------------------
--- Accepted by GHC, with a small wrapper.
+-- Supports `infixl`.
 ------------------------------------------------------------------------------
 data Bool = True | False;
 ife a b c = case a of { True -> b ; False -> c };
@@ -22,11 +22,10 @@ elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 concat = foldr (++) [];
 itemize c = c:[];
 
-data Pair x y = Pair x y;
-fpair p = \f -> case p of { Pair x y -> f x y };
+fpair p = \f -> case p of { (,) x y -> f x y };
 data Maybe a = Nothing | Just a;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
-pure x = \inp -> Just (Pair x inp);
+pure x = \inp -> Just (x, inp);
 satHelper f = \h t -> ife (f h) (pure h t) Nothing;
 sat f inp = flst inp Nothing (satHelper f);
 bind f m = case m of
@@ -37,6 +36,7 @@ ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 (<*>) = ap;
 fmap f x = ap (pure f) x;
 (<$>) = fmap;
+(>>=) x y = \inp -> bind (\a t -> y a t) (x inp);
 (<|>) x y = \inp -> case x inp of
   { Nothing -> y inp
   ; Just x -> Just x
@@ -97,7 +97,11 @@ section r = paren (parenExpr r <|> rightSect r);
 
 atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V var <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
-expr = liftA2 (foldl (&)) (aexp expr) (many (liftA2 (\f b a -> A (A (V f) a) b) op (aexp expr)));
+fix f = f (fix f);
+lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+precOf s precTab = fmaybe (lstLookup s precTab) 5 id;
+opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
+expr precTab = fix \r n -> ife (n <= 9) (liftA2 (foldl (&)) (r (succ n)) (many (liftA2 (\f b a -> A (A (V f) a) b) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
 isFree v expr = case expr of
   { R s -> False
@@ -105,24 +109,28 @@ isFree v expr = case expr of
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not ((lstEq v w) || not (isFree v t))
   };
-maybeFix s x = Pair s (ife (isFree s x) (A (R "Y") (L s x)) x);
-def = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many var) (spch '=' *> expr));
+maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
+def precTab = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many var) (spch '=' *> expr precTab 0));
 
-fst p = case p of { Pair x y -> x };
-snd p = case p of { Pair x y -> y };
+fst p = case p of { (,) x y -> x };
+snd p = case p of { (,) x y -> y };
 
 aType = paren (some var) <|> (undefined <$> var) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
-dataDefs cs = map (\cas -> fpair cas (\c as -> Pair c (foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
+dataDefs cs = map (\cas -> fpair cas (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
 
-dataArgs = (snd . foldl (\p u -> fpair p (\s l -> Pair (s ++ s) (s : l))) (Pair "x" [])) <$> many aType;
-adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (Pair <$> var <*> dataArgs) (spch '|')));
-program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
+dataArgs = (snd . foldl (\p u -> fpair p (\s l -> (s ++ s, s : l))) ("x", [])) <$> many aType;
+adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy ((,) <$> var <*> dataArgs) (spch '|')));
 
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+prec = (\c -> ord c - ord '0') <$> spc digit;
+fixityList n os = map (\o -> (o, n)) os;
+fixity = between (keyword "infixl") (spch ';') (fixityList <$> prec <*> some op);
 
-second f p = fpair p \x y -> Pair x (f y);
-primTab = Pair "," "``BCT" : (Pair "ord" "I" : (Pair "succ" "`T`(1)+" : map (second ("``BT`T" ++)) [Pair "<=" "L", Pair "==" "=", Pair "-" "-", Pair "+" "+", Pair "*" "*"]));
+funs precTab = concat <$> sepBy (adt <|> (itemize <$> def precTab)) (spch ';');
+program = sp *> (concat <$> many fixity) >>= funs;
+
+second f p = fpair p \x y -> (x, f y);
+primTab = [(",", "``BCT"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
 
 rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
