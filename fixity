@@ -1,7 +1,10 @@
 ------------------------------------------------------------------------------
--- Supports `infixl`.
+-- Supports infix declarations.
+--
+-- All infix declarations must precede the definitions.
 ------------------------------------------------------------------------------
 data Bool = True | False;
+data Maybe a = Nothing | Just a;
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
@@ -19,11 +22,11 @@ foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 undefined = undefined;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
+find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 concat = foldr (++) [];
 itemize c = c:[];
 
 fpair p = \f -> case p of { (,) x y -> f x y };
-data Maybe a = Nothing | Just a;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 pure x = \inp -> Just (x, inp);
 satHelper f = \h t -> ife (f h) (pure h t) Nothing;
@@ -99,9 +102,45 @@ atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
-precOf s precTab = fmaybe (lstLookup s precTab) 5 id;
+
+fst p = case p of { (,) x y -> x };
+snd p = case p of { (,) x y -> y };
+data Assoc = NAssoc | LAssoc | RAssoc;
+eqAssoc x y = case x of
+  { NAssoc -> case y of
+    { NAssoc -> True
+    ; LAssoc -> False
+    ; RAssoc -> False
+    }
+  ; LAssoc -> case y of
+    { NAssoc -> False
+    ; LAssoc -> True
+    ; RAssoc -> False
+    }
+  ; RAssoc -> case y of
+    { NAssoc -> False
+    ; LAssoc -> False
+    ; RAssoc -> True
+    }
+  };
+precOf s precTab = fmaybe (lstLookup s precTab) 5 fst;
+assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
-expr precTab = fix \r n -> ife (n <= 9) (liftA2 (foldl (&)) (r (succ n)) (many (liftA2 (\f b a -> A (A (V f) a) b) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
+opFold precTab e xs = case xs of
+  { [] -> e
+  ; (:) x xt -> case find (\y -> not (eqAssoc (assocOf (fst x) precTab) (assocOf (fst y) precTab))) xt of
+    { Nothing -> case assocOf (fst x) precTab of
+      { NAssoc -> case xt of
+        { [] -> fpair x (\op y -> A (A (V op) e) y)
+        ; (:) y yt -> undefined
+        }
+      ; LAssoc -> foldl (\a b -> fpair b (\op y -> A (A (V op) a) y)) e xs
+      ; RAssoc -> (foldr (\a b -> fpair a (\op y -> \e -> A (A (V op) e) (b y))) id xs) e
+      }
+    ; Just y -> undefined
+    }
+  };
+expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
 isFree v expr = case expr of
   { R s -> False
@@ -112,9 +151,6 @@ isFree v expr = case expr of
 maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
 def precTab = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many var) (spch '=' *> expr precTab 0));
 
-fst p = case p of { (,) x y -> x };
-snd p = case p of { (,) x y -> y };
-
 aType = paren (some var) <|> (undefined <$> var) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> fpair cas (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
@@ -123,8 +159,9 @@ dataArgs = (snd . foldl (\p u -> fpair p (\s l -> (s ++ s, s : l))) ("x", [])) <
 adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy ((,) <$> var <*> dataArgs) (spch '|')));
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
-fixityList n os = map (\o -> (o, n)) os;
-fixity = between (keyword "infixl") (spch ';') (fixityList <$> prec <*> some op);
+fixityList a n os = map (\o -> (o, (n, a))) os;
+fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> some op);
+fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 funs precTab = concat <$> sepBy (adt <|> (itemize <$> def precTab)) (spch ';');
 program = sp *> (concat <$> many fixity) >>= funs;

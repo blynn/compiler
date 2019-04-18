@@ -94,6 +94,7 @@ u run() {
       case '.': lazy(1, heapOn(arg(1), 0), heapOn('T', 2)); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
+      case '*': lazy(2, '#', num(1) * num(2)); break;
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
@@ -587,7 +588,7 @@ void catfile(char *s, char *f) {
 }
 
 int main(int argc, char **argv) {
-  char program[65536];
+  char program[1<<16];
   strcpy(program, "");
   strcat(program, parenCompiler); strcat(program, ";,");
   strcat(program, skiCompiler); strcat(program, ";,");
@@ -598,16 +599,24 @@ int main(int argc, char **argv) {
   catfile(program, "singularity"); strcat(program, ";,");
   catfile(program, "stringy"); strcat(program, ";,");
   catfile(program, "binary"); strcat(program, ";,");
-  catfile(program, "adt"); strcat(program, ";,");
+  catfile(program, "algebraically"); strcat(program, ";,");
   catfile(program, "parity"); strcat(program, ";,");
   catfile(program, "fixity"); strcat(program, ";,");
   strcat(program,
+"infixl 6 + -;"
+"infixl 7 *;"
+"infixr 5 : ++;"
+"infix 4 == <=;"
+"infixr 3 &&;"
+"infixr 2 ||;"
+"infixr 0 $;"
+"($) f x = f x;"
 "data Bool = True | False;"
 "ife a b c = case a of { True -> b ; False -> c };"
 "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
 "foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
 "elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
-"go s = ife (elem 'x' \"wxyz\") \"success\n\" \"FAIL\n\";;."
+"go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
 );
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
