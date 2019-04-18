@@ -102,7 +102,7 @@ aType = paren (some var) <|> var <|> between (spch '[') (spch ']') aType;
 map = @C (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> cas (\c as -> pair c (foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
 
-dataArgs = (snd . foldl (\p u -> p (\s l -> pair (s ++ s) (s : l))) (pair "x" [])) <$> many aType;
+dataArgs = (snd . foldl (\p u -> p (\s l -> pair ('x':s) (s : l))) (pair "x" [])) <$> many aType;
 adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (pair <$> var <*> dataArgs) (spch '|')));
 program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
 lstLookup s = foldr (\h t -> h (\k v -> lstEq s k (Just v) t)) Nothing;

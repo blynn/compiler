@@ -62,9 +62,11 @@ wantWith pred f inp = bind (satHelper pred) (f inp);
 want f s inp = wantWith (lstEq s) f inp;
 
 paren = between (spch '(') (spch ')');
-letter = sat \x -> ((x <= 'z') && ('a' <= x)) || ((x <= 'Z') && ('A' <= x));
+small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
+large = sat \x -> (x <= 'Z') && ('A' <= x);
 digit = sat \x -> (x <= '9') && ('0' <= x);
-varLex = liftA2 (:) letter (many (letter <|> digit)); 
+varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
+conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
 keyword s = spc (want varLex s);
 varId = spc (wantWith (not . lstEq "of") varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
@@ -87,7 +89,7 @@ litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
 sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
-alt r = (var <|> (undefined <$> sqLst r) <|> (undefined <$> paren (spch ','))) *> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
+alt r = (conId <|> var <|> (undefined <$> sqLst r) <|> (undefined <$> paren (spch ','))) *> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 alts r = between (spch '{') (spch '}') (sepBy (alt r) (spch ';'));
 altize h t = foldl A h t;
 cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
@@ -98,7 +100,7 @@ parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pu
 rightSect r = (((\v a -> A (A (R "C") (V v)) a) <$> op) <|> commaThen) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
-atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V var <|> lit;
+atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
@@ -149,14 +151,14 @@ isFree v expr = case expr of
   ; L w t -> not ((lstEq v w) || not (isFree v t))
   };
 maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
-def precTab = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many var) (spch '=' *> expr precTab 0));
+def precTab = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> expr precTab 0));
 
-aType = paren (some var) <|> (undefined <$> var) <|> (undefined <$> between (spch '[') (spch ']') aType);
+aType = (undefined <$> paren (some aType)) <|> (undefined <$> (conId <|> varId)) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> fpair cas (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
 
-dataArgs = (snd . foldl (\p u -> fpair p (\s l -> (s ++ s, s : l))) ("x", [])) <$> many aType;
-adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy ((,) <$> var <*> dataArgs) (spch '|')));
+dataArgs = (snd . foldl (\p u -> fpair p (\s l -> ('x':s, s : l))) ("x", [])) <$> many aType;
+adt = between (keyword "data") (spch '=') (conId *> many varId) *> (dataDefs <$> (sepBy ((,) <$> conId <*> dataArgs) (spch '|')));
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;

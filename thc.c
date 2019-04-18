@@ -52,10 +52,7 @@ u parse() {
   }
 }
 
-void reset(u root) {
-  sp = heap + TOP - 3;
-  *sp = root;
-}
+void reset(u root) { *(sp = heap + TOP - 3) = root; }
 
 u arg(u n) { return heap[sp [n] + 1]; }
 u num(u n) { return heap[arg(n) + 1]; }
