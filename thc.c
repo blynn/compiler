@@ -9,6 +9,8 @@ enum { TOP = 1<<28 };
 u heap[TOP], *sp, hp, tab[256], tabn;
 char *inp;
 
+void stats() { printf("[HP = %u, SP = %ld\n", hp, sp - heap); }
+
 u heapOn(u f, u x) {
   heap[hp] = f;
   heap[hp + 1] = x;
@@ -22,7 +24,6 @@ u parseTerm() {
   u c, n;
   do c = run(); while (c == '\n');
   switch(c) {
-    case '0': return 0;
     case '#': return heapOn('#', run());
     case '@': return tab[run() - ' '];
     case '`':
@@ -40,6 +41,7 @@ u parseTerm() {
 }
 
 u parse() {
+  stats();
   tabn = 0;
   for(;;) {
     u c = parseTerm();
@@ -47,6 +49,7 @@ u parse() {
       c = *inp++;
       return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', 0)));
     }
+    if (tabn == 256) die ("table overflow");
     tab[tabn++] = c;
     if (run() != ';') die("expected ';'");
   }
@@ -71,6 +74,8 @@ int (*ouch)(int);
 u run() {
   int ch;
   for(;;) {
+    // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
+    if (heap + hp >= sp) stats(), die("STACK OVERFLOW");
     u x = *sp;
     if (!x) break;
     if (x < 128) switch(x) {
@@ -92,6 +97,8 @@ u run() {
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case '*': lazy(2, '#', num(1) * num(2)); break;
+      case '/': lazy(2, '#', num(1) / num(2)); break;
+      case '%': lazy(2, '#', num(1) % num(2)); break;
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
@@ -122,11 +129,12 @@ void testCase(char *prog, char *want) {
 }
 
 // ASCII 32.. = " !\"#$%&'()*"
-char *parenCompiler =
+char *parenthetically =
 /*
 uncurry x y = y x;
 (&) x y = y x;
 (.) x y z = x (y z);
+
 pair x y f = f x y;
 (||) f g x y = f x (g x y);
 (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
@@ -159,7 +167,7 @@ parse s = parseParen "" s (\p t -> ifNull p ";" (p ++ (';':parse t)));
 "`Y``B`C`@,K``B`S``BB``C@#``:#;K``B`C``BB@\"`B`:#;;"
 ;
 
-char *skiCompiler =
+char *exponentially =
 /*
 flip f x y = f y x;
 id x = x;
@@ -562,15 +570,15 @@ void runTests() {
     ";."
     "y",
     "`xy");
-  testCase(cat3(parenCompiler, "`K``:#f``:#xK;;", "."),  // atom id 'x' "f"
+  testCase(cat3(parenthetically, "`K``:#f``:#xK;;", "."),  // atom id 'x' "f"
     "fx");
-  testCase(cat3(parenCompiler, "`K```@'I#x``:#fK;;", "."),  // atom id 'x' "f"
+  testCase(cat3(parenthetically, "`K```@'I#x``:#fK;;", "."),  // atom id 'x' "f"
     "`fx");
-  testCase(cat3(parenCompiler, "`K````@*#)``:#1K``:#2K``:#3K;;", "."),  // if3 ')' "1" "2" "3"
+  testCase(cat3(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;;", "."),  // if3 ')' "1" "2" "3"
     "1");
-  testCase(cat3(parenCompiler, "``B`TK`@,K;;", ".just(one);not(two);"),  // fst . parseParen
+  testCase(cat3(parenthetically, "``B`TK`@,K;;", ".just(one);not(two);"),  // fst . parseParen
     "````just``one");
-  testCase(cat3(parenCompiler, ";", ".par(en);(t(he)(ses));K;;.extra"),
+  testCase(cat3(parenthetically, ";", ".par(en);(t(he)(ses));K;;.extra"),
     "```par`en;``t`he``ses;K;;");
 }
 
@@ -579,16 +587,16 @@ int pc(int c) { int r = putchar(c); fflush(stdout); return r; }
 void catfile(char *s, char *f) {
   char *p = s + strlen(s);
   FILE *fp = fopen(f, "r");
-  p += fread(p, 1, 16384, fp);
+  p += fread(p, 1, 65536, fp);
   fclose(fp);
   *p = 0;
 }
 
 int main(int argc, char **argv) {
-  char program[1<<16];
+  char program[1<<20];
   strcpy(program, "");
-  strcat(program, parenCompiler); strcat(program, ";,");
-  strcat(program, skiCompiler); strcat(program, ";,");
+  strcat(program, parenthetically); strcat(program, ";,");
+  strcat(program, exponentially); strcat(program, ";,");
   strcat(program, ski1Compiler); strcat(program, ";,");
   strcat(program, semantically); strcat(program, ";,");
   strcat(program, singularity); strcat(program, ";,");

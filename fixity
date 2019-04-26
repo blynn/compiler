@@ -2,6 +2,8 @@
 -- Supports infix declarations.
 --
 -- All infix declarations must precede the definitions.
+--
+-- Supports let expressions.
 ------------------------------------------------------------------------------
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
@@ -79,7 +81,6 @@ id x = x;
 flip f x y = f y x;
 (&) x f = f x;
 anyOne = fmap itemize (spc (sat (\c -> True)));
-pre = char '@' *> anyOne;
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
@@ -90,7 +91,8 @@ litChar = between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
 sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
 alt r = (conId <|> var <|> (undefined <$> sqLst r) <|> (undefined <$> paren (spch ','))) *> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
-alts r = between (spch '{') (spch '}') (sepBy (alt r) (spch ';'));
+braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
+alts r = braceSep (alt r);
 altize h t = foldl A h t;
 cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
 
@@ -100,7 +102,18 @@ parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pu
 rightSect r = (((\v a -> A (A (R "C") (V v)) a) <$> op) <|> commaThen) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
-atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V (conId <|> var) <|> lit;
+isFree v expr = case expr of
+  { R s -> False
+  ; V s -> lstEq s v
+  ; A x y -> isFree v x || isFree v y
+  ; L w t -> not ((lstEq v w) || not (isFree v t))
+  };
+maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
+def r = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
+addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) def)) x ls;
+letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
+
+atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
@@ -144,16 +157,7 @@ opFold precTab e xs = case xs of
   };
 expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
-isFree v expr = case expr of
-  { R s -> False
-  ; V s -> lstEq s v
-  ; A x y -> isFree v x || isFree v y
-  ; L w t -> not ((lstEq v w) || not (isFree v t))
-  };
-maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
-def precTab = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> expr precTab 0));
-
-aType = (undefined <$> paren (some aType)) <|> (undefined <$> (conId <|> varId)) <|> (undefined <$> between (spch '[') (spch ']') aType);
+aType = (undefined <$> paren (some aType <* ((spch ',' *> some aType) <|> pure []) )) <|> (undefined <$> (conId <|> varId)) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> fpair cas (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
 
@@ -165,11 +169,11 @@ fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> some op);
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-funs precTab = concat <$> sepBy (adt <|> (itemize <$> def precTab)) (spch ';');
+funs precTab = concat <$> sepBy (adt <|> (itemize <$> def (expr precTab 0))) (spch ';');
 program = sp *> (concat <$> many fixity) >>= funs;
 
 second f p = fpair p \x y -> (x, f y);
-primTab = [(",", "``BCT"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("+", "+"), ("*", "*")];
+primTab = [(",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
 
 rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
