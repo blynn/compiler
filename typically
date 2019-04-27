@@ -317,7 +317,9 @@ mgu unify t u = case t of
     }
   };
 
-unify a b m = fmaybe m Nothing \s -> fmaybe (mgu unify (apply s a) (apply s b)) Nothing (Just . (@@ s));
+mapMaybe f m = fmaybe m Nothing (Just . f);
+
+unify a b m = fmaybe m Nothing \s -> mapMaybe (@@ s) (mgu unify (apply s a) (apply s b));
 
 untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
   { Data adt -> (adt : adts, fs)
@@ -402,10 +404,10 @@ inferHelper tab loc ast csn = fpair csn \cs n ->
   ; Case x alts -> (va, fpair (inferHelper tab loc x (cs, n + 1)) \tx csn1 -> foldr (inferAlt inferHelper tab loc tx va) csn1 alts)
   };
 
-fromJust m = fmaybe m undefined id;
-apSub tsn = fpair tsn \ty jsn -> fpair jsn \js _ -> apply (fromJust js) ty;
+apSub tsn = fpair tsn \ty msn -> fpair msn \ms _ -> mapMaybe (flip apply ty) ms;
 
+fromJust m = fmaybe m undefined id;
 --infer :: [Top] -> SymTab
 infer prog = fpair (untangle prog) \adts defs ->
-  foldl (\tab def -> (fst def, apSub (inferHelper tab [] (snd def) (Just [], 0))) : tab) (concat (map inferAdt adts) ++ preTab) defs;
+  foldl (\tab def -> fpair def \s expr -> (s, (fromJust . apSub) (inferHelper tab [] expr (Just [], 0))) : tab) (concat (map inferAdt adts) ++ preTab) defs;
 dumpTypes s = (concat . map (\p -> fpair p \s t -> s ++ " :: " ++ showType t ++ "\n") . fst . fromJust) ((infer <$> program) s);

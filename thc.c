@@ -5,12 +5,10 @@ typedef unsigned u;
 
 enum { FORWARD = 27 };
 
-int is_parsing;
-
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
 enum { TOP = 1<<27 };
-u heap[TOP], np, *sp, *spTop, hp = 128, tab[256], tabn;
+u heap[TOP], np, *sp, *spTop, hp = 128;
 char *inp;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
@@ -32,13 +30,14 @@ u copy(u n) {
 }
 
 void gc() {
+  stats();
   if (sp > spTop) return;
-  if (is_parsing) return;
   u *p;
 
   np = hp < TOP/2 ? TOP/2 : 128;
+  //u np0 = np;
   for(p = sp; p <= spTop; p++) *p = copy(*p);
-  for(u i = 0; i < tabn; i++) tab[i] = copy(tab[i]);
+  //printf("GC %u\n", np - np0);
   hp = np;
 }
 
@@ -49,48 +48,54 @@ u heapOn(u f, u x) {
   return hp - 2;
 }
 
+u buf[65536], bufn, tab[256], tabn;
+
+u bufOn(u f, u x) {
+  buf[bufn] = f;
+  buf[bufn + 1] = x;
+  bufn += 2;
+  return bufn - 2;
+}
+
 u run();
 
 u parseTerm() {
   u c, n;
   do c = run(); while (c == '\n');
   switch(c) {
-    case '#': return heapOn('#', run());
+    case '#': return bufOn('#', run());
     case '@': return tab[run() - ' '];
     case '`':
-      c = hp;
-      hp += 2;
-      heap[c] = parseTerm();
-      heap[c + 1] = parseTerm();
-      return c;
+      c = parseTerm();
+      return bufOn(c, parseTerm());
     case '(':
       n = 0;
       while ((c = run()) != ')') n = 10*n + c - '0';
-      return heapOn('#', n);
+      return bufOn('#', n);
     default: return c;
   }
 }
 
-u parse() {
+void reset(u root) { *(sp = spTop) = root; }
+
+void parse() {
   stats();
+  bufn = 128;
   tabn = 0;
   for(;;) {
-    is_parsing = 1;
     u c = parseTerm();
     if (c == ';') {
       c = *inp++;
-      is_parsing = 0;
-      return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', '0')));
+      c = bufOn(c, bufOn(tab[tabn - 1], bufOn('<', '0')));
+      for (hp = 128; hp < bufn; hp++) heap[hp] = buf[hp];
+      reset(c);
+      return;
     }
     if (tabn == 256) die ("table overflow");
     tab[tabn++] = c;
-    is_parsing = 0;
-    gc();
     if (run() != ';') die("expected ';'");
   }
 }
-
-void reset(u root) { *(sp = spTop) = root; }
 
 u arg(u n) { return heap[sp [n] + 1]; }
 u num(u n) { return heap[arg(n) + 1]; }
@@ -110,7 +115,7 @@ u run() {
   int ch;
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    static int gctr; if (++gctr == (1<<20)) gc(), gctr = 0;
+    static int gctr; if (++gctr == (1<<25)) gc(), gctr = 0;
     u x = *sp;
     if (x < 128) switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
@@ -128,7 +133,7 @@ u run() {
       case '#': lazy(2, arg(2), sp[1]); break;
       case 1: ch = num(1); lazy(2, heapOn(arg(2), '?'), heapOn('T', 1)); return ch;
       case 2: ouch(num(1)); lazy(2, heapOn(arg(2), '0'), heapOn('T', 2)); break;
-      case ',': lazy(1, heapOn(arg(1), '?'), heapOn('T', 1)); reset(parse()); break;
+      case ',': lazy(1, heapOn(arg(1), '?'), heapOn('T', 1)); parse(); break;
       case '.': lazy(1, heapOn(arg(1), '0'), heapOn('T', 2)); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
