@@ -3,13 +3,42 @@ typedef unsigned u;
 #include <stdlib.h>
 #include <string.h>
 
+enum { FORWARD = 0 };
+
+int is_parsing;
+
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<28 };
-u heap[TOP], *sp, hp, tab[256], tabn;
+enum { TOP = 1<<27 };
+u heap[TOP], np, *sp, *spTop, hp = 128, tab[256], tabn;
 char *inp;
 
-void stats() { printf("[HP = %u, SP = %ld\n", hp, sp - heap); }
+void stats() { printf("[HP = %u, SP = %ld]\n", hp, sp - heap); }
+
+u copy(u n) {
+  if (n < 128) return n;
+  if (heap[n] == FORWARD) return heap[n + 1];
+  u x = heap[n];
+  u y = heap[n + 1];
+  u z = np;
+  np += 2;
+  heap[n] = FORWARD;
+  heap[n + 1] = z;
+  heap[z] = copy(x);
+  heap[z + 1] = x == '#' || x == '0' ? y : copy(y);
+  return z;
+}
+
+void gc() {
+  if (sp > spTop) return;
+  if (is_parsing) return;
+  u *p;
+
+  np = hp < TOP/2 ? TOP/2 : 128;
+  for(p = sp; p <= spTop; p++) *p = copy(*p);
+  for(u i = 0; i < tabn; i++) tab[i] = copy(tab[i]);
+  hp = np;
+}
 
 u heapOn(u f, u x) {
   heap[hp] = f;
@@ -44,18 +73,21 @@ u parse() {
   stats();
   tabn = 0;
   for(;;) {
+    is_parsing = 1;
     u c = parseTerm();
     if (c == ';') {
       c = *inp++;
-      return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', 0)));
+      is_parsing = 0;
+      return heapOn(c, heapOn(tab[tabn - 1], heapOn('<', '0')));
     }
     if (tabn == 256) die ("table overflow");
     tab[tabn++] = c;
+    is_parsing = 0;
     if (run() != ';') die("expected ';'");
   }
 }
 
-void reset(u root) { *(sp = heap + TOP - 3) = root; }
+void reset(u root) { *(sp = spTop) = root; }
 
 u arg(u n) { return heap[sp [n] + 1]; }
 u num(u n) { return heap[arg(n) + 1]; }
@@ -75,10 +107,11 @@ u run() {
   int ch;
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
+    static int gn; if (++gn == 123) gc(), gn = 0;
     if (heap + hp >= sp) stats(), die("STACK OVERFLOW");
     u x = *sp;
-    if (!x) break;
     if (x < 128) switch(x) {
+      case '0': return 0;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'S': lazy(3, harg(1, 3), harg(2, 3)); break;
       case 'B': lazy(3, arg(1), harg(2, 3)); break;
@@ -88,12 +121,12 @@ u run() {
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
       case ':': lazy(4, harg(4, 1), arg(2)); break;
-      case '<': ch = *inp++; ch <= 0 ? lazy(1, 'I', 'K') : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', 0)); break;
+      case '<': ch = *inp++; ch <= 0 ? lazy(1, 'I', 'K') : lazy(1, heapOn(':', heapOn('#', ch)), heapOn('<', '?')); break;
       case '#': lazy(2, arg(2), sp[1]); break;
-      case 1: ch = num(1); lazy(2, heapOn(arg(2), 0), heapOn('T', 1)); return ch;
-      case 2: ouch(num(1)); lazy(2, heapOn(arg(2), 0), heapOn('T', 2)); break;
-      case ',': lazy(1, heapOn(arg(1), 0), heapOn('T', 1)); reset(parse()); break;
-      case '.': lazy(1, heapOn(arg(1), 0), heapOn('T', 2)); break;
+      case 1: ch = num(1); lazy(2, heapOn(arg(2), '?'), heapOn('T', 1)); return ch;
+      case 2: ouch(num(1)); lazy(2, heapOn(arg(2), '0'), heapOn('T', 2)); break;
+      case ',': lazy(1, heapOn(arg(1), '?'), heapOn('T', 1)); reset(parse()); break;
+      case '.': lazy(1, heapOn(arg(1), '0'), heapOn('T', 2)); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case '*': lazy(2, '#', num(1) * num(2)); break;
@@ -110,7 +143,6 @@ u run() {
 }
 
 int runWith(int (*f)(int), char *str) {
-  hp = 128;
   ouch = f;
   inp = str;
   reset(heapOn(',', heapOn('<', '0')));
@@ -593,6 +625,8 @@ void catfile(char *s, char *f) {
 }
 
 int main(int argc, char **argv) {
+  heap[TOP - 3] = TOP - 2;
+  spTop = heap + TOP - 4;
   char program[1<<20];
   strcpy(program, "");
   strcat(program, parenthetically); strcat(program, ";,");
