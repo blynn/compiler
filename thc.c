@@ -3,7 +3,7 @@ typedef unsigned u;
 #include <stdlib.h>
 #include <string.h>
 
-enum { FORWARD = 0 };
+enum { FORWARD = 27 };
 
 int is_parsing;
 
@@ -13,13 +13,15 @@ enum { TOP = 1<<27 };
 u heap[TOP], np, *sp, *spTop, hp = 128, tab[256], tabn;
 char *inp;
 
-void stats() { printf("[HP = %u, SP = %ld]\n", hp, sp - heap); }
+void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 u copy(u n) {
   if (n < 128) return n;
-  if (heap[n] == FORWARD) return heap[n + 1];
+  if (np < TOP/2 && n < TOP/2) return n;
+  if (np >= TOP/2 && n >= TOP/2) return n;
   u x = heap[n];
   u y = heap[n + 1];
+  if (x == FORWARD) return y;
   u z = np;
   np += 2;
   heap[n] = FORWARD;
@@ -83,6 +85,7 @@ u parse() {
     if (tabn == 256) die ("table overflow");
     tab[tabn++] = c;
     is_parsing = 0;
+    gc();
     if (run() != ';') die("expected ';'");
   }
 }
@@ -107,10 +110,10 @@ u run() {
   int ch;
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    static int gn; if (++gn == 123) gc(), gn = 0;
-    if (heap + hp >= sp) stats(), die("STACK OVERFLOW");
+    static int gctr; if (++gctr == (1<<20)) gc(), gctr = 0;
     u x = *sp;
     if (x < 128) switch(x) {
+      case FORWARD: stats(); die("stray forwarding pointer");
       case '0': return 0;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'S': lazy(3, harg(1, 3), harg(2, 3)); break;
@@ -641,6 +644,9 @@ int main(int argc, char **argv) {
   catfile(program, "algebraically"); strcat(program, ";,");
   catfile(program, "parity"); strcat(program, ";,");
   catfile(program, "fixity"); strcat(program, ";,");
+  catfile(program, "typically"); strcat(program, ";.");
+  catfile(program, "typically");
+  /*
   strcat(program,
 "infixl 6 + -;"
 "infixl 7 *;"
@@ -657,6 +663,7 @@ int main(int argc, char **argv) {
 "elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
 "go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
 );
+*/
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }

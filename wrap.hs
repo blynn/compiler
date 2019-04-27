@@ -7,4 +7,4 @@ a <= b = if a Prelude.<= b then True else False
 a == b = if a Prelude.== b then True else False
 (/) = Prelude.div
 (%) = Prelude.mod
-#include "fixity"
+#include "typically"

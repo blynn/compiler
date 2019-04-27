@@ -1,0 +1,411 @@
+------------------------------------------------------------------------------
+-- Type inference.
+--
+-- To compile with GHC, replace [Int] with String throughout.
+------------------------------------------------------------------------------
+data Bool = True | False;
+data Maybe a = Nothing | Just a;
+fst p = case p of { (,) x y -> x };
+snd p = case p of { (,) x y -> y };
+ife a b c = case a of { True -> b ; False -> c };
+not a = case a of { True -> False; False -> True };
+(.) f g x = f (g x);
+(||) f g = ife f True (ife g True False);
+(&&) f g = ife f (ife g True False) False;
+flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
+lstEq xs ys = case xs of
+  { [] -> flst ys True (\h t -> False)
+  ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
+  };
+(++) xs ys = flst xs ys (\x xt -> x:(xt ++ ys));
+
+foldr c n l = flst l n (\h t -> c h(foldr c n t));
+foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
+undefined = undefined;
+foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
+elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
+find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
+concat = foldr (++) [];
+itemize c = c:[];
+any f xs = foldr (\x t -> ife (f x) True t) False xs;
+
+fpair p = \f -> case p of { (,) x y -> f x y };
+fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+pure x = \inp -> Just (x, inp);
+satHelper f = \h t -> ife (f h) (pure h t) Nothing;
+sat f inp = flst inp Nothing (satHelper f);
+bind f m = case m of
+  { Nothing -> Nothing
+  ; Just x -> fpair x f
+  };
+ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+(<*>) = ap;
+fmap f x = ap (pure f) x;
+(<$>) = fmap;
+(>>=) x y = \inp -> bind (\a t -> y a t) (x inp);
+(<|>) x y = \inp -> case x inp of
+  { Nothing -> y inp
+  ; Just x -> Just x
+  };
+liftA2 f x y = ap (fmap f x) y;
+(*>) = liftA2 \x y -> y;
+(<*) = liftA2 \x y -> x;
+many p = liftA2 (:) p (many p) <|> pure [];
+some p = liftA2 (:) p (many p);
+sepBy1 p sep = liftA2 (:) p (many (sep *> p));
+sepBy p sep = sepBy1 p sep <|> pure [];
+
+char c = sat \x -> x == c;
+between x y p = x *> (p <* y);
+com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
+sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+spc f = f <* sp;
+spch = spc . char;
+wantWith pred f inp = bind (satHelper pred) (f inp);
+want f s inp = wantWith (lstEq s) f inp;
+
+paren = between (spch '(') (spch ')');
+small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
+large = sat \x -> (x <= 'Z') && ('A' <= x);
+digit = sat \x -> (x <= '9') && ('0' <= x);
+varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
+conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
+keyword s = spc (want varLex s);
+varId = spc (wantWith (not . lstEq "of") varLex);
+opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
+op = spc opLex <|> between (spch '`') (spch '`') varId;
+var = varId <|> paren (spc opLex);
+
+data Ast = R [Int] | V [Int] | A Ast Ast | L [Int] Ast | Case Ast [([Int], Ast)];
+
+id x = x;
+flip f x y = f y x;
+(&) x f = f x;
+anyOne = fmap itemize (spc (sat (\c -> True)));
+lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
+listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
+escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
+litOne delim = fmap (\c -> R ('#':(itemize c))) (escChar <|> sat (\c -> not (c == delim)));
+litInt = R . ('(':) . (++ ")") <$> spc (some digit);
+litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
+litChar = between (char '\'') (spch '\'') (litOne '\'');
+lit = litStr <|> litChar <|> litInt;
+sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
+alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
+braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
+alts r = braceSep (alt r);
+cas r = Case <$> between (keyword "case") (keyword "of") r <*> alts r;
+
+thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
+commaThen = spch ',' *> pure (A (V ","));
+parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
+rightSect r = (((\v a -> A (A (V "\\C") (V v)) a) <$> op) <|> commaThen) <*> r;
+section r = paren (parenExpr r <|> rightSect r);
+
+isFree v expr = case expr of
+  { R s -> False
+  ; V s -> lstEq s v
+  ; A x y -> isFree v x || isFree v y
+  ; L w t -> not ((lstEq v w) || not (isFree v t))
+  ; Case x as -> isFree v x || any (isFree v . snd) as
+  };
+maybeFix s x = (s, ife (isFree s x) (A (V "\\Y") (L s x)) x);
+def r = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
+addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) def)) x ls;
+letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
+
+atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
+aexp r = fmap (foldl1 A) (some (atom r));
+fix f = f (fix f);
+lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+
+data Assoc = NAssoc | LAssoc | RAssoc;
+eqAssoc x y = case x of
+  { NAssoc -> case y of
+    { NAssoc -> True
+    ; LAssoc -> False
+    ; RAssoc -> False
+    }
+  ; LAssoc -> case y of
+    { NAssoc -> False
+    ; LAssoc -> True
+    ; RAssoc -> False
+    }
+  ; RAssoc -> case y of
+    { NAssoc -> False
+    ; LAssoc -> False
+    ; RAssoc -> True
+    }
+  };
+precOf s precTab = fmaybe (lstLookup s precTab) 5 fst;
+assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
+opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
+opFold precTab e xs = case xs of
+  { [] -> e
+  ; (:) x xt -> case find (\y -> not (eqAssoc (assocOf (fst x) precTab) (assocOf (fst y) precTab))) xt of
+    { Nothing -> case assocOf (fst x) precTab of
+      { NAssoc -> case xt of
+        { [] -> fpair x (\op y -> A (A (V op) e) y)
+        ; (:) y yt -> undefined
+        }
+      ; LAssoc -> foldl (\a b -> fpair b (\op y -> A (A (V op) a) y)) e xs
+      ; RAssoc -> (foldr (\a b -> fpair a (\op y -> \e -> A (A (V op) e) (b y))) id xs) e
+      }
+    ; Just y -> undefined
+    }
+  };
+expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
+
+map = flip (foldr . ((:) .)) [];
+
+data Typ = TC [Int] | TV [Int] | TAp Typ Typ;
+data Constr = Constr [Int] [Typ];
+data Adt = Adt Typ [Constr];
+
+_type r = foldl1 TAp <$> some r;
+aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|> (TC <$> conId) <|> (TV <$> varId) <|> (TAp (TC "[]") <$> between (spch '[') (spch ']') (_type aType));
+
+simpleType c vs = foldl TAp (TC c) (map TV vs);
+
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('x':s, s : l))) ("x", []);
+-- For example, creates `Just = \x a b -> b x`.
+scottEncode vs con = case con of { Constr s ts -> (s, foldr L (foldl (\a b -> A a (V b)) (V s) (mkStrs ts)) ((mkStrs ts) ++ vs)) };
+conOf con = case con of { Constr s _ -> s };
+mkAdtDefs a = case a of { Adt _ cons -> map (scottEncode (map conOf cons)) cons };
+adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many varId) <*> (sepBy (Constr <$> conId <*> many aType) (spch '|'));
+
+prec = (\c -> ord c - ord '0') <$> spc digit;
+fixityList a n os = map (\o -> (o, (n, a))) os;
+fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> some op);
+fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
+
+data Top = Data Adt | Fun ([Int], Ast);
+
+toDef top = case top of
+  { Data adt -> mkAdtDefs adt
+  ; Fun f -> f:[]
+  };
+
+arr a b = TAp (TAp (TC "->") a) b;
+
+inferAdt adt = case adt of
+  { Adt t cs -> map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
+  };
+
+funs precTab = sepBy ((Data <$> adt) <|> (Fun <$> def (expr precTab 0))) (spch ';');
+program = sp *> (concat <$> many fixity) >>= funs;
+
+first f p = fpair p \x y -> (f x, y);
+second f p = fpair p \x y -> (x, f y);
+primTab = [(",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*"), (":", ":"), ("[]", "K")];
+prim s = fmaybe (lstLookup s primTab) s id;
+
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
+show ds t = case t of
+  { R s -> s
+  ; V v -> rank ds v
+  ; A x y -> '`':(show ds x ++ show ds y)
+  ; L w t -> undefined
+  ; Case x as -> undefined
+  };
+data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
+
+debruijn n e = case e of
+  { R s -> Pass (R s)
+  ; V v -> foldr (\h m -> ife (lstEq h v) Ze (Su m)) (Pass (V v)) n
+  ; A x y -> App (debruijn n x) (debruijn n y)
+  ; L s t -> La (debruijn (s:n) t)
+  ; Case x as -> debruijn n (foldl A x (map snd as))
+  };
+
+data Sem = Defer | Closed Ast | Need Sem | Weak Sem;
+
+ldef = \r y -> case y of
+  { Defer -> Need (Closed (A (A (R "S") (R "I")) (R "I")))
+  ; Closed d -> Need (Closed (A (R "T") d))
+  ; Need e -> Need (r (Closed (A (R "S") (R "I"))) e)
+  ; Weak e -> Need (r (Closed (R "T")) e)
+  };
+
+lclo = \r d y -> case y of
+  { Defer -> Need (Closed d)
+  ; Closed dd -> Closed (A d dd)
+  ; Need e -> Need (r (Closed (A (R "B") d)) e)
+  ; Weak e -> Weak (r (Closed d) e)
+  };
+
+lnee = \r e y -> case y of
+  { Defer -> Need (r (r (Closed (R "S")) e) (Closed (R "I")))
+  ; Closed d -> Need (r (Closed (A (R "R") d)) e)
+  ; Need ee -> Need (r (r (Closed (R "S")) e) ee)
+  ; Weak ee -> Need (r (r (Closed (R "C")) e) ee)
+  };
+
+lwea = \r e y -> case y of
+  { Defer -> Need e
+  ; Closed d -> Weak (r e (Closed d))
+  ; Need ee -> Need (r (r (Closed (R "B")) e) ee)
+  ; Weak ee -> Weak (r e ee)
+  };
+
+babsa x y = case x of
+  { Defer -> ldef babsa y
+  ; Closed d -> lclo babsa d y
+  ; Need e -> lnee babsa e y
+  ; Weak e -> lwea babsa e y
+  };
+
+babs t = case t of
+  { Ze -> Defer
+  ; Su x -> Weak (babs x)
+  ; Pass s -> Closed s
+  ; La t -> case babs t of
+    { Defer -> Closed (R "I")
+    ; Closed d -> Closed (A (R "K") d)
+    ; Need e -> e
+    ; Weak e -> babsa (Closed (R "K")) e
+    }
+  ; App x y -> babsa (babs x) (babs y)
+  };
+
+nolam x = case babs (debruijn [] x) of
+  { Defer -> undefined
+  ; Closed d -> d
+  ; Need e -> undefined
+  ; Weak e -> undefined
+  };
+dump tab ds = flst ds ";" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
+compile s = fmaybe (program s) "?" ((\ds -> dump ds ds) . (concat . map toDef) . fst);
+
+showType t = case t of
+  { TC s -> s
+  ; TV s -> s
+  ; TAp a b -> concat ["(", showType a, " ", showType b, ")"]
+  };
+
+apply sub t = case t of
+  { TC v -> t
+  ; TV v -> fmaybe (lstLookup v sub) t id
+  ; TAp a b -> TAp (apply sub a) (apply sub b)
+  };
+
+(@@) s1 s2 = map (second (apply s1)) s2 ++ s1;
+
+occurs s t = case t of
+  { TC v -> False
+  ; TV v -> lstEq s v
+  ; TAp a b -> occurs s a || occurs s b
+  };
+
+varBind s t = case t of
+  { TC v -> Just [(s, t)]
+  ; TV v -> ife (lstEq v s) (Just []) (Just [(s, t)])
+  ; TAp a b -> ife (occurs s t) Nothing (Just [(s, t)])
+  };
+
+mgu unify t u = case t of
+  { TC a -> case u of
+    { TC b -> ife (lstEq a b) (Just []) Nothing
+    ; TV b -> varBind b t
+    ; TAp a b -> Nothing
+    }
+  ; TV a -> varBind a u
+  ; TAp a b -> case u of
+    { TC b -> Nothing
+    ; TV b -> varBind b t
+    ; TAp c d -> unify b d (mgu unify a c)
+    }
+  };
+
+unify a b m = fmaybe m Nothing \s -> fmaybe (mgu unify (apply s a) (apply s b)) Nothing (Just . (@@ s));
+
+untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
+  { Data adt -> (adt : adts, fs)
+  ; Fun f -> (adts, f : fs)
+  }) ([], []) prog;
+
+preTab =
+  [ ("\\Y", arr (arr (TV "a") (TV "a")) (TV "a"))
+  , ("\\C", arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
+  , ("[]", TAp (TC "[]") (TV "a"))
+  , (":", arr (TV "a") (arr (TAp (TC "[]") (TV "a")) (TAp (TC "[]") (TV "a"))))
+  , (",", arr (TV "a") (arr (TV "b") (TAp (TAp (TC ",") (TV "a")) (TV "b"))))
+  , ("==", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
+  , ("<=", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
+  , ("+", arr (TC "Int") (arr (TC "Int") (TC "Int")))
+  , ("-", arr (TC "Int") (arr (TC "Int") (TC "Int")))
+  , ("*", arr (TC "Int") (arr (TC "Int") (TC "Int")))
+  , ("/", arr (TC "Int") (arr (TC "Int") (TC "Int")))
+  , ("%", arr (TC "Int") (arr (TC "Int") (TC "Int")))
+  , (",", arr (TV "a") (arr (TV "b") (TAp (TAp (TC ",") (TV "a")) (TV "b"))))
+  , ("chr", arr (TC "Int") (TC "Int"))
+  , ("ord", arr (TC "Int") (TC "Int"))
+  , ("succ", arr (TC "Int") (TC "Int"))
+  ];
+
+ifz n = ife (0 == n);
+showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
+showInt n s = ifz n ('0':) (showInt' n) s;
+
+--instantiate' :: Typ -> Int -> [([Int], Typ)] -> ((Typ, Int), [([Int], Typ)])
+instantiate' t n tab = case t of
+  { TC s -> ((t, n), tab)
+  ; TV s -> case lstLookup s tab of
+    { Nothing -> let { va = TV (s ++ ('_':showInt n "")) } in ((va, n + 1), (s, va):tab)
+    ; Just v -> ((v, n), tab)
+    }
+  ; TAp x y ->
+    fpair (instantiate' x n tab) \tn1 tab1 ->
+    fpair tn1 \t1 n1 -> fpair (instantiate' y n1 tab1) \tn2 tab2 ->
+    fpair tn2 \t2 n2 -> ((TAp t1 t2, n2), tab2)
+  };
+
+--instantiate :: Typ -> Int -> (Typ, Int)
+instantiate t n = fst (instantiate' t n []);
+
+-- Returns True for (TAp (TC "->") x).
+isArrow t = case t of
+  { TC _ -> False
+  ; TV _ -> False
+  ; TAp x _ -> case x of
+    { TC v -> lstEq v "->"
+    ; TV _ -> False
+    ; TAp _ _ -> False
+    }
+  };
+
+--bumpScott :: Typ -> Typ -> (Typ, Typ)
+bumpScott tnew t = case t of
+  { TC _ -> (t, tnew)
+  ; TV _ -> (t, tnew)
+  ; TAp x y -> ife (isArrow x) (second (TAp x) (bumpScott tnew y)) (t, tnew)
+  };
+
+--inferAlt :: SymTab -> SymTab -> Typ -> Typ -> ([Int], Ast) -> (Maybe Subst, Int) -> (Maybe Subst, Int)
+inferAlt inferHelper tab loc tx va st csn = fpair st \s t -> fpair csn \cs n ->
+  fpair (fmaybe (lstLookup s tab) undefined (flip instantiate n)) \scott n0 ->
+  fpair (inferHelper tab loc t (cs, n0)) \tt csn1 -> fpair csn1 \cs1 n1 ->
+  fpair (bumpScott va scott) \tout talt ->
+  (unify tx tout (unify tt talt cs1), n1 + 1);
+
+--inferHelper :: SymTab -> SymTab -> Ast -> (Maybe Subst, Int) -> (Typ, (Maybe Subst, Int))
+inferHelper tab loc ast csn = fpair csn \cs n ->
+  let { va = TV ('_':showInt n "") } in case ast of
+  { R s -> (TC "Int", csn)
+  ; V s -> fmaybe (lstLookup s loc) (fmaybe (lstLookup s tab) undefined 
+    (\t -> second ((,) cs) (instantiate t n))) (flip (,) csn)
+  ; A x y -> 
+    fpair (inferHelper tab loc x (cs, n + 1)) \tx csn1 ->
+    fpair (inferHelper tab loc y csn1) \ty csn2 ->
+    (va, first (unify tx (arr ty va)) csn2)
+  ; L s x -> first (TAp (TAp (TC "->") va)) (inferHelper tab ((s, va):loc) x (cs, n + 1))
+  ; Case x alts -> (va, fpair (inferHelper tab loc x (cs, n + 1)) \tx csn1 -> foldr (inferAlt inferHelper tab loc tx va) csn1 alts)
+  };
+
+fromJust m = fmaybe m undefined id;
+apSub tsn = fpair tsn \ty jsn -> fpair jsn \js _ -> apply (fromJust js) ty;
+
+--infer :: [Top] -> SymTab
+infer prog = fpair (untangle prog) \adts defs ->
+  foldl (\tab def -> (fst def, apSub (inferHelper tab [] (snd def) (Just [], 0))) : tab) (concat (map inferAdt adts) ++ preTab) defs;
+dumpTypes s = (concat . map (\p -> fpair p \s t -> s ++ " :: " ++ showType t ++ "\n") . fst . fromJust) ((infer <$> program) s);
