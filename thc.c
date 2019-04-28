@@ -3,7 +3,7 @@ typedef unsigned u;
 #include <stdlib.h>
 #include <string.h>
 
-enum { FORWARD = 27 };
+enum { FORWARD = 27, REDUCING = 9, RECUR = 10 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
@@ -18,8 +18,39 @@ u copy(u n) {
   if (np < TOP/2 && n < TOP/2) return n;
   if (np >= TOP/2 && n >= TOP/2) return n;
   u x = heap[n];
+  if (x >= 128) {
+    while (heap[x] == 'T') {
+      heap[n] = heap[n + 1];
+      heap[n + 1] = heap[x + 1];
+      x = heap[n];
+    }
+    if (heap[x] == 'K') {
+      heap[n + 1] = heap[x + 1];
+      x = heap[n] = 'I';
+    }
+  }
   u y = heap[n + 1];
-  if (x == FORWARD) return y;
+  switch(x) {
+    case FORWARD: return y;
+    case REDUCING:
+      heap[n] = RECUR;
+      heap[n + 1] = np;
+      np += 2;
+      return heap[n + 1];
+    case RECUR: return y;
+    case 'I':
+      heap[n] = REDUCING;
+      y = copy(y);
+      if (heap[n] == RECUR) {
+        heap[heap[n + 1]] = 'I';
+        heap[heap[n + 1] + 1] = y;
+      } else {
+        heap[n + 1] = y;
+      }
+      heap[n] = FORWARD;
+      return heap[n + 1];
+    default: break;
+  }
   u z = np;
   np += 2;
   heap[n] = FORWARD;
@@ -30,14 +61,14 @@ u copy(u n) {
 }
 
 void gc() {
-  stats();
+  //stats();
   if (sp > spTop) return;
   u *p;
 
   np = hp < TOP/2 ? TOP/2 : 128;
-  //u np0 = np;
+  u np0 = np;
   for(p = sp; p <= spTop; p++) *p = copy(*p);
-  //printf("GC %u\n", np - np0);
+  fprintf(stderr, "GC %u %ld\n", np - np0, spTop - sp);
   hp = np;
 }
 
@@ -115,7 +146,7 @@ u run() {
   int ch;
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    static int gctr; if (++gctr == (1<<25)) gc(), gctr = 0;
+    static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
     u x = *sp;
     if (x < 128) switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
@@ -125,7 +156,7 @@ u run() {
       case 'B': lazy(3, arg(1), harg(2, 3)); break;
       case 'C': lazy(3, harg(1, 3), arg(2)); break;
       case 'R': lazy(3, harg(2, 3), arg(1)); break;
-      case 'I': lazy(2, arg(1), arg(2)); break;
+      case 'I': sp[1] = arg(1); sp++; break;
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
       case ':': lazy(4, harg(4, 1), arg(2)); break;
@@ -633,8 +664,7 @@ void catfile(char *s, char *f) {
 }
 
 int main(int argc, char **argv) {
-  heap[TOP - 3] = TOP - 2;
-  spTop = heap + TOP - 4;
+  spTop = heap + TOP - 1;
   char program[1<<20];
   strcpy(program, "");
   strcat(program, parenthetically); strcat(program, ";,");
