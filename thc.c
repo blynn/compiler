@@ -61,7 +61,6 @@ u copy(u n) {
 }
 
 void gc() {
-  //stats();
   if (sp > spTop) return;
   u *p;
 
@@ -679,9 +678,8 @@ int main(int argc, char **argv) {
   catfile(program, "algebraically"); strcat(program, ";,");
   catfile(program, "parity"); strcat(program, ";,");
   catfile(program, "fixity"); strcat(program, ";,");
-  catfile(program, "typically"); strcat(program, ";.");
-  catfile(program, "typically");
-  /*
+  catfile(program, "typically"); strcat(program, ";,");
+  catfile(program, "typically"); strcat(program, ";,");
   strcat(program,
 "infixl 6 + -;"
 "infixl 7 *;"
@@ -698,7 +696,6 @@ int main(int argc, char **argv) {
 "elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
 "go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
 );
-*/
   if (argc > 1) runTests(); else runWith(pc, program);
   return 0;
 }
