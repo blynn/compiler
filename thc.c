@@ -681,10 +681,10 @@ int main(int argc, char **argv) {
   catfile(program, "typically"); strcat(program, ";,");
   catfile(program, "typically"); strcat(program, ";,");
   strcat(program,
-"infixl 6 + -;"
+"infixl 6 + , -;"
 "infixl 7 *;"
-"infixr 5 : ++;"
-"infix 4 == <=;"
+"infixr 5 : , ++;"
+"infix 4 == , <=;"
 "infixr 3 &&;"
 "infixr 2 ||;"
 "infixr 0 $;"

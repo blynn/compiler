@@ -1,8 +1,12 @@
+
 ------------------------------------------------------------------------------
 -- Type inference.
 --
 -- To compile with GHC, replace [Int] with String throughout.
 ------------------------------------------------------------------------------
+infixr 5 : , ++;
+infixl 4 <*> , <$> , <* , *>;
+infixl 3 <|>;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
 fst p = case p of { (,) x y -> x };
@@ -17,7 +21,7 @@ lstEq xs ys = case xs of
   { [] -> flst ys True (\h t -> False)
   ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
   };
-(++) xs ys = flst xs ys (\x xt -> x:(xt ++ ys));
+(++) xs ys = flst xs ys (\x xt -> x:xt ++ ys);
 
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
@@ -85,7 +89,7 @@ anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (\c -> R ('#':(itemize c))) (escChar <|> sat (\c -> not (c == delim)));
+litOne delim = fmap (\c -> R ('#':itemize c)) (escChar <|> sat (\c -> not (c == delim)));
 litInt = R . ('(':) . (++ ")") <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
@@ -176,7 +180,7 @@ adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;
-fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> some op);
+fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 data Top = Data Adt | Fun ([Int], Ast);
@@ -192,7 +196,7 @@ inferAdt adt = case adt of
   { Adt t cs -> map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
   };
 
-funs precTab = sepBy ((Data <$> adt) <|> (Fun <$> def (expr precTab 0))) (spch ';');
+funs precTab = sepBy (Data <$> adt <|> Fun <$> def (expr precTab 0)) (spch ';');
 program = sp *> (concat <$> many fixity) >>= funs;
 
 first f p = fpair p \x y -> (f x, y);
@@ -201,11 +205,11 @@ primTab = [("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"
   map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
 
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':n:[]) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
 show ds t = case t of
   { R s -> s
   ; V v -> rank ds v
-  ; A x y -> '`':(show ds x ++ show ds y)
+  ; A x y -> '`':show ds x ++ show ds y
   ; L w t -> undefined
   ; Case x as -> undefined
   };
@@ -355,7 +359,7 @@ showInt n s = ifz n ('0':) (showInt' n) s;
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
   ; TV s -> case lstLookup s tab of
-    { Nothing -> let { va = TV (s ++ ('_':showInt n "")) } in ((va, n + 1), (s, va):tab)
+    { Nothing -> let { va = TV (s ++ '_':showInt n "") } in ((va, n + 1), (s, va):tab)
     ; Just v -> ((v, n), tab)
     }
   ; TAp x y ->
