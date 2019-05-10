@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TupleSections #-}
 import Prelude ((+), (-), (*), Char, Int, String, succ, Show)
 import Data.Char (chr, ord)
 import qualified Prelude

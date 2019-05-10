@@ -1,8 +1,7 @@
-
 ------------------------------------------------------------------------------
 -- Type inference.
 --
--- To compile with GHC, replace [Int] with String throughout.
+-- `String` is hardcoded to mean `[Int]`.
 ------------------------------------------------------------------------------
 infixr 5 : , ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -80,7 +79,7 @@ opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
-data Ast = R [Int] | V [Int] | A Ast Ast | L [Int] Ast | Case Ast [([Int], Ast)];
+data Ast = R String | V String | A Ast Ast | L String Ast | Case Ast [(String, Ast)];
 
 id x = x;
 flip f x y = f y x;
@@ -101,9 +100,8 @@ alts r = braceSep (alt r);
 cas r = Case <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
-commaThen = spch ',' *> pure (A (V ","));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = (((\v a -> A (A (V "\\C") (V v)) a) <$> op) <|> commaThen) <*> r;
+rightSect r = ((\v a -> A (A (V "\\C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
@@ -162,12 +160,13 @@ expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (m
 
 map = flip (foldr . ((:) .)) [];
 
-data Typ = TC [Int] | TV [Int] | TAp Typ Typ;
-data Constr = Constr [Int] [Typ];
+data Typ = TC String | TV String | TAp Typ Typ;
+data Constr = Constr String [Typ];
 data Adt = Adt Typ [Constr];
 
 _type r = foldl1 TAp <$> some r;
-aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|> (TC <$> conId) <|> (TV <$> varId) <|> (TAp (TC "[]") <$> between (spch '[') (spch ']') (_type aType));
+typeConstant = (\s -> ife (lstEq "String" s) (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
+aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|> typeConstant <|> (TV <$> varId) <|> (TAp (TC "[]") <$> between (spch '[') (spch ']') (_type aType));
 
 simpleType c vs = foldl TAp (TC c) (map TV vs);
 
@@ -183,7 +182,7 @@ fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-data Top = Data Adt | Fun ([Int], Ast);
+data Top = Data Adt | Fun (String, Ast);
 
 toDef top = case top of
   { Data adt -> mkAdtDefs adt
@@ -355,7 +354,7 @@ ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
---instantiate' :: Typ -> Int -> [([Int], Typ)] -> ((Typ, Int), [([Int], Typ)])
+--instantiate' :: Typ -> Int -> [(String, Typ)] -> ((Typ, Int), [(String, Typ)])
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
   ; TV s -> case lstLookup s tab of
@@ -389,10 +388,10 @@ bumpScott tnew t = case t of
   ; TAp x y -> ife (isArrow x) (second (TAp x) (bumpScott tnew y)) (t, tnew)
   };
 
---type SymTab = [([Int], Typ)];
---type Subst = [([Int], Typ)];
+--type SymTab = [(String, Typ)];
+--type Subst = [(String, Typ)];
 
---inferAlt :: SymTab -> SymTab -> Typ -> Typ -> ([Int], Ast) -> (Maybe Subst, Int) -> (Maybe Subst, Int)
+--inferAlt :: SymTab -> SymTab -> Typ -> Typ -> (String, Ast) -> (Maybe Subst, Int) -> (Maybe Subst, Int)
 inferAlt inferHelper tab loc tx va st csn = fpair st \s t -> fpair csn \cs n ->
   fpair (fmaybe (lstLookup s tab) undefined (flip instantiate n)) \scott n0 ->
   fpair (inferHelper tab loc t (cs, n0)) \tt csn1 -> fpair csn1 \cs1 n1 ->
@@ -404,7 +403,7 @@ inferHelper tab loc ast csn = fpair csn \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
   { R s -> (TC "Int", csn)
   ; V s -> fmaybe (lstLookup s loc) (fmaybe (lstLookup s tab) undefined 
-    (\t -> second ((,) cs) (instantiate t n))) (flip (,) csn)
+    (\t -> second (cs,) (instantiate t n))) (, csn)
   ; A x y -> 
     fpair (inferHelper tab loc x (cs, n + 1)) \tx csn1 ->
     fpair (inferHelper tab loc y csn1) \ty csn2 ->

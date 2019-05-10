@@ -90,9 +90,8 @@ altize h t = foldl A h t;
 cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
-commaThen = spch ',' *> pure (A (V ","));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = (((\v a -> A (A (R "C") (V v)) a) <$> op) <|> commaThen) <*> r;
+rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V var <|> lit;
