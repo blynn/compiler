@@ -196,8 +196,8 @@ genCaseType adt = case adt of
   { Adt t cs -> (concat (map (\c -> case c of { Constr s _ -> '|':s }) cs), arr t (foldr arr (TV "case") (map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs)))
   };
 
-inferAdt adt = case adt of
-  { Adt t cs -> map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
+inferAdt adt = case adt of { Adt t cs ->
+  map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
   };
 
 funs precTab = sepBy (Data <$> adt <|> Fun <$> def (expr precTab 0)) (spch ';');
@@ -336,12 +336,13 @@ untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
   ; Fun f -> (adts, f : fs)
   }) ([], []) prog;
 
+preAdts =
+  [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
+  , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]
+  ];
 preTab =
   [ ("\\Y", arr (arr (TV "a") (TV "a")) (TV "a"))
   , ("\\C", arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
-  , ("[]", TAp (TC "[]") (TV "a"))
-  , (":", arr (TV "a") (arr (TAp (TC "[]") (TV "a")) (TAp (TC "[]") (TV "a"))))
-  , (",", arr (TV "a") (arr (TV "b") (TAp (TAp (TC ",") (TV "a")) (TV "b"))))
   , ("==", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
   , ("<=", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
   , ("+", arr (TC "Int") (arr (TC "Int") (TC "Int")))
@@ -349,13 +350,9 @@ preTab =
   , ("*", arr (TC "Int") (arr (TC "Int") (TC "Int")))
   , ("/", arr (TC "Int") (arr (TC "Int") (TC "Int")))
   , ("%", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , (",", arr (TV "a") (arr (TV "b") (TAp (TAp (TC ",") (TV "a")) (TV "b"))))
   , ("chr", arr (TC "Int") (TC "Int"))
   , ("ord", arr (TC "Int") (TC "Int"))
   , ("succ", arr (TC "Int") (TC "Int"))
-
-  , ("|,", arr (TAp (TAp (TC ",") (TV "a")) (TV "b")) (arr (arr (TV "a") (arr (TV "b") (TV "case"))) (TV "case")))
-  , ("|[]|:", arr (TAp (TC "[]") (TV "a")) (arr (TV "case") (arr (arr (TV "a") (arr (TAp (TC "[]") (TV "a")) (TV "case"))) (TV "case"))))
   ];
 
 ifz n = ife (0 == n);
@@ -405,7 +402,7 @@ infer tab defs = flst defs (Right tab) \def rest -> fpair def \s expr ->
     ; Just t -> infer ((s, t) : tab) rest
     };
 
-tabInit adts = concat (map inferAdt adts) ++ map genCaseType adts ++ preTab;
+tabInit adts = let { as = preAdts ++ adts } in concat (map inferAdt as) ++ map genCaseType as ++ preTab;
 
 typedAsm prog = fpair (untangle prog) \adts defs ->
   case infer (tabInit adts) defs of
