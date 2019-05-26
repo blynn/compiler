@@ -183,11 +183,11 @@ fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-data Top = Data Adt | Fun (String, Ast);
+data Top = Data Adt | Def (String, Ast);
 
 toDef top = case top of
   { Data adt -> mkAdtDefs adt
-  ; Fun f -> f:[]
+  ; Def f -> f:[]
   };
 
 arr a b = TAp (TAp (TC "->") a) b;
@@ -200,8 +200,8 @@ inferAdt adt = case adt of { Adt t cs ->
   map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
   };
 
-funs precTab = sepBy (Data <$> adt <|> Fun <$> def (expr precTab 0)) (spch ';');
-program = sp *> (concat <$> many fixity) >>= funs;
+tops precTab = sepBy (Data <$> adt <|> Def <$> def (expr precTab 0)) (spch ';');
+program = sp *> (concat <$> many fixity) >>= tops;
 
 first f p = fpair p \x y -> (f x, y);
 second f p = fpair p \x y -> (x, f y);
@@ -333,7 +333,7 @@ unify a b m = fmaybe m Nothing \s -> mapMaybe (@@ s) (mgu unify (apply s a) (app
 
 untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
   { Data adt -> (adt : adts, fs)
-  ; Fun f -> (adts, f : fs)
+  ; Def f -> (adts, f : fs)
   }) ([], []) prog;
 
 preAdts =
@@ -396,24 +396,28 @@ apSub tsn = fpair tsn \ty msn -> fpair msn \ms _ -> mapMaybe (flip apply ty) ms;
 
 data Either a b = Left a | Right b;
 
-infer tab defs = flst defs (Right tab) \def rest -> fpair def \s expr ->
+inferDefs tab defs = flst defs (Right tab) \def rest -> fpair def \s expr ->
   case apSub (inferHelper tab [] expr (Just [], 0)) of
     { Nothing -> Left ("bad type: " ++ s)
-    ; Just t -> infer ((s, t) : tab) rest
+    ; Just t -> inferDefs ((s, t) : tab) rest
     };
 
 tabInit adts = let { as = preAdts ++ adts } in concat (map inferAdt as) ++ map genCaseType as ++ preTab;
 
-typedAsm prog = fpair (untangle prog) \adts defs ->
-  case infer (tabInit adts) defs of
-    { Left err -> err
-    ; Right _ -> asm prog
-    };
+infer prog = fpair (untangle prog) \adts defs -> inferDefs (tabInit adts) defs;
+
+typedAsm prog = case infer prog of
+  { Left err -> err
+  ; Right _ -> asm prog
+  };
 
 fromJust m = fmaybe m undefined id;
 
 -- mustInfer :: [Top] -> SymTab
-mustInfer prog = fpair (untangle prog) \adts defs -> foldl (\tab def -> fpair def \s expr -> (s, (fromJust . apSub) (inferHelper tab [] expr (Just [], 0))) : tab) (tabInit adts) defs;
+mustInfer prog = case infer prog of
+  { Left _ -> undefined
+  ; Right ds -> ds
+  };
 
 dumpTypes s = (concat . map (\p -> fpair p \s t -> s ++ " :: " ++ showType t ++ "\n") . fst . fromJust) ((mustInfer <$> program) s);
 
