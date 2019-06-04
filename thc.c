@@ -681,14 +681,6 @@ int main(int argc, char **argv) {
   catfile(program, "typically"); strcat(program, ";,");
   catfile(program, "typically"); strcat(program, ";.");
 
-  /*
-  strcat(program,
-"f x = x * 3;"
-"g a b = f(a + b);"
-"h a b = (a + b)*3;"
-  );
-  */
-
   strcat(program,
 "infixl 6 + , -;"
 "infixl 7 *;"

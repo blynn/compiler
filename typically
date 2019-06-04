@@ -3,10 +3,16 @@
 --
 -- `String` is hardcoded to mean `[Int]`.
 ------------------------------------------------------------------------------
+infixr 9 .;
 infixr 5 : , ++;
 infixl 4 <*> , <$> , <* , *>;
 infixl 3 <|>;
+infixr 0 $;
 undefined = undefined;
+($) f x = f x;
+id x = x;
+flip f x y = f y x;
+(&) x f = f x;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
 fst p = case p of { (,) x y -> x };
@@ -81,10 +87,8 @@ var = varId <|> paren (spc opLex);
 
 data Ast = R String | V String | A Ast Ast | L String Ast | Case String;
 
-id x = x;
-flip f x y = f y x;
-(&) x f = f x;
 map = flip (foldr . ((:) .)) [];
+concatMap = (concat .) . map;
 
 anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
@@ -99,7 +103,7 @@ sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
 alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
-casHelper x as = foldl A (Case (concat (map (('|':) . fst) as))) (x:map snd as);
+casHelper x as = foldl A (Case (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = casHelper <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
@@ -126,21 +130,9 @@ lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothi
 
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
-  { NAssoc -> case y of
-    { NAssoc -> True
-    ; LAssoc -> False
-    ; RAssoc -> False
-    }
-  ; LAssoc -> case y of
-    { NAssoc -> False
-    ; LAssoc -> True
-    ; RAssoc -> False
-    }
-  ; RAssoc -> case y of
-    { NAssoc -> False
-    ; LAssoc -> False
-    ; RAssoc -> True
-    }
+  { NAssoc -> case y of { NAssoc -> True  ; LAssoc -> False ; RAssoc -> False }
+  ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
+  ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
 precOf s precTab = fmaybe (lstLookup s precTab) 5 fst;
 assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
@@ -183,31 +175,30 @@ fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-data Top = Data Adt | Def (String, Ast);
-
-toDef top = case top of
-  { Data adt -> mkAdtDefs adt
-  ; Def f -> f:[]
-  };
-
 arr a b = TAp (TAp (TC "->") a) b;
 
 genCaseType adt = case adt of
-  { Adt t cs -> (concat (map (\c -> case c of { Constr s _ -> '|':s }) cs), arr t (foldr arr (TV "case") (map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs)))
+  { Adt t cs -> (concatMap (\c -> case c of { Constr s _ -> '|':s }) cs, arr t (foldr arr (TV "case") (map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs)))
   };
 
 inferAdt adt = case adt of { Adt t cs ->
   map (\c -> case c of { Constr s ts -> (s, foldr arr t ts) }) cs
   };
 
-tops precTab = sepBy (Data <$> adt <|> Def <$> def (expr precTab 0)) (spch ';');
-program' = sp *> (concat <$> many fixity) >>= tops;
-program = (
-  [ Data (Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
-  , Data (Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]])] ++) <$> program';
-
 first f p = fpair p \x y -> (f x, y);
 second f p = fpair p \x y -> (x, f y);
+
+-- type Program = ([Adt], [(String, Ast)])
+addAdt = first . (:);
+addDef = second . (:);
+
+tops precTab = foldr ($) ([], []) <$> sepBy (addAdt <$> adt <|> addDef <$> def (expr precTab 0)) (spch ';');
+
+program' = sp *> (concat <$> many fixity) >>= tops;
+program =
+  addAdt (Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]) .
+  addAdt (Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]) <$> program';
+
 primTab = [("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++
   map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
@@ -287,7 +278,9 @@ nolam x = case babs (debruijn [] x) of
   ; Weak e -> undefined
   };
 dump tab ds = flst ds ";" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
-asm = (\ds -> dump ds ds) . concat . map toDef;
+asm prog = (\ds -> dump ds ds)
+  (fpair prog \adts defs -> concatMap mkAdtDefs adts ++ defs);
+
 compile s = fmaybe ((asm <$> program) s) "?" fst;
 
 showType t = case t of
@@ -333,11 +326,6 @@ mgu unify t u = case t of
 mapMaybe f m = fmaybe m Nothing (Just . f);
 
 unify a b m = fmaybe m Nothing \s -> mapMaybe (@@ s) (mgu unify (apply s a) (apply s b));
-
-untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
-  { Data adt -> (adt : adts, fs)
-  ; Def f -> (adts, f : fs)
-  }) ([], []) prog;
 
 preTab =
   [ ("\\Y", arr (arr (TV "a") (TV "a")) (TV "a"))
@@ -401,9 +389,9 @@ inferDefs tab defs = flst defs (Right tab) \def rest -> fpair def \s expr ->
     ; Just t -> inferDefs ((s, t) : tab) rest
     };
 
-tabInit adts = concat (map inferAdt adts) ++ map genCaseType adts ++ preTab;
+tabInit adts = concatMap inferAdt adts ++ map genCaseType adts ++ preTab;
 
-infer prog = fpair (untangle prog) \adts defs -> inferDefs (tabInit adts) defs;
+infer prog = fpair prog \adts defs -> inferDefs (tabInit adts) defs;
 
 typedAsm prog = case infer prog of
   { Left err -> err
@@ -412,12 +400,12 @@ typedAsm prog = case infer prog of
 
 fromJust m = fmaybe m undefined id;
 
--- mustInfer :: [Top] -> SymTab
+-- mustInfer :: Program -> SymTab
 mustInfer prog = case infer prog of
   { Left _ -> undefined
   ; Right ds -> ds
   };
 
-dumpTypes s = (concat . map (\p -> fpair p \s t -> s ++ " :: " ++ showType t ++ "\n") . fst . fromJust) ((mustInfer <$> program) s);
+dumpTypes s = (concatMap (\p -> fpair p \s t -> s ++ " :: " ++ showType t ++ "\n") . fst . fromJust) ((mustInfer <$> program) s);
 
 typedCompile s = fmaybe ((typedAsm <$> program) s) "?" fst;

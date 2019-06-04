@@ -121,21 +121,9 @@ fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
-  { NAssoc -> case y of
-    { NAssoc -> True
-    ; LAssoc -> False
-    ; RAssoc -> False
-    }
-  ; LAssoc -> case y of
-    { NAssoc -> False
-    ; LAssoc -> True
-    ; RAssoc -> False
-    }
-  ; RAssoc -> case y of
-    { NAssoc -> False
-    ; LAssoc -> False
-    ; RAssoc -> True
-    }
+  { NAssoc -> case y of { NAssoc -> True  ; LAssoc -> False ; RAssoc -> False }
+  ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
+  ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
 precOf s precTab = fmaybe (lstLookup s precTab) 5 fst;
 assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
