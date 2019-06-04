@@ -201,11 +201,14 @@ inferAdt adt = case adt of { Adt t cs ->
   };
 
 tops precTab = sepBy (Data <$> adt <|> Def <$> def (expr precTab 0)) (spch ';');
-program = sp *> (concat <$> many fixity) >>= tops;
+program' = sp *> (concat <$> many fixity) >>= tops;
+program = (
+  [ Data (Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
+  , Data (Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]])] ++) <$> program';
 
 first f p = fpair p \x y -> (f x, y);
 second f p = fpair p \x y -> (x, f y);
-primTab = [("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+"), (":", ":"), ("[]", "K")] ++
+primTab = [("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++
   map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
 
@@ -336,10 +339,6 @@ untangle prog = foldr (\top acc -> fpair acc \adts fs -> case top of
   ; Def f -> (adts, f : fs)
   }) ([], []) prog;
 
-preAdts =
-  [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
-  , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]
-  ];
 preTab =
   [ ("\\Y", arr (arr (TV "a") (TV "a")) (TV "a"))
   , ("\\C", arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
@@ -402,7 +401,7 @@ inferDefs tab defs = flst defs (Right tab) \def rest -> fpair def \s expr ->
     ; Just t -> inferDefs ((s, t) : tab) rest
     };
 
-tabInit adts = let { as = preAdts ++ adts } in concat (map inferAdt as) ++ map genCaseType as ++ preTab;
+tabInit adts = concat (map inferAdt adts) ++ map genCaseType adts ++ preTab;
 
 infer prog = fpair (untangle prog) \adts defs -> inferDefs (tabInit adts) defs;
 
