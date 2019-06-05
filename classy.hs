@@ -42,8 +42,8 @@ any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 pure x = \inp -> Just (x, inp);
-satHelper f = \h t -> ife (f h) (pure h t) Nothing;
-sat f inp = flst inp Nothing (satHelper f);
+sat' f = \h t -> ife (f h) (pure h t) Nothing;
+sat f inp = flst inp Nothing (sat' f);
 bind f m = case m of
   { Nothing -> Nothing
   ; Just x -> fpair x f
@@ -71,7 +71,7 @@ com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n'
 sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
-wantWith pred f inp = bind (satHelper pred) (f inp);
+wantWith pred f inp = bind (sat' pred) (f inp);
 want f s inp = wantWith (lstEq s) f inp;
 
 paren = between (spch '(') (spch ')');
@@ -105,8 +105,8 @@ sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
 alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
-casHelper x as = foldl A (Case (concatMap (('|':) . fst) as)) (x:map snd as);
-cas r = casHelper <$> between (keyword "case") (keyword "of") r <*> alts r;
+cas' x as = foldl A (Case (concatMap (('|':) . fst) as)) (x:map snd as);
+cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
@@ -389,8 +389,8 @@ instantiate qt n = case qt of { Qual ps t ->
 --type SymTab = [(String, Qual)];
 --type Subst = [(String, Type)];
 
---inferHelper :: SymTab -> [(String, Type)] -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
-inferHelper tab loc ast csn = fpair csn \cs n ->
+--infer' :: SymTab -> [(String, Type)] -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
+infer' tab loc ast csn = fpair csn \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
   { R s -> ((TC "Int", ast), csn)
   ; V s -> fmaybe (lstLookup s loc)
@@ -398,10 +398,10 @@ inferHelper tab loc ast csn = fpair csn \cs n ->
       \t -> fpair (instantiate t n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
     ((, csn) . (, ast))
   ; A x y ->
-    fpair (inferHelper tab loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
-    fpair (inferHelper tab loc y csn1) \tay csn2 -> fpair tay \ty ay ->
+    fpair (infer' tab loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
+    fpair (infer' tab loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (inferHelper tab ((s, va):loc) x (cs, n + 1))
+  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' tab ((s, va):loc) x (cs, n + 1))
   ; Case caseTypeId -> fmaybe (lstLookup caseTypeId tab) undefined
     \caseType -> fpair (instantiate caseType n) \qcase n1 -> case qcase of { Qual _ tcase ->  ((tcase, ast), (cs, n1)) }
   ; Proof _ -> undefined
@@ -508,7 +508,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv tab qi def = fpair def \s expr ->
-  fpair (inferHelper tab [] expr (Just [], 0)) \ta msn ->
+  fpair (infer' tab [] expr (Just [], 0)) \ta msn ->
   case lstLookup s tab of
     { Nothing -> undefined -- No such method.
     -- e.g. qc = Eq a => a -> a -> Bool
@@ -539,7 +539,7 @@ inferInst ienv tab inst = fpair inst \cl qds -> fpair qds \q ds ->
   };
 
 inferDefs ienv tab defs acc = flst defs (Right (acc [])) \edef rest -> case edef of
-  { Left def -> fpair def \s expr -> fpair (inferHelper tab [] (maybeFix s expr) (Just [], 0)) \ta msn ->
+  { Left def -> fpair def \s expr -> fpair (infer' tab [] (maybeFix s expr) (Just [], 0)) \ta msn ->
   fpair msn \ms _ -> case maybeMap (prove ienv ta) ms of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> fpair qa \q a -> inferDefs ienv ((s, q) : tab) rest (acc . ((s, qa):))

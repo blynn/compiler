@@ -688,9 +688,9 @@ int main(int argc, char **argv) {
   catfile(program, "stringy"); strcat(program, ";,");
   catfile(program, "binary"); strcat(program, ";,");
   catfile(program, "algebraically"); strcat(program, ";,");
-  catfile(program, "parity"); strcat(program, ";,");
-  catfile(program, "fixity"); strcat(program, ";,");
-  catfile(program, "typically"); strcat(program, ";,");
+  catfile(program, "parity.hs"); strcat(program, ";,");
+  catfile(program, "fixity.hs"); strcat(program, ";,");
+  catfile(program, "typically.hs"); strcat(program, ";,");
   catfile(program, "classy.hs"); strcat(program, ";,");
   catfile(program, "classy.hs"); strcat(program, ";.");
 
