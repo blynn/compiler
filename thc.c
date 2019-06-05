@@ -679,7 +679,8 @@ int main(int argc, char **argv) {
   catfile(program, "parity"); strcat(program, ";,");
   catfile(program, "fixity"); strcat(program, ";,");
   catfile(program, "typically"); strcat(program, ";,");
-  catfile(program, "typically"); strcat(program, ";.");
+  catfile(program, "classy.hs"); strcat(program, ";,");
+  catfile(program, "classy.hs"); strcat(program, ";.");
 
   strcat(program,
 "infixl 6 + , -;"
