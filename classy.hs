@@ -87,7 +87,7 @@ op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
 data Type = TC String | TV String | TAp Type Type;
-data Ast = R String | V String | A Ast Ast | L String Ast | Case String | Proof Pred;
+data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
 
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
@@ -105,7 +105,7 @@ sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
 alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
-cas' x as = foldl A (Case (concatMap (('|':) . fst) as)) (x:map snd as);
+cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
@@ -118,7 +118,6 @@ isFree v expr = case expr of
   ; V s -> lstEq s v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not ((lstEq v w) || not (isFree v t))
-  ; Case _ -> False
   ; Proof _ -> False
   };
 
@@ -169,7 +168,9 @@ arr a b = TAp (TAp (TC "->") a) b;
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (want opLex "->"));
 typeConstant = (\s -> ife (lstEq "String" s) (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
-aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|> typeConstant <|> (TV <$> varId) <|> (TAp (TC "[]") <$> between (spch '[') (spch ']') (_type aType));
+aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|>
+  typeConstant <|> (TV <$> varId) <|>
+  (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type aType <* spch ']')));
 
 simpleType c vs = foldl TAp (TC c) (map TV vs);
 
@@ -181,16 +182,6 @@ fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sep
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 noQual = Qual [];
-
-genCaseType tcs = fpair tcs \t cs -> (concatMap (\c -> case c of { Constr s _ -> '|':s }) cs,
-  noQual (arr t (foldr arr (TV "case") (map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs))));
-
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('x':s, s : l))) ("x", []);
-conOf con = case con of { Constr s _ -> s };
--- For example, creates `Just = \x a b -> b x`.
-scottAdt vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) (mkStrs ts)) ((mkStrs ts) ++ vs);
-inferAdt tcs = fpair tcs \t cs -> map (\c -> case c of { Constr s ts ->
-  (s, (noQual (foldr arr t ts), scottAdt (map conOf cs) s ts)) }) cs;
 
 genDecl = (,) <$> var <*> (char ':' *> spch ':' *> _type aType);
 classDecl = keyword "class" *> (Class <$> conId <*> (TV <$> varId) <*> (keyword "where" *> braceSep genDecl));
@@ -220,7 +211,7 @@ program = (
 first f p = fpair p \x y -> (f x, y);
 second f p = fpair p \x y -> (x, f y);
 
-primTab = [("==", "I"), ("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+"), (":", ":"), ("[]", "K")] ++
+primTab = [("\\Y", "Y"), ("\\C", "C"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++
   map (second ("``BT`T" ++))
     [ ("<=", "L")
     , ("intEq", "=")
@@ -237,7 +228,6 @@ show ds t = case t of
   ; V v -> rank ds v
   ; A x y -> '`':show ds x ++ show ds y
   ; L w t -> undefined
-  ; Case _ -> undefined
   ; Proof _ -> undefined
   };
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
@@ -247,7 +237,6 @@ debruijn n e = case e of
   ; V v -> foldr (\h m -> ife (lstEq h v) Ze (Su m)) (Pass (V v)) n
   ; A x y -> App (debruijn n x) (debruijn n y)
   ; L s t -> La (debruijn (s:n) t)
-  ; Case _ -> La Ze
   ; Proof _ -> undefined
   };
 
@@ -402,8 +391,6 @@ infer' tab loc ast csn = fpair csn \cs n ->
     fpair (infer' tab loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' tab ((s, va):loc) x (cs, n + 1))
-  ; Case caseTypeId -> fmaybe (lstLookup caseTypeId tab) undefined
-    \caseType -> fpair (instantiate caseType n) \qcase n1 -> case qcase of { Qual _ tcase ->  ((tcase, ast), (cs, n1)) }
   ; Proof _ -> undefined
   };
 
@@ -493,7 +480,6 @@ prove' ienv sub psn a = case a of
   ; A x y -> let { p1 = prove' ienv sub psn x } in fpair p1 \psn1 x1 ->
     second (A x1) (prove' ienv sub psn1 y)
   ; L s t -> second (L s) (prove' ienv sub psn t)
-  ; Case _ -> (psn, a)
   ; Proof raw -> findProof ienv (predApply sub raw) psn
   };
 
@@ -547,15 +533,25 @@ inferDefs ienv tab defs acc = flst defs (Right (acc [])) \edef rest -> case edef
   ; Right inst -> inferDefs ienv tab rest (acc . (inferInst ienv tab inst:))
   };
 
-tabInit adts cls = concatMap (map (second fst) . inferAdt) adts ++ map genCaseType adts ++ map (second fst) cls ++ preTab;
+conOf con = case con of { Constr s _ -> s };
+mkCase t cs = (concatMap (('|':) . conOf) cs,
+  ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
+  , L "x" $ V "x"));
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
+-- For example, creates `Just = \x a b -> b x`.
+scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
+scottConstr t cs c = case c of { Constr s ts -> (s,
+  ( noQual $ foldr arr t ts
+  , scottEncode (map conOf cs) s $ mkStrs ts)) };
+mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
+tabInit qas = map (second fst) qas ++ preTab;
 
---  * ADT 
 --  * definitions, including those of instances
---  * methods, e.g. (==), (Eq a => a -> a -> Bool, select-==)
+--  * ADTs and methods, e.g. (==), (Eq a => a -> a -> Bool, select-==)
 --  * instance environment
-data Neat = Neat [(Type, [Constr])] [Either (String, Ast) (String, (Qual, [(String, Ast)]))] [(String, (Qual, Ast))] [(String, [Qual])];
+data Neat = Neat [Either (String, Ast) (String, (Qual, [(String, Ast)]))] [(String, (Qual, Ast))] [(String, [Qual])];
 
-fneat neat f = case neat of { Neat a b c d -> f a b c d };
+fneat neat f = case neat of { Neat a b c -> f a b c };
 
 select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
 
@@ -566,16 +562,16 @@ addInstance s q is = fpair (select (\kv -> lstEq s (fst kv)) is []) \m xs -> cas
 
 mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
-untangle prog = foldr (\top acc -> fneat acc \adts fs cls ienv -> case top of
-  { Adt t cs -> Neat ((t, cs) : adts) fs cls ienv
-  ; Def f -> Neat adts (Left f : fs) cls ienv
-  ; Class classId v ms -> Neat adts fs (
+untangle prog = foldr (\top acc -> fneat acc \fs qas ienv -> case top of
+  { Adt t cs -> Neat fs (mkAdtDefs t cs ++ qas) ienv
+  ; Def f -> Neat (Left f : fs) qas ienv
+  ; Class classId v ms -> Neat fs (
     map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
-    ++ cls) ienv
-  ; Inst cl q ds -> Neat adts (Right (cl, (q, ds)):fs) cls (addInstance cl q ienv)
-  }) (Neat [] [] [] []) prog;
+    ++ qas) ienv
+  ; Inst cl q ds -> Neat (Right (cl, (q, ds)):fs) qas (addInstance cl q ienv)
+  }) (Neat [] [] []) prog;
 
-infer prog = fneat (untangle prog) \adts defs cls ienv -> inferDefs ienv (tabInit adts cls) defs ((cls ++ concatMap inferAdt adts) ++);
+infer prog = fneat (untangle prog) \defs qas ienv -> inferDefs ienv (tabInit qas) defs (qas ++);
 
 typedAsm prog = case infer prog of 
   { Left err -> err
