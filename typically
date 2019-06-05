@@ -203,7 +203,11 @@ primTab = [("\\Y", "Y"), ("\\C", "C"), (",", "``BCT"), ("chr", "I"), ("ord", "I"
   map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
 prim s = fmaybe (lstLookup s primTab) s id;
 
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':n:[]) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
+ifz n = ife (0 == n);
+showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
+showInt n s = ifz n ('0':) (showInt' n) s;
+
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '[':showInt n "]") (t . succ)) (\n -> prim v) ds 0;
 show ds t = case t of
   { R s -> s
   ; V v -> rank ds v
@@ -341,10 +345,6 @@ preTab =
   , ("ord", arr (TC "Int") (TC "Int"))
   , ("succ", arr (TC "Int") (TC "Int"))
   ];
-
-ifz n = ife (0 == n);
-showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
-showInt n s = ifz n ('0':) (showInt' n) s;
 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of

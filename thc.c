@@ -93,15 +93,20 @@ u parseTerm() {
   u c, n;
   do c = run(); while (c == '\n');
   switch(c) {
-    case '#': return bufOn('#', run());
-    case '@': return tab[run() - ' '];
     case '`':
       c = parseTerm();
       return bufOn(c, parseTerm());
+    case '#': return bufOn('#', run());
+    //case '@': return tab[run() - ' '];
+    case '@': { n = run(); if (n > 255) die("OVERFLOW!"); return tab[n - ' ']; }
     case '(':
       n = 0;
       while ((c = run()) != ')') n = 10*n + c - '0';
       return bufOn('#', n);
+    case '[':
+      n = 0;
+      while ((c = run()) != ']') n = 10*n + c - '0';
+      return tab[n];
     default: return c;
   }
 }
@@ -637,6 +642,13 @@ void runTests() {
     "`Y``B`CS``B`B`C``BB:C;"  // (++)
     "``SS``B`BK``B`BK``B`B`:#`@ ;"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
     "`@!``:#xK;"
+    ";."
+    "y",
+    "`xy");
+  testCase(
+    "`Y``B`CS``B`B`C``BB:C;"  // (++)
+    "``SS``B`BK``B`BK``B`B`:#`[0];"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
+    "`[1]``:#xK;"
     ";."
     "y",
     "`xy");
