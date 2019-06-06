@@ -13,8 +13,11 @@ flip f x y = f y x;
 (&) x f = f x;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
+fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
+first f p = fpair p \x y -> (f x, y);
+second f p = fpair p \x y -> (x, f y);
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
@@ -39,7 +42,6 @@ concat = foldr (++) [];
 itemize c = c:[];
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
 
-fpair p = \f -> case p of { (,) x y -> f x y };
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 pure x = \inp -> Just (x, inp);
 sat' f = \h t -> ife (f h) (pure h t) Nothing;
@@ -208,21 +210,24 @@ program = (
   [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]) ++) <$> program';
 
-first f p = fpair p \x y -> (f x, y);
-second f p = fpair p \x y -> (x, f y);
-
-primTab = [("\\Y", "Y"), ("\\C", "C"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++
-  map (second ("``BT`T" ++))
-    [ ("<=", "L")
-    , ("intEq", "=")
-    , ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
-prim s = fmaybe (lstLookup s primTab) s id;
+prims = let
+  { ii = arr (TC "Int") (TC "Int")
+  ; iii = arr (TC "Int") ii
+  ; bin s = R $ "``BT`T" ++ s } in map (second (first noQual)) $
+    [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), R "Y"))
+    , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), R "C"))
+    , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "="))
+    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "L"))
+    , ("chr", (ii, R "I"))
+    , ("ord", (ii, R "I"))
+    , ("succ", (ii, R "`T`(1)+"))
+    ] ++ map (\s -> (s, (iii, bin s))) ["+", "-", "*", "/", "%"];
 
 ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '[':showInt n "]") (t . succ)) (\n -> prim v) ds 0;
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '[':showInt n "]") (t . succ)) undefined ds 0;
 show ds t = case t of
   { R s -> s
   ; V v -> rank ds v
@@ -333,26 +338,9 @@ mgu unify t u = case t of
     }
   };
 
-maybeMap f m = fmaybe m Nothing (Just . f);
+maybeMap f = maybe Nothing (Just . f);
 
-unify a b m = fmaybe m Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s b));
-
-preTab =
-  map (second noQual)
-  [ ("\\Y", arr (arr (TV "a") (TV "a")) (TV "a"))
-  , ("\\C", arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
-  , ("<=", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
-  , ("intEq", arr (TC "Int") (arr (TC "Int") (TC "Bool")))
-  , ("+", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , ("-", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , ("*", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , ("/", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , ("%", arr (TC "Int") (arr (TC "Int") (TC "Int")))
-  , (",", arr (TV "a") (arr (TV "b") (TAp (TAp (TC ",") (TV "a")) (TV "b"))))
-  , ("chr", arr (TC "Int") (TC "Int"))
-  , ("ord", arr (TC "Int") (TC "Int"))
-  , ("succ", arr (TC "Int") (TC "Int"))
-  ];
+unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s b));
 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
@@ -375,22 +363,22 @@ instantiate qt n = case qt of { Qual ps t ->
   first (Qual ps1) (fst (instantiate' t n1 tab))
   };
 
---type SymTab = [(String, Qual)];
+--type SymTab = [(String, (Qual, Ast))];
 --type Subst = [(String, Type)];
 
---infer' :: SymTab -> [(String, Type)] -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
-infer' tab loc ast csn = fpair csn \cs n ->
+--infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
+infer' typed loc ast csn = fpair csn \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
   { R s -> ((TC "Int", ast), csn)
   ; V s -> fmaybe (lstLookup s loc)
-    (fmaybe (lstLookup s tab) undefined
-      \t -> fpair (instantiate t n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
+    (fmaybe (lstLookup s typed) undefined
+      \ta -> fpair (instantiate (fst ta) n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
     ((, csn) . (, ast))
   ; A x y ->
-    fpair (infer' tab loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
-    fpair (infer' tab loc y csn1) \tay csn2 -> fpair tay \ty ay ->
+    fpair (infer' typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
+    fpair (infer' typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' tab ((s, va):loc) x (cs, n + 1))
+  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, n + 1))
   ; Proof _ -> undefined
   };
 
@@ -493,14 +481,14 @@ data Either a b = Left a | Right b;
 dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
-inferMethod ienv tab qi def = fpair def \s expr ->
-  fpair (infer' tab [] expr (Just [], 0)) \ta msn ->
-  case lstLookup s tab of
+inferMethod ienv typed qi def = fpair def \s expr ->
+  fpair (infer' typed [] expr (Just [], 0)) \ta msn ->
+  case lstLookup s typed of
     { Nothing -> undefined -- No such method.
-    -- e.g. qc = Eq a => a -> a -> Bool
-    ; Just qc -> fpair msn \ms n -> case ms of
+    -- e.g. qac = Eq a => a -> a -> Bool, some AST (product of single method)
+    ; Just qac -> fpair msn \ms n -> case ms of
       { Nothing -> undefined  -- Type check fails.
-      ; Just sub -> fpair (instantiate qc n) \q1 n1 -> case q1 of { Qual psc tc -> case psc of
+      ; Just sub -> fpair (instantiate (fst qac) n) \q1 n1 -> case q1 of { Qual psc tc -> case psc of
         { [] -> undefined  -- Unreachable.
         ; (:) headPred shouldBeNull -> case qi of { Qual psi ti ->
           case headPred of { Pred _ headT -> case match headT ti of
@@ -519,18 +507,19 @@ maybeFix s x = ife (isFree s x) (A (V "\\Y") (L s x)) x;
 
 genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
 
-inferInst ienv tab inst = fpair inst \cl qds -> fpair qds \q ds ->
+inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in
-  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv tab q) ds)) (map snd $ fst $ dictVars ps 0))
+  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv typed q) ds)) (map snd $ fst $ dictVars ps 0))
   };
 
-inferDefs ienv tab defs acc = flst defs (Right (acc [])) \edef rest -> case edef of
-  { Left def -> fpair def \s expr -> fpair (infer' tab [] (maybeFix s expr) (Just [], 0)) \ta msn ->
+reverse = foldl (flip (:)) [];
+inferDefs ienv defs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
+  { Left def -> fpair def \s expr -> fpair (infer' typed [] (maybeFix s expr) (Just [], 0)) \ta msn ->
   fpair msn \ms _ -> case maybeMap (prove ienv ta) ms of
     { Nothing -> Left ("bad type: " ++ s)
-    ; Just qa -> fpair qa \q a -> inferDefs ienv ((s, q) : tab) rest (acc . ((s, qa):))
+    ; Just qa -> inferDefs ienv rest ((s, qa):typed)
     }
-  ; Right inst -> inferDefs ienv tab rest (acc . (inferInst ienv tab inst:))
+  ; Right inst -> inferDefs ienv rest (inferInst ienv typed inst:typed)
   };
 
 conOf con = case con of { Constr s _ -> s };
@@ -544,12 +533,12 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
-tabInit qas = map (second fst) qas ++ preTab;
 
---  * definitions, including those of instances
---  * ADTs and methods, e.g. (==), (Eq a => a -> a -> Bool, select-==)
 --  * instance environment
-data Neat = Neat [Either (String, Ast) (String, (Qual, [(String, Ast)]))] [(String, (Qual, Ast))] [(String, [Qual])];
+--  * definitions, including those of instances
+--  * Typed ASTs, ready for compilation, including ADTs and methods,
+--    e.g. (==), (Eq a => a -> a -> Bool, select-==)
+data Neat = Neat [(String, [Qual])] [Either (String, Ast) (String, (Qual, [(String, Ast)]))] [(String, (Qual, Ast))];
 
 fneat neat f = case neat of { Neat a b c -> f a b c };
 
@@ -562,30 +551,27 @@ addInstance s q is = fpair (select (\kv -> lstEq s (fst kv)) is []) \m xs -> cas
 
 mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
-untangle prog = foldr (\top acc -> fneat acc \fs qas ienv -> case top of
-  { Adt t cs -> Neat fs (mkAdtDefs t cs ++ qas) ienv
-  ; Def f -> Neat (Left f : fs) qas ienv
-  ; Class classId v ms -> Neat fs (
+untangle = foldr (\top acc -> fneat acc \ienv fs typed -> case top of
+  { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed)
+  ; Def f -> Neat ienv (Left f : fs) typed
+  ; Class classId v ms -> Neat ienv fs (
     map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
-    ++ qas) ienv
-  ; Inst cl q ds -> Neat (Right (cl, (q, ds)):fs) qas (addInstance cl q ienv)
-  }) (Neat [] [] []) prog;
+    ++ typed)
+  ; Inst cl q ds -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed
+  }) (Neat [] [] prims);
 
-infer prog = fneat (untangle prog) \defs qas ienv -> inferDefs ienv (tabInit qas) defs (qas ++);
+infer prog = fneat (untangle prog) inferDefs;
 
-typedAsm prog = case infer prog of 
-  { Left err -> err
-  ; Right ds -> asm (map (second snd) ds)
-  };
-
-fromJust m = fmaybe m undefined id;
-
---mustInfer :: [Top] -> SymTab
-mustInfer prog = case infer prog of
-  { Left err -> undefined
-  ; Right ds -> map (second fst) ds
-  };
 showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
-dumpTypes s = (concatMap (\p -> fpair p \s q -> s ++ " :: " ++ showQual q ++ "\n") . fst . fromJust) ((mustInfer <$> program) s);
 
-compile s = fmaybe ((typedAsm <$> program) s) "?" fst;
+dumpTypes s = fmaybe (program s) "parse error" \progRest ->
+  fpair progRest \prog rest -> case infer prog of
+  { Left err -> err
+  ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
+  };
+
+compile s = fmaybe (program s) "parse error" \progRest ->
+  fpair progRest \prog rest -> case infer prog of
+  { Left err -> err
+  ; Right qas -> asm $ map (second snd) qas
+  };

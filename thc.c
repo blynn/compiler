@@ -78,7 +78,7 @@ u heapOn(u f, u x) {
   return hp - 2;
 }
 
-u buf[65536], bufn, tab[256], tabn;
+u buf[65536], bufn, tab[1024], tabn;
 
 u bufOn(u f, u x) {
   buf[bufn] = f;
@@ -126,7 +126,7 @@ void parse() {
       reset(c);
       return;
     }
-    if (tabn == 256) die ("table overflow");
+    if (tabn == 1024) die ("table overflow");
     tab[tabn++] = c;
     if (run() != ';') die("expected ';'");
   }
