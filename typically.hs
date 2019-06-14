@@ -39,8 +39,14 @@ elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 concat = foldr (++) [];
 itemize c = c:[];
+map = flip (foldr . ((:) .)) [];
+concatMap = (concat .) . map;
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+
+data Ast = R String | V String | A Ast Ast | L String Ast;
+
 pure x = \inp -> Just (x, inp);
 sat' f = \h t -> ife (f h) (pure h t) Nothing;
 sat f inp = flst inp Nothing (sat' f);
@@ -85,12 +91,6 @@ varId = spc (wantWith (not . lstEq "of") varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
-
-data Ast = R String | V String | A Ast Ast | L String Ast;
-
-map = flip (foldr . ((:) .)) [];
-concatMap = (concat .) . map;
-
 anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
@@ -126,7 +126,6 @@ letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) 
 atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
@@ -286,7 +285,7 @@ nolam x = case babs (debruijn [] x) of
   ; Weak e -> undefined
   };
 
-dump tab ds = flst ds ";" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
+dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
 asm prog = (\ds -> dump ds ds) $
   fpair prog \typed defs -> map (second snd) typed ++ defs;
 
@@ -360,7 +359,7 @@ infer' typed loc ast csn = fpair csn \cs n ->
   { R s -> (TC "Int", csn)
   ; V s -> fmaybe (lstLookup s loc) (fmaybe (lstLookup s typed) undefined
     (\ta -> second (cs,) (instantiate (fst ta) n))) (, csn)
-  ; A x y -> 
+  ; A x y ->
     fpair (infer' typed loc x (cs, n + 1)) \tx csn1 ->
     fpair (infer' typed loc y csn1) \ty csn2 ->
     (va, first (unify tx (arr ty va)) csn2)

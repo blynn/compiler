@@ -13,7 +13,9 @@ lstEq xs ys = case xs of
   ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
   };
 (++) xs ys = flst xs ys (\x xt -> x:(xt ++ ys));
-
+id x = x;
+flip f x y = f y x;
+(&) x f = f x;
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 undefined = undefined;
@@ -21,14 +23,16 @@ foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 concat = foldr (++) [];
 itemize c = c:[];
-
 data Pair x y = Pair x y;
 fpair p = \f -> case p of { Pair x y -> f x y };
+fst p = case p of { Pair x y -> x };
+snd p = case p of { Pair x y -> y };
+second f p = fpair p \x y -> Pair x (f y);
 data Maybe a = Nothing | Just a;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+
 pure x = \inp -> Just (Pair x inp);
-satHelper f = \h t -> ife (f h) (pure h t) Nothing;
-sat f inp = flst inp Nothing (satHelper f);
 bind f m = case m of
   { Nothing -> Nothing
   ; Just x -> fpair x f
@@ -48,31 +52,28 @@ many p = liftA2 (:) p (many p) <|> pure [];
 some p = liftA2 (:) p (many p);
 sepBy1 p sep = liftA2 (:) p (many (sep *> p));
 sepBy p sep = sepBy1 p sep <|> pure [];
+between x y p = x *> (p <* y);
+satHelper f = \h t -> ife (f h) (pure h t) Nothing;
+sat f inp = flst inp Nothing (satHelper f);
+
+data Ast = R String | V String | A Ast Ast | L String Ast;
 
 char c = sat \x -> x == c;
-between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
 sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f inp = bind (satHelper pred) (f inp);
 want f s inp = wantWith (lstEq s) f inp;
-
 paren = between (spch '(') (spch ')');
 letter = sat \x -> ((x <= 'z') && ('a' <= x)) || ((x <= 'Z') && ('A' <= x));
 digit = sat \x -> (x <= '9') && ('0' <= x);
-varLex = liftA2 (:) letter (many (letter <|> digit)); 
+varLex = liftA2 (:) letter (many (letter <|> digit));
 keyword s = spc (want varLex s);
 varId = spc (wantWith (not . lstEq "of") varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
-
-data Ast = R String | V String | A Ast Ast | L String Ast;
-
-id x = x;
-flip f x y = f y x;
-(&) x f = f x;
 anyOne = fmap itemize (spc (sat (\c -> True)));
 pre = char '@' *> anyOne;
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
@@ -107,9 +108,6 @@ isFree v expr = case expr of
 maybeFix s x = Pair s (ife (isFree s x) (A (R "Y") (L s x)) x);
 def = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many var) (spch '=' *> expr));
 
-fst p = case p of { Pair x y -> x };
-snd p = case p of { Pair x y -> y };
-
 aType = paren (some var) <|> (undefined <$> var) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
 dataDefs cs = map (\cas -> fpair cas (\c as -> Pair c (foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
@@ -118,19 +116,6 @@ dataArgs = (snd . foldl (\p u -> fpair p (\s l -> Pair ('x':s) (s : l))) (Pair "
 adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (Pair <$> var <*> dataArgs) (spch '|')));
 program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
 
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
-
-second f p = fpair p \x y -> Pair x (f y);
-primTab = Pair "," "``BCT" : (Pair "ord" "I" : (Pair "succ" "`T`(1)+" : map (second ("``BT`T" ++)) [Pair "<=" "L", Pair "==" "=", Pair "-" "-", Pair "+" "+", Pair "*" "*"]));
-prim s = fmaybe (lstLookup s primTab) s id;
-
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
-show ds t = case t of
-  { R s -> s
-  ; V v -> rank ds v
-  ; A x y -> '`':(show ds x ++ show ds y)
-  ; L w t -> undefined
-  };
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
 debruijn n e = case e of
@@ -196,5 +181,15 @@ nolam x = case babs (debruijn [] x) of
   ; Need e -> undefined
   ; Weak e -> undefined
   };
-dump tab ds = flst ds ";" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
+
+primTab = Pair "," "``BCT" : (Pair "ord" "I" : (Pair "succ" "`T`(1)+" : map (second ("``BT`T" ++)) [Pair "<=" "L", Pair "==" "=", Pair "-" "-", Pair "+" "+", Pair "*" "*"]));
+prim s = fmaybe (lstLookup s primTab) s id;
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
+show ds t = case t of
+  { R s -> s
+  ; V v -> rank ds v
+  ; A x y -> '`':(show ds x ++ show ds y)
+  ; L w t -> undefined
+  };
+dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
 compile s = fmaybe (program s) "?" ((\ds -> dump ds ds) . fst);

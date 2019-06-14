@@ -1,5 +1,9 @@
 ------------------------------------------------------------------------------
--- Supports comments, spaces, symbols consisting of lowercase letters.
+-- Supports comments, spaces, variables consisting of lowercase letters.
+--
+-- To convert to a form suitable for my tools:
+--  * Change @x to (x) but be aware of #@
+--  * Change #x to 'x' but be aware of # followed by a newline.
 ------------------------------------------------------------------------------
 
 or f g x y = f x (g x y);
@@ -46,61 +50,12 @@ expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
-rank v ds = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
-show = @Y \r ds t -> t @I (\v -> rank v ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
+rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
+show = @Y \r ds t -> t @I (rank ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
 
-ze   = \    a b c d e -> a;
-su   = \x   a b c d e -> b x;
-pass = \x   a b c d e -> c x;
-la   = \x   a b c d e -> d x;
-app  = \x y a b c d e -> e x y;
+isfree = @Y(\r v t -> t (\x -> @K @I) (\x -> lsteq v x) (\x y -> or (r v x) (r v y)) (\x y -> @C (or (lsteq v x) (@C (r v y)))));
+unlam = @Y(\r v t -> isfree v t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
+babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
 
-debruijn = @Y (\r n e -> e
-  (\s -> pass (lcr s))
-  (\v -> foldr (\h m -> lsteq h v ze (su m)) (pass (lcv v)) n)
-  (\x y -> app (r n x) (r n y))
-  (\s t -> la (r (@: s n) t))
-  );
-
-closed = \t a b c -> a t;
-need   = \x a b c -> b x;
-weak   = \x a b c -> c x;
-
-lclo = \r d y -> y
-  (\dd -> closed (lca d dd))
-  (\e -> need (r (closed (lca (lcr (@:#B@K)) d)) e))
-  (\e -> weak (r (closed d) e))
-  ;
-
-lnee = \r e y -> y
-  (\d -> need (r (closed (lca (lcr (@:#R@K)) d)) e))
-  (\ee -> need (r (r (closed (lcr (@:#S@K))) e) ee))
-  (\ee -> need (r (r (closed (lcr (@:#C@K))) e) ee))
-  ;
-
-lwea = \r e y -> y
-  (\d -> weak (r e (closed d)))
-  (\ee -> need (r (r (closed (lcr (@:#B@K))) e) ee))
-  (\ee -> weak (r e ee))
-  ;
-
-babsa = @Y (\r x y -> x
-  (\d -> lclo r d y)
-  (\e -> lnee r e y)
-  (\e -> lwea r e y)
-  );
-
-babs = @Y (\r t -> t
-  (need (closed (lcr (@:#I@K))))
-  (@B weak r)
-  closed
-  (\t -> r t
-    (\d -> closed (lca (lcr (@:#K@K)) d))
-    @I
-    (babsa (closed (lcr (@:#K@K)))))
-  (\x y -> babsa (r x) (r y))
-  );
-
-nolam x = babs (debruijn @K x) @I @? @?;
-dump = @Y \r tab ds -> ds (@:#;@K) \h t -> append (show tab (nolam (h (@K @I)))) (@: #; (r tab t));
+dump = @Y \r tab ds -> ds @K \h t -> append (show tab (babs (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));

@@ -301,7 +301,7 @@ nolam x = case babs (debruijn [] x) of
   ; Need e -> undefined
   ; Weak e -> undefined
   };
-dump tab ds = flst ds ";" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
+dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
 asm ds = dump ds ds;
 
 apply sub t = case t of
