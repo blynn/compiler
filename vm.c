@@ -80,7 +80,7 @@ u app(u f, u x) {
 u tab[TABMAX], tabn;
 
 u parseTerm(u (*get)()) {
-  u c, n;
+  u n, c;
   do c = get(); while (c == '\n');
   switch(c) {
     case '`':
@@ -384,6 +384,7 @@ char *singularity =
 
 void runTests() {
   testCase("I;", "Hello, World!\n", "Hello, World!\n");
+  testCase("``C`T?`KI;", "tail", "ail");
   testCase("`K``:#O``:#KK;", "", "OK");
   // xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys }
   // f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))
@@ -447,6 +448,9 @@ int main(int argc, char **argv) {
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
   bufptr = buf + 2;
+
+  if (argc > 1) return runTests(), 0;
+
   strcpy(buf, "I;");
   go(parenthetically);
   go(exponentially);
@@ -482,7 +486,5 @@ int main(int argc, char **argv) {
 "go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
 ;
   run(str_get, pc);
-
-  if (argc > 1) runTests();
   return 0;
 }

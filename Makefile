@@ -2,7 +2,7 @@
 
 target: site
 
-FILES=$(addsuffix .html, index lambda ion parse quest sing sem inc)
+FILES=$(addsuffix .html, index socrates lambda scott ION parse quest sing sem grind ioccc type)
 
 menu.html: menu; cobble menu menu
 

@@ -81,8 +81,8 @@ whose leaves can be one of 6 different values:
 \begin{code}
 {-# LANGUAGE FlexibleContexts #-}
 import Control.Monad.State
-data Com = S | K | I | B | C | T deriving Show
-data Exp = Lf Com | Exp :# Exp | Ext String deriving Show
+data Com = S | K | I | B | C | T
+data CL = Lf Com | CL :# CL | Ext String
 \end{code}
 
 We ignore the `Ext String` field for now. They come into play later, when
@@ -99,7 +99,7 @@ enjoyable explanation of how it works.
 
 \begin{code}
 type VarId = String
-data LC = Var VarId | Lam VarId LC | LC :@ LC | Other Com deriving Show
+data LC = Var VarId | Lam VarId LC | LC :@ LC | Other Com
 
 deLam :: LC -> LC
 deLam t = case t of
@@ -111,7 +111,7 @@ deLam t = case t of
   x :@ y  -> deLam x :@ deLam y
   _       -> t
 
-fromLC :: LC -> Exp
+fromLC :: LC -> CL
 fromLC t = case deLam t of
   Other c -> Lf c
   x :@ y  -> fromLC x :# fromLC y
@@ -127,7 +127,7 @@ In a combinatory logic term, subterms matching certain patterns 'reduce' to
 other subterms:
 
 \begin{code}
-reduce :: Exp -> Maybe Exp
+reduce :: CL -> Maybe CL
 reduce t = case t of
   Lf I :# x           -> Just x
   Lf K :# x :# y      -> Just x
@@ -167,7 +167,7 @@ this time as we walk back up again, we recursively normalize the right
 branches.
 
 \begin{code}
-normalize :: Exp -> Exp
+normalize :: CL -> CL
 normalize t = down t [] up1 where
   down t args k = case t of
     x :# y -> down x (y:args) k
@@ -188,7 +188,7 @@ For our computations, it turns out we only need our terms to reach 'weak head
 normal form', which means we skip the second walk to the bottom and back:
 
 \begin{code}
-run :: Exp -> Exp
+run :: CL -> CL
 run t = down t [] where
   down t args = case t of
     x :# y -> down x (y:args)
@@ -210,12 +210,13 @@ Turing machines have a tape to handle input and output. With combinatory
 logic, the program is a term, the input string is encoded as a term, and the
 output string is the decoding of the program term applied to the input term.
 
-We use the 'Scott encoding'. Encoding and decoding requires us to evaluate
-combinators alongside our own functions, hence the `runM` function and the
-state monad.
+We use
+link:scott.html[the 'Scott encoding']. Encoding and decoding requires us to
+evaluate combinators alongside our own functions, hence the `runM` function and
+the state monad.
 
 \begin{code}
-runM :: Monad m => (Exp -> m (Maybe Exp)) -> Exp -> m Exp
+runM :: Monad m => (CL -> m (Maybe CL)) -> CL -> m CL
 runM f t = down t [] where
   down t args = case t of
     x :# y -> down x (y:args)
@@ -229,12 +230,12 @@ runM f t = down t [] where
         [] -> pure t
         a:as -> up (t :# a) as
 
-encodeChar :: Char -> Exp
+encodeChar :: Char -> CL
 encodeChar c = go (fromEnum c) where
   go 0 = Lf K
   go n = Lf K :# (Lf T :# go (n - 1))
 
-decodeChar :: Exp -> Char
+decodeChar :: CL -> Char
 decodeChar t = toEnum $ execState (runM red $ t :# Ext "Z" :# Ext "S") 0 where
   red t = case t of
     Ext "S" :# a -> do
@@ -242,11 +243,11 @@ decodeChar t = toEnum $ execState (runM red $ t :# Ext "Z" :# Ext "S") 0 where
       pure $ Just $ a :# Ext "Z" :# Ext "S"
     _ -> pure $ reduce t
 
-encode :: [Char] -> Exp
+encode :: [Char] -> CL
 encode "" = Lf K
 encode (c:cs) = Lf K :# (Lf C :# (Lf T :# encodeChar c) :# encode cs)
 
-decode :: Exp -> [Char]
+decode :: CL -> [Char]
 decode t = execState (runM red $ t :# Ext "nil" :# Ext "cons") id "" where
   red t = case t of
     Ext "cons" :# x :# xs -> do
@@ -260,7 +261,7 @@ decode t = execState (runM red $ t :# Ext "nil" :# Ext "cons") id "" where
 We can now run a combinatory logic program:
 
 \begin{code}
-runCom :: Exp -> String -> String
+runCom :: CL -> String -> String
 runCom t s = decode (run (t :# encode s))
 \end{code}
 
@@ -268,7 +269,7 @@ If we believe it is easy to rewrite `runCom` and `reduce` in the target
 language, then we can whip up the following function in no time:
 
 ------------------------------------------------------------------------------
-gen :: Exp -> TargetLanguage
+gen :: CL -> TargetLanguage
 ------------------------------------------------------------------------------
 
 Thus we have a compiler which works on lambda calculus:
@@ -311,5 +312,5 @@ abstraction.
 
 http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Adam Chlipala wrote
 'A Certified Type-Preserving Compiler from Lambda Calculus to Assembly
-Language'], which we take as a license to be informal when we please;
-we can always fall back to this paper to see how it's really done!
+Language'], which we take as a license to be informal when we please.
+We can always fall back to this paper to see how it's really done!

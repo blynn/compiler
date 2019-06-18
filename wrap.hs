@@ -11,4 +11,4 @@ a <= b = if a Prelude.<= b then True else False
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Char where { (==) x y = if (x Prelude.== y) then True else False };
 instance Eq Int where { (==) x y = if (x Prelude.== y) then True else False };
-#include "classy.hs"
+#include "typically.hs"

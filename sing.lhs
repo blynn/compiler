@@ -1,4 +1,4 @@
-= The Singularity =
+= The Compiler Singularity =
 
 I've been cheating. Behind the scenes, I ran a computer program that I wrote
 to convert readable code to combinators or lambdas with one-character
@@ -8,8 +8,8 @@ trust]" issues, all this should be done by hand. Nonetheless, each of the
 our programs seem small enough that a sufficiently motivated human could
 verify them.
 
-Now that the truth is revealed, we may as well show its program-generated
-source up front:
+Now that the truth is revealed, we may as well show the program-generated
+source of our next compiler up front:
 
 ------------------------------------------------------------------------------
 \a.\b.\c.\d.ac(bcd);
@@ -60,20 +60,17 @@ Y\a.\b.\c.cK\d.\e.@"(@Eb(@H(d(KI))))(:#;(abe));
 \a.@Ca(:#?K)(B(\b.@Ibb)(TK));
 ------------------------------------------------------------------------------
 
-Hopefully, we believe it plausible that the above can be verified by hand to
-be equivalent to the following compiler. We have upgraded our previous parser,
-and added code to look up the index of a top-level definition, allowing
-for much prettier input.
+Hopefully, it's plausible that the above can be verified by hand to
+be equivalent to the following compiler. We have upgraded our previous parser
+to support comments, whitespace, and variables consisting of lowercase letters.
+We also added code to look up the index of a top-level definition.
+This allows for much prettier input. Indeed, pretty enough that we are
+willing to program directly in the language accepted by this compiler.
 
-We have reached the singularity because this compiler is self-hosting.
-It can take its own source as input and produce the corresponding ION
-assembly. No more cheating. (Any combinators appearing in the source were
-inlined by hand; they are for `not, fst, snd, True, False` and so on.)
-
-With this compiler, there will be no need for any more subterfuge.
-
+We have reached a kind of singularity because this compiler is self-hosting.
+It can take its 100% human-generated source as input and produce the
+corresponding ION assembly.
 ------------------------------------------------------------------------------
--- Supports comments, spaces, variables consisting of lowercase letters.
 
 or f g x y = f x (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
@@ -123,8 +120,8 @@ program = liftki sp (some (liftk def (spch #;)));
 rank v ds = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
 show = @Y \r ds t -> t @I (\v -> rank v ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
 
-isfree = @Y(\r v t -> t (\x -> @K @I) (\x -> lsteq v x) (\x y -> or (r v x) (r v y)) (\x y -> @C (or (lsteq v x) (@C (r v y)))));
-unlam = @Y(\r v t -> isfree v t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
+occurs = @Y(\r v t -> t (\x -> @K @I) (\x -> lsteq v x) (\x y -> or (r v x) (r v y)) @?);
+unlam = @Y(\r v t -> occurs v t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
 babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
 
 dump = @Y \r tab ds -> ds @K \h t -> append (show tab (babs (h (@K @I)))) (@: #; (r tab t));

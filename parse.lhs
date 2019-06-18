@@ -1,4 +1,4 @@
-== Parsing ==
+= Parsing =
 
 A computer program is usually stored as a string intended for human
 consumption.In contrast, language specifications usually concentrate on an
@@ -33,32 +33,12 @@ that will be our `TargetLanguage`.
 
 \begin{code}
 {-# LANGUAGE NamedFieldPuns #-}
-import Data.Char (chr, ord)
-import qualified Data.Map as M
-import Data.Map (Map, (!))
+import Control.Monad
 import Data.Char (ord)
+import System.Environment
 import Text.Megaparsec
 import Text.Megaparsec.Char
-data VM = VM
-  { sp :: Int
-  , hp :: Int
-  , mem :: Map Int Int
-  } deriving Show 
-
-new :: VM
-new = VM maxBound 128 mempty
-
-load :: Int -> VM -> Int
-load k vm = mem vm ! k
-
-store :: Int -> Int -> VM -> VM
-store k v vm = vm{mem = M.insert k v $ mem vm}
-
-app :: Int -> Int -> VM -> (Int, VM)
-app x y vm@VM{hp} = (hp, store hp x $ store (hp + 1) y $ vm { hp = hp + 2 })
-
-push :: Int -> VM -> VM
-push n vm@VM{sp} = store sp n $ vm{sp = sp - 1}
+import ION
 \end{code}
 
 == ION assembly ==
@@ -123,13 +103,11 @@ For example, instead of `[0]` we may write `@ ` and instead of `[10]` we may
 write `@*`.
 
 If an earlier term is needed multiple times, then we share it rather than
-duplicate it.
-
-Because of indexes that refer to previously defined terms, we define `Expr`
-which replaces the role played by `Exp`:
+duplicate it. Accordingly, we define combinatory logic terms to be combinators,
+applications, and indexes of previously defined terms:
 
 \begin{code}
-data Expr = Comb Int | Expr :@ Expr | Nat Int | Idx Int deriving Show 
+data CL = Com Int | CL :@ CL | Nat Int | Idx Int
 \end{code}
 
 An 32-bit word constant is represented by a number in parentheses. For example,
@@ -141,46 +119,78 @@ this allows us to generate programs without dealing about decimal conversion.
 
 For example, instead of `(42)` we may write `#*`.
 
-Newlines are ignored, so they may be used for layout.
-
 == Parser ==
 
 We use Megaparsec to build a recursive descent parser for our language.
 
 \begin{code}
 digit = oneOf ['0'..'9']
-num = read <$> some digit 
+num = read <$> some digit
 nat = ord <$> (char '#' *> anySingle)
   <|> char '(' *> num <* char ')'
 idx = (+(-32)) . ord <$> (char '@' *> anySingle)
   <|> char '[' *> num <* char ']'
-comb = Comb . ord <$> oneOf "SKIBCT"
+comb = Com . ord <$> oneOf "SKIBCTRY:L=+-/*%?"
 term = comb
   <|> ((:@) <$> (char '`' *> term) <*> term)
   <|> Nat <$> nat
   <|> Idx <$> idx
 
-prog :: Parsec () String [Expr]
-prog = some term
+prog :: Parsec () String [CL]
+prog = some (term <* char ';')
 \end{code}
 
 We serialize terms as follows.
 
 \begin{code}
-fromExpr' :: [(Int, Int)] -> Expr -> VM -> (Int, VM)
-fromExpr' defs t vm = case t of
-  Comb n -> (n, vm)
+fromExpr :: [(Int, Int)] -> CL -> VM -> (Int, VM)
+fromExpr defs t vm = case t of
+  Com n -> (n, vm)
   x :@ y -> let
-    (a, vm1) = fromExpr' defs x vm
-    (b, vm2) = fromExpr' defs y vm1
+    (a, vm1) = fromExpr defs x vm
+    (b, vm2) = fromExpr defs y vm1
     in app a b vm2
   Nat n -> app 35 n vm
   Idx n | Just addr <- lookup n defs -> (addr, vm)
 
-fromProg :: [Expr] -> VM -> VM
+fromProg :: [CL] -> VM -> VM
 fromProg ts vm = push root vm1 where
-  (prog, vm1) = foldl addDef ([], vm) ts
-  root = snd $ last prog
-  addDef (defs, m) t = let (addr, m') = fromExpr' defs t m
+  ((_, root):_, vm1) = foldl addDef ([], vm) ts
+  addDef (defs, m) t = let (addr, m') = fromExpr defs t m
     in ((length defs, addr):defs, m')
 \end{code}
+
+We add a helper to add custom combinators to a given program so it takes
+standard input and writes to standard output.
+
+\begin{code}
+wrapIO :: CL -> CL
+wrapIO x = x :@ (Com 48 :@ Com 63) :@ Com 46 :@ (Com 84 :@ Com 49)
+\end{code}
+
+Lastly, a `main` function which runs the program in the file whose name is
+supplied as the first argument:
+
+\begin{code}
+main :: IO ()
+main = getArgs >>= \as -> case as of
+  []  -> putStrLn "Must provide program."
+  [f] -> do
+    s <- readFile f
+    case parse prog "" s of
+      Left err -> putStrLn $ "Parse error: " <> show err
+      Right cls -> do
+        void $ evalIO $ fromProg (cls ++ [wrapIO $ Idx $ length cls - 1]) new
+  _   -> putStrLn "One program only."
+\end{code}
+
+For example:
+
+------------------------------------------------------------------------------
+$ echo -n 'I;' > id
+$ echo "Hello" | ion id
+Hello
+$ echo -n '``C`T?`KI;' > tail
+$ echo "tail" | ion tail
+ail
+------------------------------------------------------------------------------

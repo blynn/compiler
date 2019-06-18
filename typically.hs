@@ -291,12 +291,6 @@ asm prog = (\ds -> dump ds ds) $
 
 compile s = fmaybe ((asm <$> program) s) "?" fst;
 
-showType t = case t of
-  { TC s -> s
-  ; TV s -> s
-  ; TAp a b -> concat ["(", showType a, " ", showType b, ")"]
-  };
-
 apply sub t = case t of
   { TC v -> t
   ; TV v -> fmaybe (lstLookup v sub) t id
@@ -377,6 +371,12 @@ inferDefs typed defs = flst defs (Right typed) \def rest -> fpair def \s expr ->
     };
 
 infer prog = fpair prog inferDefs;
+
+showType t = case t of
+  { TC s -> s
+  ; TV s -> s
+  ; TAp a b -> concat ["(", showType a, " ", showType b, ")"]
+  };
 
 dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of

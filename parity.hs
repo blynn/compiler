@@ -1,5 +1,7 @@
 ------------------------------------------------------------------------------
 -- Accepted by GHC, with a small wrapper.
+--
+-- Integer constants.
 ------------------------------------------------------------------------------
 data Bool = True | False;
 ife a b c = case a of { True -> b ; False -> c };

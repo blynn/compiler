@@ -11,7 +11,7 @@ Rather than treating lambda terms as a syntax to be rewritten as combinators,
 we define its meaning in terms of combinators, which can be viewed as a
 bracket abstraction algorithm.
 
-Writing these compilers is starting to feel almost formulaic.
+Several parts of the compiler are unchanged.
 
 Some standard definitions:
 
@@ -150,3 +150,7 @@ The grammar is identical, but the generated code is far smaller.
 Without garbage collection, the previous compiler requires over 87 million
 32-bit words on the heap to compile the above, while this compiler compiles
 itself using under 11 million 32-bit words.
+
+If our computers were less powerful, it would be better to skip our compilers
+using classic bracket abstraction and go straight to the above, at the cost of
+converting many more LC terms to CL terms by hand.

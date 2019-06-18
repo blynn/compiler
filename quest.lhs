@@ -35,7 +35,7 @@ term acc (h:t)
     then app acc (h:head t:"") (tail t)
     else app acc (h:"") t
   where app acc s = term (if null acc then s else '`':acc ++ s)
-  
+
 parse "" = ""
 parse s = let (p, t) = term "" s in p ++ ';':parse t
 ------------------------------------------------------------------------------
@@ -85,6 +85,9 @@ In ION assembly, this is:
 `Y``B`B`C`T?@+;
 `Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
 ------------------------------------------------------------------------------
+
+where we have added a newline after each semicolon for clarity; these must
+be removed before feeding to our parser.
 
 == Exponentially ==
 
@@ -251,9 +254,6 @@ For each variable we abstract over, the algorithm adds an application of the S
 combinator to every application. Hence for N variables, this multiplies the
 number of applications by 2^N, making this algorithm impractical.
 
-We therefore use this algorithm sparingly; just enough to reach a better
-algorithm.
-
 == Practically ==
 
 Our next compiler uses the most straightforward optimization to improve on
@@ -268,16 +268,16 @@ unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam
 ------------------------------------------------------------------------------
 
 We rewrite these as lambda abstractions with one-character variable names
-and replace the line defining `unlam` with them:
+and Y combinators:
 
 ------------------------------------------------------------------------------
 Y\a.\b.\c.c(\d.\e.\f.f)(\d.d(b=))(\d.\e.@((abd)(abe))?;
 Y\a.\b.\c.@=bc(c?(@!(@2#I))(\d.\e.@3(@3(@2#S)(abd))(abe))?)(@3(@2#K)c);
 ------------------------------------------------------------------------------
 
-Our previous compiler can compile this to a new compiler with better bracket
-abstraction. The optimization works well enough that in our next iteration,
-we're comfortable writing lambda abstractions whenever we wish.
+Our previous compiler turns these into massive but manageable combinatory logic
+terms. That is, we use classic bracket abstraction sparingly: just enough to
+reach a better algorithm.
 
 == Sacrificial lambdas ==
 
