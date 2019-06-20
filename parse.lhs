@@ -1,12 +1,12 @@
 = Parsing =
 
-A computer program is usually stored as a string intended for human
-consumption.In contrast, language specifications usually concentrate on an
-abstract representation, such as a syntax tree, where we can ignore details
-such as which characters count as whitespace.
+A computer program is usually a string intended for human consumption, while
+language specifications usually devote most of their attention to an abstract
+representation, such as a syntax tree, where we can ignore details such as
+which characters count as whitespace.
 
-A parser is a function taking a string to its corresponding syntax tree, or an
-error if the string is not a valid program.
+A parser maps the former to the latter, or an error if the input string is not
+a valid program.
 
 ------------------------------------------------------------------------------
 parse :: [Char] -> Either Error Language
@@ -28,7 +28,7 @@ compile :: [Char] -> Either Error TargetLanguage
 ------------------------------------------------------------------------------
 
 In general we may also need to transform a program in `TargetLanguage` to some
-binary format. For the ION machine, we'll define a sort of assembly language
+binary format. For the ION machine, we define a sort of assembly language
 that will be our `TargetLanguage`.
 
 \begin{code}
@@ -59,22 +59,21 @@ prog = term ';' [prog]
 A program is a sequence of terms terminated by semicolons.
 The entry point is the last term of the sequence.
 
-The motivation for supporing a sequence instead of insisting on a single term
-is that instead of writing programs of the form:
+The motivation for a sequence instead of insisting on a single term is that
+instead of writing programs of the form:
 
 ------------------------------------------------------------------------------
 norm = (\sq x y -> sq x + sq y) (\x -> x * x)
 ------------------------------------------------------------------------------
 
-we can write:
+we'd like to write:
 
 ------------------------------------------------------------------------------
 square x = x * x
 norm x y = square x + square y
 ------------------------------------------------------------------------------
 
-The semicolon terminators are unnecessary, but greatly aid human
-comprehension.
+The semicolon terminators in our grammar are unnecessary, but aid debugging.
 
 The backquote is a prefix binary operator denoting application.
 For example, we represent the program `BS(BB)` with:
@@ -90,7 +89,7 @@ earlier term by enclosing its index in square brackets.
 Thus another way to represent `BS(BB)` is:
 
 ------------------------------------------------------------------------------
-B;``[0]S`[0][0];
+B;S;``[0][1]`[0][0];
 ------------------------------------------------------------------------------
 
 An term may refer to an earlier term using the `(@)` prefix unary
@@ -99,8 +98,8 @@ it refers to the term of index `n - 32`. This offset is chosen so that short
 programs can be written in printable ASCII without worrying about decimal
 conversion.
 
-For example, instead of `[0]` we may write `@ ` and instead of `[10]` we may
-write `@*`.
+For example, instead of "[0]" we may write "@ "
+and instead of "[10]" we may write "@*".
 
 If an earlier term is needed multiple times, then we share it rather than
 duplicate it. Accordingly, we define combinatory logic terms to be combinators,
@@ -121,7 +120,7 @@ For example, instead of `(42)` we may write `#*`.
 
 == Parser ==
 
-We use Megaparsec to build a recursive descent parser for our language.
+We use Megaparsec to build a recursive descent parser for ION assembly.
 
 \begin{code}
 digit = oneOf ['0'..'9']
@@ -136,7 +135,7 @@ term = comb
   <|> Nat <$> nat
   <|> Idx <$> idx
 
-prog :: Parsec () String [CL]
+prog :: Parsec () [Char] [CL]
 prog = some (term <* char ';')
 \end{code}
 
@@ -160,8 +159,8 @@ fromProg ts vm = push root vm1 where
     in ((length defs, addr):defs, m')
 \end{code}
 
-We add a helper to add custom combinators to a given program so it takes
-standard input and writes to standard output.
+A helper turns a given pure CL program into one that runs on standard input and
+output:
 
 \begin{code}
 wrapIO :: CL -> CL

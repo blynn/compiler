@@ -1,3 +1,28 @@
+= Unfinished business =
+
+A C implentation of the ION machine is listed below.
+
+It uses a stop-the-world copying garbage collector. It turns out we should
+reduce projection functions (such as `fst` and `snd`) as we collect garbage.
+See:
+
+  * John Hughes, 'The design and implementation of programming languages" 1983
+  * Philip Wadler, 'Fixing some space leaks with a garbage collector" 1987
+
+We achieve this by reducing `K I T` nodes during garbage collection.
+
+== TODO ==
+
+If I can find the time, and I'm still interested, I hope to:
+
+  * Experiment with bulk combinators.
+  * Look into http://www.cs.cornell.edu/~ross/publications/eqsat/[equality
+saturation]: automating compiler optimization.
+  * Keep playing Compiler Quest: fill in missing pieces, add compiler
+optimizations, add language features, improve the interface, improve parsing,
+replace association lists with something faster, etc.
+
+------------------------------------------------------------------------------
 typedef unsigned u;
 #include <stdio.h>
 #include <stdlib.h>
@@ -182,26 +207,6 @@ void buf_put(u c) {
   *bufptr++ = c;
 }
 
-void testCmp(char *inp, char *want) {
-  str = inp;
-  buf_reset();
-  run(str_get, buf_put);
-  *bufptr = 0;
-  if (strcmp(buf, want)) printf("FAIL: got '%s', want '%s'\n", buf, want);
-}
-
-void testCase(char *prog, char *inp, char *want) {
-  parse(prog);
-  testCmp(inp, want);
-}
-
-void testCaseMore(char *prog, char *more, char *inp, char *want) {
-  parse(prog);
-  str = more;
-  parseMore(str_get);
-  testCmp(inp, want);
-}
-
 char *parenthetically =
 /*
 uncurry x y = y x;
@@ -380,42 +385,6 @@ char *singularity =
 "\\a.@Ca(:#?K)(B(\\b.@Ibb)(TK));"
 ;
 
-void runTests() {
-  testCase("I;", "Hello, World!\n", "Hello, World!\n");
-  testCase("``C`T?`KI;", "tail", "ail");
-  testCase("`K``:#O``:#KK;", "", "OK");
-  // xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys }
-  // f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))
-  //   = Y(B(CS)(B(B(C(BB(:))))C))
-  // because B(B(C(BB(:))))C = \r ys -> \x xt -> (:) x (r xt ys)
-  testCase(
-    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-    "`K``@ " "``:#B``:#eK" "``:#nK;",
-    "",
-    "Ben");
-  testCase(
-    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-    "``SS``B`BK``B`BK``B`B`:#`@ ;"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
-    "`@!``:#xK;",
-    "y",
-    "`xy");
-  testCase(
-    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-    "``SS``B`BK``B`BK``B`B`:#`[0];"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
-    "`[1]``:#xK;",
-    "y",
-    "`xy");
-  testCase("`K``:#f``:#xK;", "", "fx");
-  // atom id 'x' "f"
-  testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx");
-  // if3 ')' "1" "2" "3"
-  testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1");
-  // fst . term
-  testCaseMore(parenthetically, "``B`TK`@,K;",
-    "just(one);not(two);", "````just``one");
-  testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;");
-}
-
 FILE *fp;
 void fp_reset(char *f) { fp = fopen(f, "r"); }
 u fp_get() {
@@ -447,8 +416,6 @@ int main(int argc, char **argv) {
   spTop = mem + TOP - 1;
   bufptr = buf + 2;
 
-  if (argc > 1) return runTests(), 0;
-
   strcpy(buf, "I;");
   go(parenthetically);
   go(exponentially);
@@ -465,24 +432,7 @@ int main(int argc, char **argv) {
   go_file("classy.hs");
   go_file("classy.hs");
 
-  parse(buf);
-  // fp_reset("classy.hs"); run(fp_get, pc);
-  str =
-"infixl 6 + , -;"
-"infixl 7 *;"
-"infixr 5 : , ++;"
-"infix 4 == , <=;"
-"infixr 3 &&;"
-"infixr 2 ||;"
-"infixr 0 $;"
-"($) f x = f x;"
-"data Bool = True | False;"
-"ife a b c = case a of { True -> b ; False -> c };"
-"flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
-"foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
-"elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
-"go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
-;
-  run(str_get, pc);
+  parse(buf); fp_reset("classy.hs"); run(fp_get, pc);
   return 0;
 }
+------------------------------------------------------------------------------

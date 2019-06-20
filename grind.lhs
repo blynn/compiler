@@ -1,8 +1,7 @@
-= Level Grinding =
+= Level grinding =
 
-We incrementally improve our compiler a few times.
-Returning to our analogy with computer RPGs, it's as if we're grinding levels.
-
+We incrementally improve our compiler over and over again.
+Here's where it feels most like grinding levels in a computer RPG.
 There is even a skill tree of sorts. Do we want to add language features? Or
 optimize the generated code? Or improve error reporting? And so on.
 
@@ -80,15 +79,15 @@ include::algebraically[]
 
 == Parity ==
 
-We have a reached another milestone. GHC accepts our next compiler if we
-insert the following preamble:
+Achievement unlocked. GHC accepts our next compiler if we insert the following
+preamble:
 
 ------------------------------------------------------------------------------
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-import Prelude ((+), (-), (*), Char, Int, String, succ, Show)
+import Prelude ((+), (-), (*), Char, Int, String, succ)
 import Data.Char (chr, ord)
 import qualified Prelude
 a <= b = if a Prelude.<= b then True else False
@@ -100,14 +99,15 @@ instance Eq Int where { (==) x y = if (x Prelude.== y) then True else False };
 ------------------------------------------------------------------------------
 
 We can now develop using GHC with its powerful type checking and friendly
-error messages, and switch back to our compiler at the last minute, though
-we must be mindful that in our language, all operators have the same
+error messages. Naturally, we switch back to our compiler when it all works,
+though we must be mindful that in our language, all operators have the same
 precedence, every identifier in an expression we're parsing must have already
-been defined, and case expressions require each of the data constructors to
-appear exactly once and in order.
+been defined, and case expressions require al data constructors to appear
+exactly once and in order.
 
-This compiler supports integer constants. We've got away without them for
-so long because we supply a `succ` primitive.
+This compiler supports integer constants. We've survived without them for
+so long because the `succ` function has been enough for our numerical needs
+so far.
 
 ++++++++++
 <p><a onclick='hideshow("parity");'>&#9654; Toggle Source</a></p>

@@ -2,25 +2,27 @@
 
 One of the many problems with link:lambda.html[our "ultimate" compiler] is that
 we used a rich powerful language based on lambda calculus to build a shoddy
-compiler for barebones lambda calculus.
+compiler for bare-bones lambda calculus.
 
-So let us begin anew from C, which is close enough to the metal that we can
-see how we could start from assembly language if we had to. Also, C compilers
-are available on countless different platforms, meaning our compiler will be,
-too.
+Let us begin anew from C, which is so close to the metal that we can see how we
+could start from assembly language if we had to. Also, C compilers are
+available on countless platforms.
 
-We take a page from Knuth's 'The Art of Computer Programming', and introduce a
+We take a page from Knuth's 'The Art of Computer Programming' and introduce a
 mythical computer named the International Obfuscated Nonce (ION) machine.
-It's so named bacause it's based on a one-time random design used in an entry
-to the 26th International Obfuscated C Code Contest. Our compiler will
-generate C code that simulates this machine, though we first describe it in a
-high-level language.
+It's so named bacause it's based on a one-time random design used in
+link:ioccc.html[an entry to the 26th International Obfuscated C Code Contest].
 
 The basic unit of data is a 32-bit word. Memory is an array of 32-bit words,
 indexed by 32-bit words. Among the registers are the heap pointer HP and the
 stack pointer SP. The instruction set consists of the usual suspects: loading
 and storing words, arithmetic, jumps. The contents of memory are initially
 undefined.
+
+Our compiler generates C code that simulates this machine, though we first
+describe it at a higher level. By abuse of notation, `Int` means the type of
+32-bit words. (Actually using `Word32` requires more imports and conversions
+here and there.)
 
 \begin{code}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -73,37 +75,34 @@ push :: Int -> VM -> VM
 push n vm@VM{sp} = store (sp - 1) n $ vm{sp = sp - 1}
 \end{code}
 
-== Sharing is caring ==
+== Sharing economy ==
 
-We earlier noted that although we've been representing our terms with trees,
-evaluation may result in a directed graph, because applying the S
-combinator causes two nodes to refer to the same subtree.
-
-This sharing saves room, but we can save more. Our `reduce` function is
-copy-on-write, by which we mean if two nodes X and Y refer to the same subtree,
-reducing X causes X to point to a new subtree, while preserving Y.
-Instead, we should implement "don't-bother-copying-on-write", and modify the
-same subtree whether X or Y is being reduced, a strategy known as 'lazy
+We earlier noted that applying the S combinator causes two nodes to refer to
+the same subterm. This sharing saves room, but we can save more. Our `reduce`
+function is copy-on-write, by which we mean if two nodes X and Y refer to the
+same subterm, reducing X causes X to point to a new subterm, while preserving
+Y. Instead, we should implement "don't-bother-copying-on-write", and modify
+the same subterm whether X or Y is being reduced, a strategy known as 'lazy
 evaluation'.
 
 We might think of this as different to normal order, because we're reducing
 both X and Y even if they are not the two left-most subterms.
 
-== Arithmetic ==
-
-For primitve functions, we use a trick described in depth by Naylor and
-Runciman, "The Reduceron reconfigured and re-evaluated". If the evaluation
-function encounters the `#` combinator, then the first argument is some
-integer `n`. Let `f` be the second argument. Then we reduce to `f(#n)`.
-
-So if we have `#2(#3(+))`, this reduces to `(+)(#3)(#2)`. We arrange it so
-evaluating `(+)` assumes the first two arguments are normalized and represent
-integers and reduces to `#s` where `s == m + n`.
-
 == Pure combinators ==
 
-We add the `R` combinaor (equivalent to `CC`) and `:` combinator
-(equivalent to `B(BK)(BCT)`) to get:
+For primitve functions, we use a trick described in depth by Naylor and
+Runciman, "The Reduceron reconfigured and re-evaluated":
+we reduce `#nf` to `f(#n)`.
+
+So if we have `#2(#3(+))`, this reduces to `(+)(#3)(#2)`.
+Evaluating `(+)` assumes the first two arguments are normalized and represent
+integers, and reduces to `#s` where `s` is the sum of `m` and `n`.
+
+We support the operations `+ - / * % = L`. The first 5 have the same meaning
+they do in C, while the last 2 are equivalent to C's `==` and `<=`.
+
+The only other combinators left to explain are the `R` combinator (equivalent
+to `CC`) and the `:` combinator (equivalent to `B(BK)(BCT)`).
 
 \begin{code}
 arg' :: Int -> VM -> Int

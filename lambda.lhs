@@ -8,18 +8,15 @@ interpret :: Language -> TM
 
 We chose poorly.
 
-In my computer science classes, they taught us about universal Turing machines
-but omitted their construction. Any exercises asking for a Turing machine
-invariably involved pitifully trivial problems, such as copying some number of
-1s.
+In the classes I took, any exercises asking for a Turing machine invariably
+involved pitifully trivial problems, such as copying some number of 1s.
 
 Later, they'd introduce Universal Turing Machines, but without actually showing
-us one because it was too much trouble. They'd use universal machines to
+us one because it was too much trouble. They'd use these universal machines to
 explain why it's impossible to decide if a given Turing machine ever halts.
 
-In other words, right from the start, they warned us Turing machines are
-clumsy beasts where easy tasks are hard to program, and generally we can't
-tell when one hangs.
+So from day one, they warned us Turing machines are clumsy beasts where easy
+tasks are hard to accomplish, and generally hang unpredictably.
 
 == Lambda Calculus ==
 
@@ -30,29 +27,30 @@ Less well-known is that lambdas alone are equivalent in power to Turing
 machines. That is, we can toss out states, tapes, read/write heads, and do
 nothing but repeatedly substitute a variable with an expression, yet still
 compute just as effectively. If `LC` denotes the set of all closed lambda
-terms, then the following two mutually inverse functions are known to exist:
+terms (see below for the meaning of "closed"), then the following two mutually
+inverse functions are known to exist:
 
 ------------------------------------------------------------------------------
 fromTM :: TM -> LC
 fromLC :: LC -> TM
 ------------------------------------------------------------------------------
 
-(We're taking some artistic license with the word "inverse" as going from one
-to the other and back again may take us to a different program. The point is
-it'll behave identically to the original.)
+We're taking some artistic license with the word "inverse" as a round trip may
+take us to a different program. The point is it'll behave identically to the
+original.
 
 Because lambdas are user-friendly, theoreticians use lambda calculus to define
 programming languages.
 
 Lambda calculus is also easier for computers to understand. Compiler textbooks
-describe putting source code into
+describe transforming source code into
 https://www.cs.princeton.edu/~appel/papers/ssafun.pdf["SSA form", another name
 for lambda calculus], so it can be readily analyzed and manipulated. So it
 seems one way or another, a source language will be defined in terms of lambda
 calculus.
 
-Hence we revise our definition of an interpreter that defines a programming
-language:
+Accordingly, we revise our definition of a programming language to be a function
+taking a program to a closed lambda calculus term:
 
 ------------------------------------------------------------------------------
 interpret :: Language -> LC
@@ -72,8 +70,10 @@ data LC = Var VarId | Lam VarId LC | LC :@ LC
 
 A program is represented by a 'closed' lambda term, which means every `Var`
 node must be a descendant of a `Lam` node with a matching `VarId`.
-As for the semantics: we define a closed lambda term to be notation for a
-combinatory logic term.
+
+As for its semantics: we define a closed lambda term to be notation for a
+combinatory logic term. Below we describe how to rewrite a closed lambda term
+as a combinatory logic term.
 
 We define a combinatory logic term as a full binary tree
 whose leaves can be one of 6 different values:
@@ -82,20 +82,21 @@ whose leaves can be one of 6 different values:
 {-# LANGUAGE FlexibleContexts #-}
 import Control.Monad.State
 data Com = S | K | I | B | C | T
+\end{code}
+
+We actually only need S and K; the others are basically useful macros.
+
+\begin{code}
 data CL = Lf Com | CL :# CL | Ext String
 \end{code}
 
-We ignore the `Ext String` field for now. They come into play later, when
-we want to mix external functions with our combinators.
+The `Ext String` field comes into play later, when we want to mix external
+functions with our combinators.
 
-We actually only need S and K; the values may be thought of as useful macros.
-
-The `fromLC` function below rewrites the former as the latter using an
-algorithm known as 'bracket abstraction'.
-
-It converts a closed lambda term to a combinatory logic term (and crashes on
-unclosed terms). See Smullyan's "To Mock a Mockingbird" for a particularly
-enjoyable explanation of how it works.
+The `fromLC` function below rewrites the former as the latter.
+Using an algorithm known as 'bracket abstraction', it converts a closed LC
+term to a CL term (and crashes on unclosed terms). See Smullyan's "To Mock a
+Mockingbird" for a particularly enjoyable explanation.
 
 \begin{code}
 type VarId = String
@@ -119,7 +120,7 @@ fromLC t = case deLam t of
 
 We tweaked our earlier definition of `LC` so they are combinator-aware; during
 bracket abstraction, we produce intermediate Frankenstein terms that are an
-amalgam of combinatory logic terms and lambda calculus terms.
+amalgam of CL and LC terms.
 
 == What is combinatory logic? ==
 
@@ -142,7 +143,7 @@ The S combinator duplicates one of its arguments. Although we think of the
 result as a tree, in our implementation, we wind up with two nodes pointing to
 the same copy of the argument that is duplicated, that is, we employ 'sharing'
 to conserve memory. The S combinator also means a tree may not necessarily
-shrink after a reduction.
+shrink after a so-called reduction.
 
 If none of the patterns appear, then no reductions are possible and the term
 is said to be in 'normal form'. Otherwise there are one or more subterms that
@@ -155,16 +156,15 @@ If a term can be reduced to a normal form (which is in some sense unique by
 https://plato.stanford.edu/entries/logic-combinatory/#ChurTheoConsTheo[Church-Rosser]),
 then this strategy will find it. Other evaluation orders might never terminate
 even when a normal form exists, which correspond to Turing machines that never
-halt. (However, adding types to lambda calculus can guarantee the existence of
-a normal form for a useful subset of terms.)
+halt.
 
 The left 'spine' of the tree is the path that starts from the root node and
 recursively follows the left child. To evaluate in normal order,
 we walk down the left spine until we bottom out, then reduce as we walk back
 up to the root; on each reduction, we must walk back down again in case the
-replacement subtree be reduced. Then we walk down again to the bottom, and
-this time as we walk back up again, we recursively normalize the right
-branches.
+replacement subtree can be reduced. Afterwards, we walk down the left spine
+again to the bottom, and this time as we walk back up again, we recursively
+normalize the right branches.
 
 \begin{code}
 normalize :: CL -> CL
@@ -185,7 +185,7 @@ normalize t = down t [] up1 where
 \end{code}
 
 For our computations, it turns out we only need our terms to reach 'weak head
-normal form', which means we skip the second walk to the bottom and back:
+normal form', which means we skip the second trip.
 
 \begin{code}
 run :: CL -> CL
@@ -201,9 +201,6 @@ run t = down t [] where
       a:as -> up (t :# a) as
 \end{code}
 
-We have chosen the combinatory logic approach because `reduce` and `run` are
-easy to port to most target languages.
-
 == Input and output ==
 
 Turing machines have a tape to handle input and output. With combinatory
@@ -211,9 +208,11 @@ logic, the program is a term, the input string is encoded as a term, and the
 output string is the decoding of the program term applied to the input term.
 
 We use
-link:scott.html[the 'Scott encoding']. Encoding and decoding requires us to
-evaluate combinators alongside our own functions, hence the `runM` function and
-the state monad.
+link:scott.html[the 'Scott encoding']. Strings are Scott-encoded lists of
+Scott-encoded Peano numbers.
+
+Encoding and decoding requires us to evaluate combinators alongside our own
+functions, hence the `runM` function and the state monad.
 
 \begin{code}
 runM :: Monad m => (CL -> m (Maybe CL)) -> CL -> m CL
@@ -295,8 +294,7 @@ https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitiona
 landmark paper of 1972] cites examples of languages defined in variants of
 lambda calculus, and shows how all of them can be defined in a lambda calculus
 which only has first-order functions and whose order of evaluation is
-irrelevant. In particular, our choice of normal-order evaluation above is
-harmless.
+irrelevant.
 
 A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
 Sussman wrote the famous lambda papers]: a series of cookbooks describing how
@@ -310,7 +308,7 @@ http://conal.net/papers/compiling-to-categories/compiling-to-categories.pdf[Elli
 work on compiling to categories] gives fascinating uses for bracket
 abstraction.
 
-http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Adam Chlipala wrote
+http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Chlipala wrote
 'A Certified Type-Preserving Compiler from Lambda Calculus to Assembly
 Language'], which we take as a license to be informal when we please.
 We can always fall back to this paper to see how it's really done!

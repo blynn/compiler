@@ -1,7 +1,9 @@
 = Scott encoding =
 
 Encoding data as functions may seem strange at first, but after playing around
-with combinators for a while, the Scott encoding seems natural.
+with combinators for a while,
+https://en.wikipedia.org/wiki/Mogensen%E2%80%93Scott_encoding[the Scott
+encoding] suggests itself.
 
 Take some algebraic data type:
 
@@ -10,7 +12,7 @@ data Adt a b c = Foo a | Bar | Baz b c
 ------------------------------------------------------------------------------
 
 Suppose we come across a value `x` of type `Adt`. What can we do with it?
-The only possible action is to examine it with a case statement:
+The only possible nontrivial action is to examine it with a case statement:
 
 ------------------------------------------------------------------------------
 case x of
@@ -29,7 +31,7 @@ replace each data constructor in the pattern with `\`. Then we get:
 x (\a -> f a) (\ -> g) (\b c -> h b c)
 ------------------------------------------------------------------------------
 
-Here, a lambda abstraction with no variables has the obvious meaning, that is,
+Here, a lambda abstraction with no variables has the obvious meaning, namely,
 `\ -> g` is the same as `g`.
 
 Then the Scott encoding of the value `x` of type `Adt` is whatever it takes to
@@ -60,15 +62,44 @@ Bar     = \_ g _ -> g
 Baz a b = \_ _ h -> h a b
 ------------------------------------------------------------------------------
 
-== Numbers ==
+== Booleans, Numbers, Lists ==
 
-Peano numbers are the following algebraic data type:
+We would like to define booleans as:
+
+------------------------------------------------------------------------------
+data Bool = False | True
+------------------------------------------------------------------------------
+
+Since `False` appears before `True`, a compiler seeing this would naturally
+index them with the numbers 0 and 1 respectively, which matches common
+practice, and Haskell, too, as can be seen via various automatically generated
+functions: `fromEnum toEnum minBound maxBound succ pred`.
+
+Unfortunately, for the time being, we must define:
+
+------------------------------------------------------------------------------
+data Bool = True | False
+------------------------------------------------------------------------------
+
+so that our compiler produces the Scott encodings:
+
+------------------------------------------------------------------------------
+True  = \x _ -> x
+False = \_ y -> y
+------------------------------------------------------------------------------
+
+This is because long before computers were commonplace, mathematicians settled
+on this particular encoding of booleans. We bow down to this convention, so
+it matches what we find when we look up "Church encoding" or "Scott
+encoding" in the literature.
+
+Peano numbers are defined by the following algebraic data type:
 
 ------------------------------------------------------------------------------
 data Peano = Zero | Succ Peano
 ------------------------------------------------------------------------------
 
-From above, the Scott encoding is:
+The Scott encoding is:
 
 ------------------------------------------------------------------------------
 Zero   = \f _ -> f
@@ -84,40 +115,32 @@ predecessor n = case n of
   Succ n -> n
 ------------------------------------------------------------------------------
 
-With a Scott-encoded input, this becomes:
+Using the Scott encoding:
 
 ------------------------------------------------------------------------------
 predecessor n = n Zero (\n -> n)
 ------------------------------------------------------------------------------
 
-Pure lambda calculus has an undeserved reputation for sloth; for example,
-Chaitin write "you can’t really run programs that way, they’re too
-slow" and picks LISP instead.
-
+Pure lambda calculus has an undeserved reputation for sloth.
 Perhaps one of the misconceptions is arithmetic must be performed in unary.
 Not so! We may define numbers in binary instead of unary:
 
 ------------------------------------------------------------------------------
-data Binary = One Binary | Nil Binary | End
+data Binary = End | Nil Binary | One Binary
 ------------------------------------------------------------------------------
 
-But we may as well use a list of booleans instead.
-
-Haskell's predefined lists and booleans are:
+But we may as well use a list of booleans instead. 
+A list is defined by:
 
 ------------------------------------------------------------------------------
 data [a] = [] | a : [a]
-data Bool = False | True
 ------------------------------------------------------------------------------
 
-which implies their Scott encodings are:
+yielding the Scott encodings:
 
 ------------------------------------------------------------------------------
 []       = \f _ -> f
 (:) a as = \_ g -> g a as
-
-False = \f _ -> f
-True  = \_ g -> g
 ------------------------------------------------------------------------------
 
 Here's a starter pack of functions for numbers encoded in binary:
@@ -170,3 +193,7 @@ encode n = if n == 0 then [] else case divMod n 2 of
   (n', 0) -> False : encode n'
   (n', 1) -> True  : encode n'
 \end{code}
+
+We have no need for these since we'll extend CL to support the native integer
+types of the underlying machine. But we stress again pure lambda calculus
+numerals are not condemned to be unary! 

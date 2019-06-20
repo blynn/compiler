@@ -1,15 +1,16 @@
 = Compiler Quest =
 
 Bootstrapping a compiler is like a role-playing game. From humble beginnings,
-we painstakingly cobble together a primtive, hard-to-use compiler whose only
+we painstakingly cobble together a primitive, hard-to-use compiler whose only
 redeeming quality is that it can build itself.
 
 Because the language supported by our compiler is so horrible, we can only
 bear to write a few incremental improvements. But once we persevere, we
-compile the marginally better compiler to gain a level. We can now iterate: we
-add more features to our new compiler, which is easier thanks to our most
-recent changes, then compile again, and so on. Eventually we reach a compiler
-that no longer causes embarrassment.
+compile the marginally better compiler to gain a level.
+
+Then we iterate. We add more features to our new compiler, which is easier
+thanks to our most recent changes, then compile again, and so on. The game
+is open-ended; we keep improving our compiler until we get bored.
 
 == Parenthetically ==
 
@@ -115,7 +116,7 @@ P x y f = f x y;
 (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
 ------------------------------------------------------------------------------
 
-As combinators:
+As combinators, we have:
 
 ------------------------------------------------------------------------------
 BKT;
@@ -123,8 +124,6 @@ BCT;
 BS(BB);
 Y(B(CS)(B(B(C(BB:)))C));
 ------------------------------------------------------------------------------
-
-=== Parser combinators ===
 
 Parsing is based on functions of type:
 
@@ -161,8 +160,6 @@ B@&(@'K);
 B(B(R@ ))S;
 ------------------------------------------------------------------------------
 
-=== Abstract syntax tree ===
-
 Our syntax tree goes into the following data type:
 
 ------------------------------------------------------------------------------
@@ -188,8 +185,6 @@ BK(B(BK)(B(BK)T));
 B(BK)(B(BK)(B(B(BK))(BCT)));
 B(BK)(B(BK)(B(BK)(BCT)));
 ------------------------------------------------------------------------------
-
-=== Grammar ===
 
 The `sat` parser combinator parses a single character that satisfies a given
 predicate. The `char` specializes this to parse a given character, and
@@ -219,22 +214,23 @@ Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));
 Y(S(B@&(B(@'T)@3))@4);
 ------------------------------------------------------------------------------
 
-=== Bracket abstraction ===
-
 The `babs` and `unlam` functions perform simple bracket abstraction, and
 `show` writes the resulting lambda-free `Ast` in ION assembly.
-
-Putting it all together, `main` parses as many semicolon-terminated
-expressions as it can and converts them to ION assembly.
 
 ------------------------------------------------------------------------------
 show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) undefined;
 unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
 babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
+------------------------------------------------------------------------------
+
+Putting it all together, `main` parses as many semicolon-terminated
+expressions as it can and converts them to ION assembly.
+
+------------------------------------------------------------------------------
 main s = (expr <* char ';') s "" (\p -> p (\x t -> show (babs x) ++ ";" ++ main t)));
 ------------------------------------------------------------------------------
 
-As combinators:
+These last few functions are:
 
 ------------------------------------------------------------------------------
 Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));
@@ -244,26 +240,21 @@ Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
 ------------------------------------------------------------------------------
 
 We feed the combinators into our first compiler to produce an ION assembly
-program that compiles lambda calculus to ION assembly. We're back to where we
-were before, except instead of Haskell, we can use any language where it's
-easy to simulate an ION machine.
-
-Apart from the primitive grammar, our task might seem complete.
-However, there is a problem with classic bracket abstraction.
-For each variable we abstract over, the algorithm adds an application of the S
-combinator to every application. Hence for N variables, this multiplies the
-number of applications by 2^N, making this algorithm impractical.
+program that compiles a primitive lambda calculus to ION assembly.
 
 == Practically ==
 
-Our next compiler uses the most straightforward optimization to improve on
-classic bracket abstraction.
+In classic bracket abstraction, for each variable we abstract over, the
+algorithm adds an application of the S combinator to every application. Hence
+for N variables, this multiplies the number of applications by 2^N, which
+is intolerable for all but the smallest programas.  Our next
+compiler uses the most straightforward optimization to improve on this.
 
 We stop recursively adding S combinators as soon as we realize they are
 unnecessary by modifying `unlam` and adding a helper function `occurs`:
 
 ------------------------------------------------------------------------------
-occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
+occurs v t = t (\x -> False) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
 unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
 ------------------------------------------------------------------------------
 
@@ -271,21 +262,31 @@ We rewrite these as lambda abstractions with one-character variable names
 and Y combinators:
 
 ------------------------------------------------------------------------------
-Y\a.\b.\c.c(\d.\e.\f.f)(\d.d(b=))(\d.\e.@((abd)(abe))?;
-Y\a.\b.\c.@=bc(c?(@!(@2#I))(\d.\e.@3(@3(@2#S)(abd))(abe))?)(@3(@2#K)c);
+Y\a.\b.\c.c(\d.KI)(\d.d(b=))(\d.\e.@\"(abd)(abe))?;
+Y\a.\b.\c.@7bc(c?(K(@,#I))(\d.\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);
 ------------------------------------------------------------------------------
 
 Our previous compiler turns these into massive but manageable combinatory logic
 terms. That is, we use classic bracket abstraction sparingly: just enough to
 reach a better algorithm.
 
-== Sacrificial lambdas ==
+== Summary ==
 
-Adding term-rewriting rules further reduce the size of the output combinatory
-logic term after bracket abstraction.
+Our three compilers are the following:
 
-https://tromp.github.io/cl/LC.pdf[John Tromp's paper contains a useful list
-of rewrite rules.]
+------------------------------------------------------------------------------
+``BCT;``BS`BB;`Y``B`CS``B`B`C``BB:C;``B`R``BKK`BB;``C``BBB``S``BS@#``B`B`:#`@";``S``B@!`T`##=`T`#@=;``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;``BC``B`B@&@$;``S``BC``B`BB``B`BT@$`TK;``S``B@!`T`#;=`T`#)=;``S``BC``B`BB``B`BB@)`T`#(=;``BC``S``BS``B`C``C@*@ @(@';`Y``B`B`C`T?@+;`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
+
+BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT(T=));@/(BC(S(B@"(T(#;=)))(T(#)=))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT(T=))))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
+
+BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT(T=));@/(BC(S(B@"(T(#;=)))(T(#)=))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));Y\a.\b.\c.c(\d.KI)(\d.d(b=))(\d.\e.@"(abd)(abe))?;Y\a.\b.\c.@7bc(c?(K(@,#I))(\d.\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));
+------------------------------------------------------------------------------
+
+== Term rewriting ==
+
+https://tromp.github.io/cl/LC.pdf[John Tromp has a useful list of rewrite
+rules] to further reduce the size of the output combinatory logic term after
+bracket abstraction.
 
 Chapter 16 of
 https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/['The

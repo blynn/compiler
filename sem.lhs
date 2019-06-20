@@ -1,19 +1,17 @@
 = LC to CL, Semantically =
 
-Compilers abandoned bracket abstraction in favour of generating custom
-combinators for each particular program, known as supercombinators.
+Compiler authors abandoned bracket abstraction long ago in favour of generating
+custom combinators for each particular program, known as 'supercombinators'.
 
 We'll buck this trend, partly for notoriety, but also because
 http://okmij.org/ftp/tagless-final/ski.pdf[a bracket abstraction algorithm
 by Oleg Kiselyov] breathes new life into the old approach.
 
 Rather than treating lambda terms as a syntax to be rewritten as combinators,
-we define its meaning in terms of combinators, which can be viewed as a
-bracket abstraction algorithm.
+Kiselyov defines the meaning of a lambda term using combinators. The formal
+semantics can be viewed as a bracket abstraction algorithm.
 
-Several parts of the compiler are unchanged.
-
-Some standard definitions:
+Much of our previous compiler remains the same. We have standard definitions:
 
 ------------------------------------------------------------------------------
 or f g x y = f x (g x y);
@@ -51,7 +49,7 @@ liftk = liftaa @K;
 sat f inp = inp @K (\h t -> f h (pure h t) @K);
 ------------------------------------------------------------------------------
 
-Parser.
+Parser:
 
 ------------------------------------------------------------------------------
 char c = sat (\x -> x(c(@=)));
@@ -92,7 +90,7 @@ debruijn = @Y (\r n e -> e
   );
 ------------------------------------------------------------------------------
 
-Kiselyov's bracket abstraction algorithm from Section 4 of the paper:
+And Kiselyov's bracket abstraction algorithm from Section 4 of the paper:
 
 ------------------------------------------------------------------------------
 closed = \t a b c -> a t;
@@ -151,6 +149,6 @@ Without garbage collection, the previous compiler requires over 87 million
 32-bit words on the heap to compile the above, while this compiler compiles
 itself using under 11 million 32-bit words.
 
-If our computers were less powerful, it would be better to skip our compilers
-using classic bracket abstraction and go straight to the above, at the cost of
-converting many more LC terms to CL terms by hand.
+If our computers were less powerful, it would be better to skip our previous
+compilers using classic bracket abstraction and go straight to the above, at
+the cost of converting many more LC terms to CL terms by hand.

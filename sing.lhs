@@ -1,15 +1,17 @@
 = The Compiler Singularity =
 
-I've been cheating. Behind the scenes, I ran a computer program that I wrote
+I have a confession. Behind the scenes, I've been running a computer program
 to convert readable code to combinators or lambdas with one-character
-variables. Ideally, to avoid
-"https://www.ece.cmu.edu/~ganger/712.fall02/papers/p761-thompson.pdf[trusting
-trust]" issues, all this should be done by hand. Nonetheless, each of the
-our programs seem small enough that a sufficiently motivated human could
-verify them.
+variables, and to deal with `@` addresses.
 
-Now that the truth is revealed, we may as well show the program-generated
-source of our next compiler up front:
+Ideally, to avoid
+"https://www.ece.cmu.edu/~ganger/712.fall02/papers/p761-thompson.pdf[trusting
+trust]" issues, all the above should have been done manually. Nonetheless,
+each of the our terms seem short enough that a sufficiently motivated human
+could verify them.
+
+Now that the truth is revealed, instead of pretending to derive terms by hand,
+we may as well show the program-generated source of our next compiler up front:
 
 ------------------------------------------------------------------------------
 \a.\b.\c.\d.ac(bcd);
@@ -60,18 +62,21 @@ Y\a.\b.\c.cK\d.\e.@"(@Eb(@H(d(KI))))(:#;(abe));
 \a.@Ca(:#?K)(B(\b.@Ibb)(TK));
 ------------------------------------------------------------------------------
 
+(Again, for clarity we have placed a newline after each semicolon.)
+
 Hopefully, it's plausible that the above can be verified by hand to
 be equivalent to the following compiler. We have upgraded our previous parser
 to support comments, whitespace, and variables consisting of lowercase letters.
 We also added code to look up the index of a top-level definition.
-This allows for much prettier input. Indeed, pretty enough that we are
-willing to program directly in the language accepted by this compiler.
+
+Our language is now friendly enough that we are willing to work directly in the
+language accepted by this compiler. No more cheating.
 
 We have reached a kind of singularity because this compiler is self-hosting.
 It can take its 100% human-generated source as input and produce the
 corresponding ION assembly.
-------------------------------------------------------------------------------
 
+------------------------------------------------------------------------------
 or f g x y = f x (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
 append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));

@@ -7,8 +7,7 @@ His interlocutor typically gave an impressive but imprecise answer, to which
 Socrates asked a series of follow-up questions. Sooner or later, he'd find a
 contradiction. Both parties gained a deeper understanding of the topic, but
 even after several iterations, the main conclusion most often seemed to be "X
-is hard to define". This seems awfully little to extract from such a long
-process.
+is hard to define". Awfully little to extract from such a long process.
 
 I encountered an optimization in a book by Douglas Adams: just give
 mathematical answers. If asked "What is the answer to the meaning of life, the
@@ -108,11 +107,11 @@ number of bits at a time.
 
 == Deterministic Finite Automata ==
 
-Computers (and humans) are so much more than mere circuits because we can
-retain something from one step to use in future steps. Even though we can only
-read a few words at a time, we can absorb a complex story from a book. This
-is because after starting in one state of mind, processing a few bits can put
-us in another state of mind, which affects how we process future bits.
+Humans and computers are so much more than mere circuits because we can retain
+something from one step to use in future steps. Even though we can only read a
+few words at a time, we can absorb a complex story from a book. This is because
+after starting in one state of mind, processing a few bits can put us in
+another state of mind.
 
 This leads us to consider deterministic finite automata, or finite state
 machines:
@@ -150,15 +149,15 @@ By the way, we could have written:
 runDfa (start, step, accepts) = accepts . foldr (flip step) start
 ------------------------------------------------------------------------------
 
-but we prefer to avoid getting too tied into Haskell so it looks more like
-we're starting from first principles.
+but we prefer to avoid getting overly mixed up in Haskell library functions so
+it looks more like we're starting from first principles.
 
-We could extend the above so we also output characters (see
+We could extend the above to output characters as it computes (see
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
 https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]). But
-traditionally, we start with nothing but a Boolean because it's the simplest
-case, and already we learn a lot. We quickly find DFAs are incapable of
-elementary tasks such as checking if a bunch of parentheses are balanced, or
+traditionally, we start with nothing but a Boolean at the end because we
+already learn a lot from this simple case. We quickly find DFAs are incapable
+of elementary tasks such as checking if a bunch of parentheses are balanced, or
 if some number of As has been followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
@@ -237,9 +236,9 @@ evalTM :: TM -> String -> String
 evalTM p s = fromTape (runTM p (toTape s))
 \end{code}
 
-To simplify, we have ditched the notion of accepting states; we could
-trivially support them by tweaking our TM to write a symbol representing a
-boolean just before halting.
+To simplify, we have ditched the notion of accepting states; we could trivially
+support them by tweaking our TM to write a symbol representing acceptance
+before halting.
 
 https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis[Turing machines
 are a good mathematical answer to "What is a computer?"]
@@ -302,7 +301,7 @@ more elegantly specified].
 
 https://www.microsoft.com/en-us/research/uploads/prod/2018/03/build-systems-final.pdf[Build systems can be defined mathematically].
 
-We can even apply these ideas to operating systems. See
+Even operating systems can be defined with mathematics. See
 https://www.sigops.org/s/conferences/sosp/2009/papers/klein-sosp09.pdf[seL4]
 and http://flint.cs.yale.edu/certikos/[CertiKOS].
 
