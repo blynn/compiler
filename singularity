@@ -1,10 +1,10 @@
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Supports comments, spaces, variables consisting of lowercase letters.
 --
 -- To convert to a form suitable for my tools:
 --  * Change @x to (x) but be aware of #@
 --  * Change #x to 'x' but be aware of # followed by a newline.
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 or f g x y = f x (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));

@@ -13,7 +13,7 @@ could verify them.
 Now that the truth is revealed, instead of pretending to derive terms by hand,
 we may as well show the program-generated source of our next compiler up front:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 \a.\b.\c.\d.ac(bcd);
 Y\a.\b.\c.\d.\e.b(cd\f.\g.e)\f.\g.ce\h.\i.f(h=)(agide)e;
 Y\a.\b.\c.bc\d.\e.:d(aec);
@@ -60,23 +60,28 @@ Y\a.\b.\c.@Fbc(c?(K(@8(:#IK)))(\d.\e.@:(@:(@9(:#SK))(abd))(abe))?)(@:(@9(:#KK))c
 Y\a.\b.b@8@9(\c.\d.@:(ac)(ad))\c.\d.@Gc(ad);
 Y\a.\b.\c.cK\d.\e.@"(@Eb(@H(d(KI))))(:#;(abe));
 \a.@Ca(:#?K)(B(\b.@Ibb)(TK));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 (Again, for clarity we have placed a newline after each semicolon.)
 
 Hopefully, it's plausible that the above can be verified by hand to
-be equivalent to the following compiler. We have upgraded our previous parser
-to support comments, whitespace, and variables consisting of lowercase letters.
-We also added code to look up the index of a top-level definition.
+be equivalent to the following compiler.
 
-Our language is now friendly enough that we are willing to work directly in the
-language accepted by this compiler. No more cheating.
+We have upgraded our previous parser to support comments, whitespace, and
+variables consisting of lowercase letters. We also added code to look up the
+index of a top-level definition.
 
-We have reached a kind of singularity because this compiler is self-hosting.
-It can take its 100% human-generated source as input and produce the
-corresponding ION assembly.
+Prefixing a character with `@` gives us direct access to the primitive
+combinators. (Not to be confused with the `@` operator of ION assembly.)
 
-------------------------------------------------------------------------------
+Our language is now friendly enough that we are willing to work in it
+exclusively. No more cheating.
+
+In other words, we have reached a singularity because this compiler is
+self-hosting.  It can take its 100% organic artisanal human-generated source as
+input and produce the corresponding ION assembly.
+
+------------------------------------------------------------------------
 or f g x y = f x (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
 append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
@@ -131,4 +136,4 @@ babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
 
 dump = @Y \r tab ds -> ds @K \h t -> append (show tab (babs (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------

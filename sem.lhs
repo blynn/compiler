@@ -3,7 +3,7 @@
 Compiler authors abandoned bracket abstraction long ago in favour of generating
 custom combinators for each particular program, known as 'supercombinators'.
 
-We'll buck this trend, partly for notoriety, but also because
+We'll buck this trend, partly for notoriety, but also for novelty:
 http://okmij.org/ftp/tagless-final/ski.pdf[a bracket abstraction algorithm
 by Oleg Kiselyov] breathes new life into the old approach.
 
@@ -13,7 +13,7 @@ semantics can be viewed as a bracket abstraction algorithm.
 
 Much of our previous compiler remains the same. We have standard definitions:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 or f g x y = f x (g x y);
 and f g x y = @C f y (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
@@ -21,21 +21,21 @@ append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
 pair x y f = f x y;
 just x f g = g x;
 foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Scott encoding of a data structure we use to hold lambda terms:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- data LC = R String | V String | A LC LC | L String LC
 lcr s   = \a b c d -> a s;
 lcv v   = \a b c d -> b v;
 lca x y = \a b c d -> c x y;
 lcl x y = \a b c d -> d x y;
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Parser combinators library:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 pure x inp = just (pair x inp);
 bind f m = m @K (\x -> x f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
@@ -47,11 +47,11 @@ some p = liftaa @: p (many p);
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
 sat f inp = inp @K (\h t -> f h (pure h t) @K);
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Parser:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 char c = sat (\x -> x(c(@=)));
 com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
 (@=)))))) (char #
@@ -69,12 +69,12 @@ apps = @Y \rr r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (rr r
 expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Finally, something new: a function to rewrite lambda terms with De Bruijn
 syntax:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- data DB = Ze | Su DB | Pass LC | La DB | App DB DB
 ze   = \    a b c d e -> a;
 su   = \x   a b c d e -> b x;
@@ -88,11 +88,11 @@ debruijn = @Y (\r n e -> e
   (\x y -> app (r n x) (r n y))
   (\s t -> la (r (@: s n) t))
   );
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 And Kiselyov's bracket abstraction algorithm from Section 4 of the paper:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 closed = \t a b c -> a t;
 need   = \x a b c -> b x;
 weak   = \x a b c -> c x;
@@ -132,17 +132,17 @@ babs = @Y (\r t -> t
   (\x y -> babsa (r x) (r y))
   );
 nolam x = babs (debruijn @K x) @I @? @?;
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 That leaves the code generator and main function that ties everything
 together:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 rank v ds = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
 show = @Y \r ds t -> t @I (\v -> rank v ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
 dump = @Y \r tab ds -> ds @K \h t -> append (show tab (nolam (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 The grammar is identical, but the generated code is far smaller.
 Without garbage collection, the previous compiler requires over 87 million

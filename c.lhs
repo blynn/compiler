@@ -13,16 +13,26 @@ We achieve this by reducing `K I T` nodes during garbage collection.
 
 == TODO ==
 
-If I can find the time, and I'm still interested, I hope to:
+...or more likely, wishful thinking:
 
   * Experiment with bulk combinators.
   * Look into http://www.cs.cornell.edu/~ross/publications/eqsat/[equality
 saturation]: automating compiler optimization.
+  * Investigate automatic theorem proving, so we can generate
+programs from their types.
+  * How does http://nautilus.cs.miyazaki-u.ac.jp/~skata/MagicHaskeller.html[MagicHaskeller] work?!
+It'd be nice to generate programs from test cases.
+  * Simulate an ION machine in WebAssembly, allowing for a client-side web
+  Haskell REPL.
   * Keep playing Compiler Quest: fill in missing pieces, add compiler
 optimizations, add language features, improve the interface, improve parsing,
 replace association lists with something faster, etc.
+  * Improve on Haskell, e.g. see suggestions by
+  https://medium.com/daml-driven/four-tweaks-to-improve-haskell-b1de9c87f816[Neil Mitchell]
+  and
+  https://gist.github.com/taktoa/a59400fd3e1c400835b60c416ad33952[Remy Goldschmidt].
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 typedef unsigned u;
 #include <stdio.h>
 #include <stdlib.h>
@@ -435,4 +445,4 @@ int main(int argc, char **argv) {
   parse(buf); fp_reset("classy.hs"); run(fp_get, pc);
   return 0;
 }
-------------------------------------------------------------------------------
+------------------------------------------------------------------------

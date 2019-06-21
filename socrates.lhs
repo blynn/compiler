@@ -3,18 +3,17 @@
 To understand X, Socrates began by asking: "What is X?". For example:
 "What is justice?", or "What is virtue?"
 
-His interlocutor typically gave an impressive but imprecise answer, to which
-Socrates asked a series of follow-up questions. Sooner or later, he'd find a
-contradiction. Both parties gained a deeper understanding of the topic, but
-even after several iterations, the main conclusion most often seemed to be "X
-is hard to define". Awfully little to extract from such a long process.
+His interlocutor typically gave an impressive but imprecise definition, to
+which Socrates asked a series of follow-up questions. Sooner or later, he'd
+find a contradiction. Both parties gained a deeper understanding of the topic,
+but even after several iterations, the main conclusion most often seemed to be
+"X is hard to define". Awfully little to extract from such a long process.
 
-I encountered an optimization in a book by Douglas Adams: just give
-mathematical answers. If asked "What is the answer to the meaning of life, the
-universe, and everything?", we reply "42" and we avoid those meddlesome
-contradictions. For if we can find a contradiction in mathematics, then we
-have in particular invalidated logical reasoning and destroyed the foundation
-of the Socratic method.
+I encountered an optimization in a book by Douglas Adams: answer
+mathematically. If asked "What is the answer to the meaning of life, the
+universe, and everything?", we reply "42" and avoid those meddlesome
+contradictions. For a contradiction in mathematics in particular invalidates
+logical reasoning, the foundation of the Socratic method.
 
 Now the problem is finding a mathematical definition that reflects what we
 have in mind. This can be difficult, but luckily, for parts of computer
@@ -27,9 +26,9 @@ We define a compiler to be a translator from one programming language to
 another. More mathematically, a function from programs in the source language
 to programs in the target language:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 compile :: Language -> TargetLanguage
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 But not just any function will do. A correct compiler must preserve the
 meaning of the source program.
@@ -41,32 +40,32 @@ running a program as evaluating a function that takes a given input value to
 an output value. Then an interpreter is a function taking a program to such a
 function:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> (Value -> Value)
 interpretTarget :: TargetLanguage -> (Value -> Value)
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 By convention, the arrow `(->)` associates to the right so we instead write:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> Value -> Value
 interpretTarget :: TargetLanguage -> Value -> Value
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Our condition for a compiler correctness is that for any program `p` in
 `Language`, and for any `input` in `Value`:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 (interpret p) input == (interpretTarget (compile p)) input
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 By convention, we use juxtaposition to denote function application, and it
 associates to the left, which plays nicely with our other convention, so
 we write:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret p input == interpretTarget (compile p) input
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 So far so good, but there ought to be some indication that these interpreters
 are running on computers.
@@ -75,20 +74,20 @@ are running on computers.
 
 We could try:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 compute :: Input -> Output
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-This perhaps techically works, because we could say the input includes the
-entire state of the computer: every register value, every single bit of
-memory, and so on. However, we've bitten off far more than we can chew; how
-can we hope to reason about a complicated gigantic function?
+This works if we say the input includes the entire state of the computer: every
+register value, every single bit of memory, and so on. However, we've bitten
+off far more than we can chew; how can we hope to reason about a complicated
+gigantic function?
 
 What if we shrink the domain and range?
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 compute :: Char -> Char
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Here, the set `Char` is relatively small, say the set of all 32-bit words.
 We make the input and output sets are identical so we only need to deal with
@@ -96,18 +95,17 @@ one type of `Char`; working around this restriction is left as an exercise.
 
 A list of `Char` represents inputs and outputs of arbitrary length.
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 type Value = [Char]
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-However, the only thing our `compute` function can do to such a list is to
-perform the same operation to each element of the list. We have modeled
-something like a circuit, which can only do one particular task on a certain
-number of bits at a time.
+The only thing our `compute` function can do to such a list is to perform the
+same operation to each element of the list. We have modeled something like a
+circuit, which performs the same task on a certain number of bits at a time.
 
 == Deterministic Finite Automata ==
 
-Humans and computers are so much more than mere circuits because we can retain
+Humans and computers are so much more than mere circuits because we retain
 something from one step to use in future steps. Even though we can only read a
 few words at a time, we can absorb a complex story from a book. This is because
 after starting in one state of mind, processing a few bits can put us in
@@ -145,9 +143,9 @@ oddXs = (0, step, \state -> state == 1) where
 
 By the way, we could have written:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 runDfa (start, step, accepts) = accepts . foldr (flip step) start
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 but we prefer to avoid getting overly mixed up in Haskell library functions so
 it looks more like we're starting from first principles.
@@ -162,10 +160,9 @@ if some number of As has been followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
 
-DFAs are hobbled by lack of memory. Let's fix this. Perhaps the simplest
-kind of memory is a stack, as evidenced by the popularity of stack-based
-virtual machines. We can model such machines with
-'deterministic push-down automata':
+DFAs are hobbled by lack of memory. Let's fix this. Perhaps the simplest kind
+of memory is a stack, as evidenced by the popularity of stack-based virtual
+machines. We model such machines with 'deterministic push-down automata':
 
 \begin{code}
 type Diff = (State, [Char])
@@ -245,9 +242,9 @@ are a good mathematical answer to "What is a computer?"]
 Thus we revise our definition of an interpreter, which in turn defines a
 programming language:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> TM
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 == What is a compiler? ==
 
@@ -255,22 +252,22 @@ Let's put all the pieces together. A language is defined by a function
 that maps a given program to a Turing machine. Given two language
 specifications:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> TM
 interpretTarget :: TargetLanguage -> TM
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 a compiler from the first language to the second is a function:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 compile :: Language -> TargetLanguage
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 such that for all source programs `p` and for all strings `s`:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 evalTM (interpret p) s == evalTM (interpretTarget (compile p)) s
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 == What else is there? ==
 
@@ -301,7 +298,7 @@ more elegantly specified].
 
 https://www.microsoft.com/en-us/research/uploads/prod/2018/03/build-systems-final.pdf[Build systems can be defined mathematically].
 
-Even operating systems can be defined with mathematics. See
+Even operating systems have embraced mathematics. See
 https://www.sigops.org/s/conferences/sosp/2009/papers/klein-sosp09.pdf[seL4]
 and http://flint.cs.yale.edu/certikos/[CertiKOS].
 

@@ -3,50 +3,46 @@
 Gregory Chaitin's pioneering results on
 https://en.wikipedia.org/wiki/Algorithmic_information_theory[algorithmic
 information theory] are exciting because he wrote real programs to make theory
-concrete. Sadly, Chaitin chose LISP due to a poor understanding of lambda
-calculus, making his results less impressive than they ought to be.
+concrete. Sadly, Chaitin chose LISP due to a flawed understanding of lambda
+calculus, diminishing the beauty of his results.
 
 https://tromp.github.io/cl/LC.pdf[John Tromp's reworking of Chaitin's ideas in
 lambda calculus and combinatory logic] is a fascinating read. Much of the fun
 involves tiny self-interpreters that read binary encodings of themselves.
-Tromp attains impressively compact self-interpreters.
 
-Tromp's binary self-interpreter expects the input in the form of nested pairs
-such as:
+Tromp's binary CL self-interpreter expects the input in the form of nested
+pairs such as:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 (True, (False, (False, ...  (True, const) ... ))
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-and if we could turn off type-checking in Haskell, the interpreter is simply:
+If we could disable type-checking in Haskell, the interpreter is simply:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 eval c = uncurry (bool (uncurry (c . bool const ap)) (eval (eval . (c .))))
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 and satisfies:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 eval c (encode m n) == c m n
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 where:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 data CL = App CL CL | S | K
 encode m n = case m of
   x :@ y -> (True, (encode x (encode y n)))
   S -> (False, (False, n))
   K -> (False, (True , n))
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-The above fails to type-check because Haskell has iso-recursive types.
+However, some of our type-challenged compilers will happily run this crazy code.
+Try the following with link:grind.html[our "Fixity" compiler]:
 
-However, some of our compilers are completely ignorant of types, so will
-happily run our crazy code. Try the following with link:grind.html[our "Fixity"
-compiler]:
-
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 data Bool = True | False;
 id x = x;
 const x y = x;
@@ -61,25 +57,26 @@ encode m n = case m of
   };
 eval c = uncurry (bool (uncurry (c . bool ap const)) (eval (eval . (c .))));
 go s = eval id (encode (App (App S K) K) s);
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Since SKK is the identity, the above just passes the input through with no
 changes.
 
 Kiselyov's bracket abstraction algorithm leads us to wonder: why limit
-ourselves to S and K? Just because we can doesn't mean we should. After all, we
-could prohibiting lambda terms needing a De Bruijn index greater than 2, but we
-don't.
+ourselves to S and K? We can, but does that mean we should? After all, we could
+prohibit lambda terms with a De Bruijn index greater than 2 and retain the
+same computing power, but nobody bothers.
 
 == Hole-in-one ==
 
 With no restrictions, adding combinators to the definition of CL to obtain a
-smaller self-interpreter is too easy. In the extreme, we could take a "trusting
-trust" approach and define a combinator X which decodes a given binary string
-to a CL term then interprets it.
+smaller self-interpreter is too easy. In the extreme, we could take a
+https://www.ece.cmu.edu/~ganger/712.fall02/papers/p761-thompson.pdf["trusting
+trust"] approach and define a combinator X which decodes a given binary string
+to a CL term and interprets it.
 
-The set of all combinators in this case is X, S, and K, and the representation
-of X would be 1 bit long, trivially resulting in a 1-bit self-interpreter.
+The set of all combinators is X, S, and K. Representing X with 1 bit trivially
+results in a 1-bit self-interpreter.
 
 == Rule-of-three ==
 
@@ -90,19 +87,19 @@ combinator.
 
 We choose the following 6 combinators:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 Sxyz = xz(yz)
 Bxyz = x (yz)
 Cxyz = xz(y )
 Kxy  = x
 Txy  = yx
 Vxyz = zxy
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 We encode them in binary according to the following table (where the backquote
 represents application):
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 ` 1
 B 01
 V 0011
@@ -110,25 +107,25 @@ T 0010
 S 0001
 C 00001
 K 00000
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Then the following is a self-interpreter:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 f c = T(V(T(V(T(T.V(V(T(c.V K C))(c S))(c.V T V)))(c B)))(f(f.(c.))))
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
-By Kiselyov's algorithm, this is:
+Kiselyov's algorithm yields:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 `Y``B`BT``B`S``BV``BT``S``BV``BT``B`BT``S``BV``S``BV``BT``CB``VKC`TS``CB``VTV`TB``SB``C``BBBB
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 We can define the Y combinator by:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 Y = ``B``TT``CB``STT
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 which means our self-interpreter takes 232 bits, beating Tromp's Theorem
 4 result of 263 bits.
@@ -136,7 +133,7 @@ which means our self-interpreter takes 232 bits, beating Tromp's Theorem
 The following demonstrates this self-interpreter in our "Fixity" compiler,
 interpreting `snd ("fst", "snd") = TK(SKK) ("fst", "snd")`.
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 data Bool = True | False;
 id x = x;
 const x y = x;
@@ -159,7 +156,56 @@ t = uncurry;
 v = bool;
 eval c = t(v(t(v(t(t . v(v(t(c . v const flip))(c ap))(c . v t v)))(c(.)))) (eval(eval . (c .))));
 demo _ = eval id (encode (App T (App K (App (App S K) K))) ("fst", "snd"));
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Is it sporting to consider the Y combinator primitive? If so, we could likely
 shrink the interpreter further.
+
+== Instant REPL play ==
+
+Interactive REPLs such as GHCi shine when we want to ask the computer for help
+while reducing the number of dreaded edit-compile-run cycles.
+
+We still write code in a file, but once done, we play around in the REPL to
+print codes and sizes.
+
+\begin{code}
+import Data.List
+import qualified Data.Map as M
+import Data.Map (Map, (!))
+import Data.Ord
+import Data.Tree
+
+coms = "```B``TT``CB``STT``B`BT``B`S``BV``BT``S``BV``BT``B`BT``S``BV``S``BV``BT``CB``VCK`TS``CB``VTV`TB``SB``C``BBBB"
+
+histo = M.fromListWith (+) $ (\c -> ([c], 1)) <$> coms
+
+huff :: Map String Int -> [(String, [Int])]
+huff ps = huff' [] $ huffTree $ (\(k, v) -> Node (k, v) []) <$> M.assocs ps
+  where
+  huff' s (Node (k, _) []) = [(k, s)]
+  huff' s (Node _ [x, y]) = huff' (0:s) x ++ huff' (1:s) y
+  huffTree [p] = p
+  huffTree ps = huffTree $ Node ("", v0 + v1) [p0, p1]:ps2 where
+    p0@(Node (_, v0) _) = getMin ps
+    ps1 = delete p0 ps
+    p1@(Node (_, v1) _) = getMin ps1
+    ps2 = delete p1 ps1
+    getMin = minimumBy $ comparing $ \(Node (_, v) _) -> v
+
+total = foldr (\(c, enc) n -> n + length enc * histo!c) 0 $ huff histo
+\end{code}
+
+== Infinite regress ==
+
+Is mainstream mathematics mistaken in its handling of the infinite?
+https://web.math.princeton.edu/\~nelson/papers/warn.pdf[What does it mean,
+Edward Nelson asks, to treat the unfinished as finished]?
+We might get a theory that is internally consistent, but so what? Good stories
+that have no bearing on reality are also internally consistent. Perhaps
+http://sites.math.rutgers.edu/~zeilberg/Opinion125.html[undecidability is
+meaningless, as Doron Zeilberger spiritedly opines].
+
+If this turns out to be the case, then I'll be annoyed because of the time I
+spent learning a lot of this stuff. But no matter what, it'll always be fun to
+seek tinier self-interpreters!

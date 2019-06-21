@@ -24,6 +24,21 @@ describe it at a higher level. By abuse of notation, `Int` means the type of
 32-bit words. (Actually using `Word32` requires more imports and conversions
 here and there.)
 
+++++++++++
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
+<p><a onclick='hideshow("ugh");'>&#9654; Toggle extensions and imports</a></p>
+<div id='ugh' style='display:none'>
+++++++++++
+
 \begin{code}
 {-# LANGUAGE NamedFieldPuns #-}
 module ION where
@@ -31,6 +46,13 @@ import Data.Char (chr, ord)
 import qualified Data.Map as M
 import Data.Map (Map, (!))
 import System.IO
+\end{code}
+
+++++++++++
+</div>
+++++++++++
+
+\begin{code}
 data VM = VM { sp :: Int, hp :: Int, mem :: Map Int Int }
 \end{code}
 
@@ -88,21 +110,21 @@ evaluation'.
 We might think of this as different to normal order, because we're reducing
 both X and Y even if they are not the two left-most subterms.
 
-== Pure combinators ==
+== Arithmetic ==
 
 For primitve functions, we use a trick described in depth by Naylor and
-Runciman, "The Reduceron reconfigured and re-evaluated":
-we reduce `#nf` to `f(#n)`.
+Runciman, "The Reduceron reconfigured and re-evaluated": we reduce `#nf` to
+`f(#n)`. For example, the term `(I#2)(K(#3)S)(+))` reduces to `(+)(#3)(#2)`.
 
-So if we have `#2(#3(+))`, this reduces to `(+)(#3)(#2)`.
-Evaluating `(+)` assumes the first two arguments are normalized and represent
-integers, and reduces to `#s` where `s` is the sum of `m` and `n`.
+Observe first two arguments of `(+)` are normalized integers, so our code for
+reducing `(+)(#m)(#n)` simply pulls out the words `m` and `n` from certain
+locations in memory and returns `#s` where `s == m + n` modulo 2^32.
 
 We support the operations `+ - / * % = L`. The first 5 have the same meaning
-they do in C, while the last 2 are equivalent to C's `==` and `<=`.
+they do in C, while the last 2 are equivalent to C's `(==)` and `(<=)`.
 
-The only other combinators left to explain are the `R` combinator (equivalent
-to `CC`) and the `:` combinator (equivalent to `B(BK)(BCT)`).
+We add a couple of useful macros: the `R` combinator (equivalent to `CC`) and
+the `(:)` combinator (equivalent to `B(BK)(BCT)`), and we're done:
 
 \begin{code}
 arg' :: Int -> VM -> Int
@@ -162,8 +184,9 @@ builtin c vm = case chr c of
 We expect a program `P` to be a function from a string to a string, where
 strings are Scott-encoded lists of characters.
 
-To run `P` on standard input and output, we initialize the VM with `P(0?).(T1)`
-then repeatedly reduce until asked to reduce the `(.)` combinator.
+To run `P` on standard input and output, we initialize the VM with
+`P(0?)(.)(T1)` then repeatedly reduce until asked to reduce the `(.)`
+combinator.
 
 The `0` combinator takes one argument, say `x`. The term `0x` reduces to `IK`
 at the end of input or `(:)(#c)(0?)` where `c` is the next input character.
@@ -174,7 +197,11 @@ in the heap.
 The `1` combinator takes two arguments, say `x` and `y`. The first argument `x`
 should be an integer constant, that is, `#c` for some `c`. Then the character
 with ASCII code `c` is printed on standard output, and the expression
-`1xy` is reduced to `y.(T1)`.
+`1xy` is reduced to `y(.)(T1)`.
+
+(In ION assembly, symbols and letters are equivalent. In particular, the
+`(.)` combinator is not a binary operator representing function composition, but
+just another combinator.)
 
 \begin{code}
 eval :: Monad m => (Int -> VM -> m (Maybe VM)) -> VM -> m VM

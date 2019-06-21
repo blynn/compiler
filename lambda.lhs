@@ -2,9 +2,9 @@
 
 We previously defined a programming language with the help of Turing machines:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> TM
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 We chose poorly.
 
@@ -21,7 +21,7 @@ tasks are hard to accomplish, and generally hang unpredictably.
 == Lambda Calculus ==
 
 Everyone knows lambda abstractions nowadays. C++ got them. JavaScript got
-them. Even "everything-is-an-object" Java got them.
+them. Even everything-is-an-object Java got them.
 
 Less well-known is that lambdas alone are equivalent in power to Turing
 machines. That is, we can toss out states, tapes, read/write heads, and do
@@ -30,31 +30,31 @@ compute just as effectively. If `LC` denotes the set of all closed lambda
 terms (see below for the meaning of "closed"), then the following two mutually
 inverse functions are known to exist:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 fromTM :: TM -> LC
 fromLC :: LC -> TM
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 We're taking some artistic license with the word "inverse" as a round trip may
 take us to a different program. The point is it'll behave identically to the
 original.
 
-Because lambdas are user-friendly, theoreticians use lambda calculus to define
-programming languages.
+Lambdas are easy for humans to understand. Practicians love them so much that
+popular languages eventually support them. Theoreticians define programming
+languages with lambda calculus.
 
-Lambda calculus is also easier for computers to understand. Compiler textbooks
-describe transforming source code into
+Lambdas are easy for computers to understand. Compiler textbooks describe
+transforming source code into
 https://www.cs.princeton.edu/~appel/papers/ssafun.pdf["SSA form", another name
-for lambda calculus], so it can be readily analyzed and manipulated. So it
-seems one way or another, a source language will be defined in terms of lambda
-calculus.
+for lambda calculus], so it can be readily analyzed and manipulated.
 
-Accordingly, we revise our definition of a programming language to be a function
-taking a program to a closed lambda calculus term:
+Thus one way or another, a source language is defined in terms of lambda
+calculus. Accordingly, we revise our definition of a programming language to be
+a function taking a program to a closed lambda calculus term:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 interpret :: Language -> LC
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Naturally, composing with `fromLC` takes us back to Turing machines,
 but let's not go there. 'Tis a silly place.
@@ -63,24 +63,43 @@ but let's not go there. 'Tis a silly place.
 
 Lambda calculus terms can be represented by trees of the form:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 type VarId = String
 data LC = Var VarId | Lam VarId LC | LC :@ LC
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 A program is represented by a 'closed' lambda term, which means every `Var`
 node must be a descendant of a `Lam` node with a matching `VarId`.
 
 As for its semantics: we define a closed lambda term to be notation for a
-combinatory logic term. Below we describe how to rewrite a closed lambda term
-as a combinatory logic term.
+combinatory logic term, which we define to be a full binary tree whose leaves
+can be one of 6 different values:
 
-We define a combinatory logic term as a full binary tree
-whose leaves can be one of 6 different values:
+++++++++++
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
+<p><a onclick='hideshow("ugh");'>&#9654; Toggle extensions and imports</a></p>
+<div id='ugh' style='display:none'>
+++++++++++
 
 \begin{code}
 {-# LANGUAGE FlexibleContexts #-}
 import Control.Monad.State
+\end{code}
+
+++++++++++
+</div>
+++++++++++
+
+\begin{code}
 data Com = S | K | I | B | C | T
 \end{code}
 
@@ -93,10 +112,9 @@ data CL = Lf Com | CL :# CL | Ext String
 The `Ext String` field comes into play later, when we want to mix external
 functions with our combinators.
 
-The `fromLC` function below rewrites the former as the latter.
-Using an algorithm known as 'bracket abstraction', it converts a closed LC
-term to a CL term (and crashes on unclosed terms). See Smullyan's "To Mock a
-Mockingbird" for a particularly enjoyable explanation.
+The `fromLC` function below rewrites a closed LC term as a CL term, using an
+algorithm known as 'bracket abstraction' (and crashes on unclosed terms). See
+Smullyan's "To Mock a Mockingbird" for a particularly enjoyable explanation.
 
 \begin{code}
 type VarId = String
@@ -267,24 +285,25 @@ runCom t s = decode (run (t :# encode s))
 If we believe it is easy to rewrite `runCom` and `reduce` in the target
 language, then we can whip up the following function in no time:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 gen :: CL -> TargetLanguage
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Thus we have a compiler which works on lambda calculus:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 ultimateCompiler :: LC -> TargetLanguage
 ultimateCompiler = gen . fromLC
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 By our definitions, this implies we can compile any given language by
-composing the above function with its definitional interpreter:
+composing the above function with the definitional interpreter
+of the language:
 
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 compile :: Language -> TargetLanguage
 compile = ultimateCompiler . interpret
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 
 Mission accomplished?
 
@@ -293,8 +312,10 @@ Mission accomplished?
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
 landmark paper of 1972] cites examples of languages defined in variants of
 lambda calculus, and shows how all of them can be defined in a lambda calculus
-which only has first-order functions and whose order of evaluation is
-irrelevant.
+whose order of evaluation is irrelevant (via transformation to 'continuation-passing
+style'), and which only supports first-order functions (via 'defunctionalization').
+http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[Hutton and Bahr describe how to
+fuse CPS transformation and defunctionalization].
 
 A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
 Sussman wrote the famous lambda papers]: a series of cookbooks describing how

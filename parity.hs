@@ -1,8 +1,8 @@
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Accepted by GHC, with a small wrapper.
 --
 -- Integer constants.
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 data Bool = True | False;
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
@@ -77,7 +77,6 @@ opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 anyOne = fmap itemize (spc (sat (\c -> True)));
-pre = char '@' *> anyOne;
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
@@ -97,7 +96,7 @@ parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pu
 rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
-atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap R pre <|> fmap V var <|> lit;
+atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V var <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 expr = liftA2 (foldl (&)) (aexp expr) (many (liftA2 (\f b a -> A (A (V f) a) b) op (aexp expr)));
 

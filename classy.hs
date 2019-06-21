@@ -1,6 +1,6 @@
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Type classes.
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 infixr 9 .;
 infixr 5 : , ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -40,9 +40,16 @@ elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 concat = foldr (++) [];
 itemize c = c:[];
+map = flip (foldr . ((:) .)) [];
+concatMap = (concat .) . map;
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
-
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+lookupWith eq s = foldr (\h t -> fpair h (\k v -> ife (eq s k) (Just v) t)) Nothing;
+lstLookup = lookupWith lstEq;
+
+data Type = TC String | TV String | TAp Type Type;
+data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
+
 pure x = \inp -> Just (x, inp);
 sat' f = \h t -> ife (f h) (pure h t) Nothing;
 sat f inp = flst inp Nothing (sat' f);
@@ -88,12 +95,6 @@ opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
-data Type = TC String | TV String | TAp Type Type;
-data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
-
-map = flip (foldr . ((:) .)) [];
-concatMap = (concat .) . map;
-
 anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
@@ -130,9 +131,6 @@ letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) 
 atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
-
-lookupWith eq s = foldr (\h t -> fpair h (\k v -> ife (eq s k) (Just v) t)) Nothing;
-lstLookup = lookupWith lstEq;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of

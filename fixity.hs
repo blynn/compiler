@@ -1,10 +1,10 @@
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 -- Supports infix declarations.
 --
 -- All infix declarations must precede the definitions.
 --
 -- Supports let expressions.
-------------------------------------------------------------------------------
+------------------------------------------------------------------------
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
 ife a b c = case a of { True -> b ; False -> c };
