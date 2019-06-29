@@ -11,9 +11,9 @@ We chose poorly.
 In the classes I took, any exercises asking for a Turing machine invariably
 involved pitifully trivial problems, such as copying some number of 1s.
 
-Later, they'd introduce Universal Turing Machines, but without actually showing
-us one because it was too much trouble. They'd use these universal machines to
-explain why it's impossible to decide if a given Turing machine ever halts.
+Later, they introduced Universal Turing Machines, but without actually showing
+us one because it was too much trouble. With universal machines, they explained
+why it's impossible to decide if a given Turing machine ever halts.
 
 So from day one, they warned us Turing machines are clumsy beasts where easy
 tasks are hard to accomplish, and generally hang unpredictably.
@@ -23,12 +23,11 @@ tasks are hard to accomplish, and generally hang unpredictably.
 Everyone knows lambda abstractions nowadays. C++ got them. JavaScript got
 them. Even everything-is-an-object Java got them.
 
-Less well-known is that lambdas alone are equivalent in power to Turing
-machines. That is, we can toss out states, tapes, read/write heads, and do
-nothing but repeatedly substitute a variable with an expression, yet still
+Less well-known is that link:../lambda/[lambdas alone are equal in
+power to Turing machines]. We can toss out states, tapes, read/write heads, and
+do nothing but repeatedly substitute a variable with an expression, yet still
 compute just as effectively. If `LC` denotes the set of all closed lambda
-terms (see below for the meaning of "closed"), then the following two mutually
-inverse functions are known to exist:
+terms, then the following two mutually inverse functions are known to exist:
 
 ------------------------------------------------------------------------
 fromTM :: TM -> LC
@@ -41,7 +40,9 @@ original.
 
 Lambdas are easy for humans to understand. Practicians love them so much that
 popular languages eventually support them. Theoreticians define programming
-languages with lambda calculus.
+languages with lambda calculus. In fact, link:socrates.html[our implementation
+of Turing Machines] is written in syntactically sweetened lambda calculus so is
+close to a candidate for `fromTM`.
 
 Lambdas are easy for computers to understand. Compiler textbooks describe
 transforming source code into
@@ -112,9 +113,9 @@ data CL = Lf Com | CL :# CL | Ext String
 The `Ext String` field comes into play later, when we want to mix external
 functions with our combinators.
 
-The `fromLC` function below rewrites a closed LC term as a CL term, using an
-algorithm known as 'bracket abstraction' (and crashes on unclosed terms). See
-Smullyan's "To Mock a Mockingbird" for a particularly enjoyable explanation.
+The `rewrite` function below rewrites a closed LC term as a CL term, using an
+algorithm known as 'bracket abstraction'. See Smullyan's "To Mock a
+Mockingbird" for a particularly enjoyable explanation.
 
 \begin{code}
 type VarId = String
@@ -130,10 +131,10 @@ deLam t = case t of
   x :@ y  -> deLam x :@ deLam y
   _       -> t
 
-fromLC :: LC -> CL
-fromLC t = case deLam t of
+rewrite :: LC -> CL
+rewrite t = case deLam t of
   Other c -> Lf c
-  x :@ y  -> fromLC x :# fromLC y
+  x :@ y  -> rewrite x :# rewrite y
 \end{code}
 
 We tweaked our earlier definition of `LC` so they are combinator-aware; during
@@ -293,7 +294,7 @@ Thus we have a compiler which works on lambda calculus:
 
 ------------------------------------------------------------------------
 ultimateCompiler :: LC -> TargetLanguage
-ultimateCompiler = gen . fromLC
+ultimateCompiler = gen . rewrite
 ------------------------------------------------------------------------
 
 By our definitions, this implies we can compile any given language by
@@ -309,13 +310,17 @@ Mission accomplished?
 
 == Well-defined ==
 
+Can all programming languages be defined with our version of lambda calculus?
+After all, we chose a particular order of evaluation.
+
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
 landmark paper of 1972] cites examples of languages defined in variants of
-lambda calculus, and shows how all of them can be defined in a lambda calculus
-whose order of evaluation is irrelevant (via transformation to 'continuation-passing
-style'), and which only supports first-order functions (via 'defunctionalization').
+lambda calculus. He then reveals this variety is unnecessary. Thanks to
+'continuation-passing style' (CPS) and 'defunctionalization', we can get by
+with a lambda calculus that only supports first-order functions, and which
+evaluates in any given order. (More recently,
 http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[Hutton and Bahr describe how to
-fuse CPS transformation and defunctionalization].
+fuse CPS transformation and defunctionalization].)
 
 A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
 Sussman wrote the famous lambda papers]: a series of cookbooks describing how
@@ -326,8 +331,8 @@ correct compiler from its specification], showing the power of precise
 definitions.
 
 http://conal.net/papers/compiling-to-categories/compiling-to-categories.pdf[Elliott's
-work on compiling to categories] gives fascinating uses for bracket
-abstraction.
+work on compiling to categories] uses bracket abstraction to yield a compelling
+alternative to domain-specific languages.
 
 http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Chlipala wrote
 'A Certified Type-Preserving Compiler from Lambda Calculus to Assembly

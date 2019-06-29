@@ -6,12 +6,12 @@ variables, and to deal with `@` addresses.
 
 Ideally, to avoid
 "https://www.ece.cmu.edu/~ganger/712.fall02/papers/p761-thompson.pdf[trusting
-trust]" issues, all the above should have been done manually. Nonetheless,
-each of the our terms seem short enough that a sufficiently motivated human
-could verify them.
+trust]" issues, all this should have been done manually. Nonetheless, each of
+the our terms seem short enough that a sufficiently motivated human could
+verify them.
 
-Now that the truth is revealed, instead of pretending to derive terms by hand,
-we may as well show the program-generated source of our next compiler up front:
+Now that the truth is out, instead of pretending to derive terms by hand, we
+show the program-generated source of our next compiler up front:
 
 ------------------------------------------------------------------------
 \a.\b.\c.\d.ac(bcd);
@@ -65,21 +65,12 @@ Y\a.\b.\c.cK\d.\e.@"(@Eb(@H(d(KI))))(:#;(abe));
 (Again, for clarity we have placed a newline after each semicolon.)
 
 Hopefully, it's plausible that the above can be verified by hand to
-be equivalent to the following compiler.
-
-We have upgraded our previous parser to support comments, whitespace, and
-variables consisting of lowercase letters. We also added code to look up the
-index of a top-level definition.
+be equivalent to the following compiler. We have upgraded our previous parser
+to support comments, whitespace, and variables consisting of lowercase letters.
+We also added code to look up the index of a top-level definition.
 
 Prefixing a character with `@` gives us direct access to the primitive
 combinators. (Not to be confused with the `@` operator of ION assembly.)
-
-Our language is now friendly enough that we are willing to work in it
-exclusively. No more cheating.
-
-In other words, we have reached a singularity because this compiler is
-self-hosting.  It can take its 100% organic artisanal human-generated source as
-input and produce the corresponding ION assembly.
 
 ------------------------------------------------------------------------
 or f g x y = f x (g x y);
@@ -137,3 +128,10 @@ babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
 dump = @Y \r tab ds -> ds @K \h t -> append (show tab (babs (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
 ------------------------------------------------------------------------
+
+Our language is now friendly enough that we are willing to work in it
+with our bare hands. No more cheating.
+
+In other words, we have reached a singularity because this compiler is
+self-hosting: it can read its 100% organic artisanal handmade source
+and produce the corresponding ION assembly.

@@ -16,9 +16,10 @@ about compilers.
 
 Since then, I have sporadically read about various compiler topics. Did my
 younger self did deserve to fail? Maybe. There were certainly gaps in that
-guy's knowledge (which are only marginally smaller now). On the other hand,
+guy's knowledge (which are only a shade narrower now). On the other hand,
 there are equally alarming gaps in my textbooks, so maybe I shouldn't have
 failed.
 
-Or maybe I'm still bitter about failing that exam. In any case, here are notes
-on writing compilers while thumbing your nose at the establishment.
+Or maybe I'm still bitter about failing that exam. In any case, here is a
+dilettante's guide to writing compilers while thumbing your nose at the
+establishment.

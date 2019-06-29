@@ -1,4 +1,4 @@
-= Parsing =
+= ION Assembly =
 
 A computer program is usually a string intended for human comprehension, while
 language specifications usually devote most of their attention to an abstract
@@ -12,19 +12,20 @@ a valid program.
 parse :: [Char] -> Either Error Language
 ------------------------------------------------------------------------
 
-Sometimes parsing is broken into more steps. A lexer tries to turn a string
-into a list of tokens, which the parser tries to turn into program.
+Parsing is often viewed as part of the compiler's job:
 
 ------------------------------------------------------------------------
-lex :: [Char] -> Either Error [Token]
-parse :: [Token] -> Either Error Language
+parseCompile :: [Char] -> Either Error TargetLanguage
+parseCompile s = case parse s of
+  Left  err  -> Left  err
+  Right prog -> Right (compile prog)
 ------------------------------------------------------------------------
 
-Parsing is often viewed as part of the compiler's job, so a better
-definition of `compile` may be:
+We simplify by replacing return errors with undefined behaviour when
+given an invalid program, so we can get away with:
 
 ------------------------------------------------------------------------
-compile :: [Char] -> Either Error TargetLanguage
+simpleCompile :: [Char] -> TargetLanguage
 ------------------------------------------------------------------------
 
 Our `TargetLanguage` is a sort of assembly language for the ION machine, where
@@ -36,18 +37,14 @@ type TargetLanguage = [Char]
 assemble :: TargetLanguage -> Either Error [CL]
 ------------------------------------------------------------------------
 
-We also need some way to initialize an ION machine with a `[CL]`:
+We also need some way to load an ION machine with a `[CL]`:
 
 ------------------------------------------------------------------------
-initialize :: [CL] -> VM
+load :: [CL] -> VM
 ------------------------------------------------------------------------
 
-We build `assemble` and `load` below. Afterwards, we are finally ready to fill
-in the missing piece:
-
-------------------------------------------------------------------------
-compile :: [Char] -> Either Error [Char]
-------------------------------------------------------------------------
+We build `assemble` and `load` below, laying the groundwork for compilers
+of the same type as `simpleCompile`.
 
 ++++++++++
 <script>
@@ -71,14 +68,15 @@ import Data.Char (ord)
 import System.Environment
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import ION
+import qualified ION
+import ION (VM)
 \end{code}
 
 ++++++++++
 </div>
 ++++++++++
 
-== ION assembly ==
+== Grammar ==
 
 We define a language that is easy to generate and parse, and that humans can
 tolerate in small doses:
@@ -97,13 +95,13 @@ A program is a sequence of terms terminated by semicolons.
 The entry point is the last term of the sequence.
 
 The motivation for a sequence instead of insisting on a single term is that
-instead of writing programs of the form:
+rather than:
 
 ------------------------------------------------------------------------
 norm = (\sq x y -> sq x + sq y) (\x -> x * x)
 ------------------------------------------------------------------------
 
-we'd like to write:
+we'd like to write the sequence of definitions:
 
 ------------------------------------------------------------------------
 square x = x * x
@@ -150,8 +148,8 @@ An 32-bit word constant is represented by a number in parentheses. For example,
 42 is represented by `(42)`.
 
 An alternative representation is to use the unary prefix operator `(#)`, in
-which case the constant is the ASCII code of the following character.  Again,
-this allows us to generate programs without dealing about decimal conversion.
+which case the constant is the ASCII code of the following character. Again,
+this is so we can generate code without dealing with decimal conversion.
 
 For example, instead of `(42)` we may write `#*`.
 
@@ -160,7 +158,7 @@ For example, instead of `(42)` we may write `#*`.
 We use Megaparsec to build a recursive descent parser for ION assembly.
 
 \begin{code}
-digit = oneOf ['0'..'9']
+digit = digitChar
 num = read <$> some digit
 nat = ord <$> (char '#' *> anySingle)
   <|> char '(' *> num <* char ')'
@@ -191,13 +189,13 @@ fromExpr defs t vm = case t of
   x :@ y -> let
     (a, vm1) = fromExpr defs x vm
     (b, vm2) = fromExpr defs y vm1
-    in app a b vm2
-  Nat n -> app 35 n vm
+    in ION.app a b vm2
+  Nat n -> ION.app 35 n vm
   Idx n | Just addr <- lookup n defs -> (addr, vm)
 
-initialize :: [CL] -> VM
-initialize ts = push root vm1 where
-  ((_, root):_, vm1) = foldl addDef ([], new) ts
+load :: [CL] -> VM
+load ts = ION.push root vm1 where
+  ((_, root):_, vm1) = foldl addDef ([], ION.new) ts
   addDef (defs, m) t = let (addr, m') = fromExpr defs t m
     in ((length defs, addr):defs, m')
 \end{code}
@@ -222,7 +220,7 @@ main = getArgs >>= \as -> case as of
     case assemble s of
       Left err -> putStrLn $ "Parse error: " <> show err
       Right cls -> do
-        void $ evalIO $ initialize $ cls ++ [wrapIO $ Idx $ length cls - 1]
+        void $ ION.evalIO $ load $ cls ++ [wrapIO $ Idx $ length cls - 1]
   _   -> putStrLn "One program only."
 \end{code}
 

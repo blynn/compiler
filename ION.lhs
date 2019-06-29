@@ -9,9 +9,9 @@ could start from assembly language if we had to. Also, C compilers are
 available on countless platforms.
 
 We take a page from Knuth's 'The Art of Computer Programming' and introduce a
-mythical computer named the International Obfuscated Nonce (ION) machine.
-It's so named bacause it's based on a one-time random design used in
-link:ioccc.html[an entry to the 26th International Obfuscated C Code Contest].
+mythical computer named the International Obfuscated Nonce (ION) machine, so
+named because it's based on a one-time random design used in link:ioccc.html[an
+entry to the 26th International Obfuscated C Code Contest].
 
 The basic unit of data is a 32-bit word. Memory is an array of 32-bit words,
 indexed by 32-bit words. Among the registers are the heap pointer HP and the
@@ -21,8 +21,8 @@ undefined.
 
 Our compiler generates C code that simulates this machine, though we first
 describe it at a higher level. By abuse of notation, `Int` means the type of
-32-bit words. (Actually using `Word32` requires more imports and conversions
-here and there.)
+32-bit words. (Using `Word32` requires more imports and conversions here and
+there.)
 
 ++++++++++
 <script>
@@ -56,9 +56,9 @@ import System.IO
 data VM = VM { sp :: Int, hp :: Int, mem :: Map Int Int }
 \end{code}
 
-Instead of Scott encodings, we introduce a base type to hold 32-bit words, so
-we can take advantage of native 32-bit words. We also introduce combinators
-that correspond to the native artihmetic instructions.
+We introduce a base type for 32-bit words, so we can take advantage of native
+32-bit words. We also introduce combinators that correspond to the native
+artihmetic instructions.
 
 Let `n` be a 32-bit word. If `n` lies in [0..127], `n` represents a combinator,
 otherwise `n` represents the application of the expression represented by
@@ -110,7 +110,7 @@ evaluation'.
 We might think of this as different to normal order, because we're reducing
 both X and Y even if they are not the two left-most subterms.
 
-== Arithmetic ==
+== The numbers game ==
 
 For primitve functions, we use a trick described in depth by Naylor and
 Runciman, "The Reduceron reconfigured and re-evaluated": we reduce `#nf` to
@@ -125,6 +125,11 @@ they do in C, while the last 2 are equivalent to C's `(==)` and `(<=)`.
 
 We add a couple of useful macros: the `R` combinator (equivalent to `CC`) and
 the `(:)` combinator (equivalent to `B(BK)(BCT)`), and we're done:
+
+Below, the I combinator is not lazy: for instance, every time we encounter the
+subterm `I(I(Ix))` we must reduce three I combinators. link:ioccc.html[The
+competition version of this code] does lazily evaluate `I` combinators, but as
+a result, we must tread carefully near the top of the stack.
 
 \begin{code}
 arg' :: Int -> VM -> Int
@@ -174,6 +179,7 @@ builtin c vm = case chr c of
   '-' -> lvm 2 (com '#') (wor $ num 1 - num 2)
   '/' -> lvm 2 (com '#') (wor $ num 1 `div` num 2)
   '%' -> lvm 2 (com '#') (wor $ num 1 `mod` num 2)
+  '?' -> error "?"
   where
   num n = numberArg n vm
   lvm n f g = lazy n f g vm
@@ -181,8 +187,8 @@ builtin c vm = case chr c of
 
 == I/O ==
 
-We expect a program `P` to be a function from a string to a string, where
-strings are Scott-encoded lists of characters.
+For us, a program `P` is a function from a string to a string, where strings
+are Scott-encoded lists of characters.
 
 To run `P` on standard input and output, we initialize the VM with
 `P(0?)(.)(T1)` then repeatedly reduce until asked to reduce the `(.)`

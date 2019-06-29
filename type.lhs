@@ -1,35 +1,30 @@
-= Types =
+= Types and Typeclasses =
 
-Types enable us to reason about our programs. The halting problem is not a
-problem, because types can prove code must terminate. But even though it is
-important to know a program halts, it's even more important to know it gives
-the right answer. Types can help here too. For example, types can show that a
-given function correctly sorts a list.
+Types enable humans and computers to reason about our programs. The halting
+problem is not a problem, because types can prove code must terminate. They can
+do even more and prove a program terminates with the right answer: for example,
+we can prove a given function correctly sorts a list.
 
 Types can automate programming, namely,
 https://www.youtube.com/watch?reload=9&v=mOtKD7ml0NU[a human supplies the type
-of a function and the computer fills it in].
+of a desired function and the computer programs itself].
 
 Types can be lightweight. Indeed, they can be invisible. A compiler can
 use 'type inference' to type-check a program completely free of any type
-annotations.
-
-Types help human comprehension. Type annotations are a form of documentation, a
-form that is especially reliable because the compiler forces it to stay in sync
-with the code.
+annotations. However, it's good to throw a few type annotations in the source,
+as they are a form of documentation that is especially reliable because the
+compiler ensures they stay in sync with the code.
 
 Therefore, we ought to add types to our language. We mimic Haskell, with at
 least one deliberate difference:
 https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tldi10-vytiniotis.pdf[Let
-should not be generalized], so we only generalize expressions defined at the
-top level.
+should not be generalized]. We only generalize top-level definitions.
 
 == Typically ==
 
-We shamelessly lift code from
-https://web.cecs.pdx.edu/~mpj/thih/thih.pdf['Typing Haskell in Haskell'] by
-Mark P. Jones. Our code is simpler because we lack support for mutual
-recursion and pattern matching.
+We shamelessly lift code from https://web.cecs.pdx.edu/~mpj/thih/thih.pdf[Mark
+P. Jones, 'Typing Haskell in Haskell']. Our version is simpler because we lack
+support for mutual recursion and pattern matching.
 
 Since we're using the Scott encoding, from a data type declaration:
 
@@ -67,8 +62,8 @@ during compilation:
 I x (\a -> f a) (\ -> g) (\b c -> h b c)
 ------------------------------------------------------------------------
 
-Our type checker is missing several features, such as kind checking and duplicate
-definitions,
+Our type checker is missing several features, such as kind checking and
+rejecting duplicate definitions.
 
 ++++++++++
 <script>
@@ -95,18 +90,19 @@ include::typically.hs[]
 
 == Classy ==
 
-In the worst case, types are a burden, and programming feels like wrestling
-with the compiler; we twist our code this way and that, and add eye-watering
-type annotations until it finally compiles.
+In the worst case, types are a burden, and force us to wrestle with the
+compiler. We twist our code this way and that, and add eye-watering type
+annotations until it finally compiles.
 
-On the other hand, types also enable us to write less. Haskell's typeclasses
-give us principled overloading. By bestowing Prolog-like powers to the type
-checker, the compiler can predictably generate tedious code so humans can
-ignore irrelevant details.
+On the other hand, well-designed types does more with less.
+Haskell's typeclasses give us principled overloading.
+By bestowing Prolog-like powers to the type checker, the compiler can
+predictably generate tedious code so humans can ignore irrelevant details.
 
-Again, Jones' paper provides some background. We generate code as well as check
-types, so we also need techniques described in John Peterson and Mark Jones,
-'Implementing Type Classes'.
+Again, Jones' paper provides some background. Since we're doing more than just
+checking types and also generating code, we need techniques described in
+http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.3952&rep=rep1&type=pdf[John
+Peterson and Mark Jones, 'Implementing Type Classes'].
 
 We choose the dictionary approach. A dictionary is a record of functions that
 is implicitly passed around. For example, if we infer the function `foo` has
@@ -137,8 +133,8 @@ we have a dedicated data type to hold constraints, though later on, we
 do in fact turn them into strings when generating variable names.
 
 We call such a node a `Proof` because it's a cute short word, and we think of a
-dictionary as proof that a certain constraint is satisfied. (Peterson and Jones
-instead write "Placeholder".)
+dictionary as proof that a certain constraint is satisfied. Peterson and Jones
+instead write "Placeholder".
 
 Typeclass methods are included in the above. For example, while processing
 the expression:
@@ -170,7 +166,7 @@ We walk through how our compiler finds a proof for:
 Proof "Eq [[Int]]"
 ------------------------------------------------------------------------
 
-Our compiler finds an instance match: "Eq a => Eq [a]", so it rewrites the
+Our compiler finds an instance match: `Eq a => Eq [a]`, so it rewrites the
 above as:
 
 ------------------------------------------------------------------------
@@ -178,30 +174,35 @@ above as:
 ------------------------------------------------------------------------
 
 The "Eq [a]" string is taken verbatim from an instance declaration, while the
-"Eq [Int]" is the result of a type substitution on "Eq a" found during
-unification.
+"Eq [Int]" is the result of a type substitution found during unification
+on "Eq a".
 
 Our compiler recursively seeks an instance match for the new `Proof`. Again it
-finds "Eq a => Eq [a]", so the next rewrite results in:
+finds `Eq a => Eq [a]`, so the next rewrite yields:
 
 ------------------------------------------------------------------------
 (V "Eq [a]") ((V "Eq [a]") (Proof "Eq Int"))
 ------------------------------------------------------------------------
 
-and again it recursively looks for an instance match. It finds the "Eq Int"
+and again it recursively looks for an instance match. It finds the `Eq Int`
 instance, and we have:
 
 ------------------------------------------------------------------------
 (V "Eq [a]") ((V "Eq [a]") (V "Eq Int"))
 ------------------------------------------------------------------------
 
-Our compiler has previously processed all class and instance declarations,
-and has prepared a table that maps "Eq Int" to a record of functions for integer
-equality testing, and "Eq [a]" to a function that takes a "Eq a" and returns
-a record of functions for equality testing on lists of type `a`.
+This works, because our compiler has previously processed all class and
+instance declarations, and has prepared the symbol table so that maps "Eq Int"
+to a record of functions for integer equality testing, and "Eq [a]" to a
+function that takes a "Eq a" and returns a record of functions for equality
+testing on lists of type `a`.
 
-We lack support for class contexts. Our code allows instances to stomp over one
-another. There are many more deficiencies.
+Among the many deficiencies in our compiler: we lack support for class
+contexts; our code allows instances to stomp over one another; our algorithm
+for finding proofs may not terminate.
+
+Without garbage collection, this compiler requires unreasonable amounts of
+memory.
 
 ++++++++++
 <p><a onclick='hideshow("classy");'>&#9654; Toggle Source</a></p>

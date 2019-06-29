@@ -9,8 +9,7 @@ bear to write a few incremental improvements. But once we persevere, we
 compile the marginally better compiler to gain a level.
 
 Then we iterate. We add more features to our new compiler, which is easier
-thanks to our most recent changes, then compile again, and so on. The game
-is open-ended; we keep improving our compiler until we get bored.
+thanks to our most recent changes, then compile again, and so on.
 
 == Parenthetically ==
 
@@ -61,8 +60,8 @@ term acc s = s undefined (\h t -> switch term acc h t);
 parse s = term "" s (\p t -> ifNull p ";" (p ++ (';':parse t)));
 ------------------------------------------------------------------------
 
-Scott-encoding pairs implies `uncurry` is the T combinator, while `(.)` is a
-infix operator with the same meaning as the B combinator.
+Scott-encoding pairs implies `uncurry` is the T combinator, and `(.)` is
+an infix operator with the same meaning as the B combinator.
 Thus the above becomes:
 
 ------------------------------------------------------------------------
@@ -287,7 +286,7 @@ BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$)
 BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT(T=));@/(BC(S(B@"(T(#;=)))(T(#)=))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));Y\a.\b.\c.c(\d.KI)(\d.d(b=))(\d.\e.@"(abd)(abe))?;Y\a.\b.\c.@7bc(c?(K(@,#I))(\d.\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));
 ------------------------------------------------------------------------
 
-== Term rewriting ==
+== Term rewriting; bootstrapping ==
 
 https://tromp.github.io/cl/LC.pdf[John Tromp has a useful list of rewrite
 rules] to further reduce the size of the output combinatory logic term after
@@ -299,3 +298,6 @@ Implementation of Functional Programming Languages' by Simon Peyton Jones]
 gives a comprehensive overview of this strategy.
 
 http://www.cantab.net/users/antoni.diller/brackets/intro.html[Antoni Diller has interactive demos and more references].
+
+https://www.joachim-breitner.de/blog/748-Thoughts_on_bootstrapping_GHC[Joachim
+Breitner frets about the difficulty of bootstrapping GHC].

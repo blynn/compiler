@@ -381,6 +381,7 @@ char *singularity =
 ;
 
 void runTests() {
+  testCase("`KK;", "ignoreme", "");
   testCase("I;", "Hello, World!\n", "Hello, World!\n");
   testCase("``C`T?`KI;", "tail", "ail");
   testCase("`K``:#O``:#KK;", "", "OK");
@@ -425,7 +426,7 @@ u fp_get() {
 
 void pc(u c) { putchar(c); fflush(stdout); }
 
-void go(char *prog) {
+void lvlup(char *prog) {
   parse(buf);
   str = prog;
   buf_reset();
@@ -433,7 +434,7 @@ void go(char *prog) {
   *bufptr = 0;
 }
 
-void go_file(char *filename) {
+void lvlup_file(char *filename) {
   printf("loading %s...\n", filename);
   parse(buf);
   fp_reset(filename);
@@ -450,20 +451,20 @@ int main(int argc, char **argv) {
   if (argc > 1) return runTests(), 0;
 
   strcpy(buf, "I;");
-  go(parenthetically);
-  go(exponentially);
-  go(practically);
-  go(singularity);
-  go_file("singularity");
-  go_file("semantically");
-  go_file("stringy");
-  go_file("binary");
-  go_file("algebraically");
-  go_file("parity.hs");
-  go_file("fixity.hs");
-  go_file("typically.hs");
-  go_file("classy.hs");
-  go_file("classy.hs");
+  lvlup(parenthetically);
+  lvlup(exponentially);
+  lvlup(practically);
+  lvlup(singularity);
+  lvlup_file("singularity");
+  lvlup_file("semantically");
+  lvlup_file("stringy");
+  lvlup_file("binary");
+  lvlup_file("algebraically");
+  lvlup_file("parity.hs");
+  lvlup_file("fixity.hs");
+  lvlup_file("typically.hs");
+  lvlup_file("classy.hs");
+  lvlup_file("classy.hs");
 
   parse(buf);
   // fp_reset("classy.hs"); run(fp_get, pc);
@@ -481,7 +482,7 @@ int main(int argc, char **argv) {
 "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
 "foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
 "elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
-"go s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
+"lvlup s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
 ;
   run(str_get, pc);
   return 0;

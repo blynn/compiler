@@ -17,6 +17,8 @@ pairs such as:
 (True, (False, (False, ...  (True, const) ... ))
 ------------------------------------------------------------------------
 
+where the booleans have their usual Church/Scott encodings.
+
 If we could disable type-checking in Haskell, the interpreter is simply:
 
 ------------------------------------------------------------------------
@@ -39,8 +41,8 @@ encode m n = case m of
   K -> (False, (True , n))
 ------------------------------------------------------------------------
 
-However, some of our type-challenged compilers will happily run this crazy code.
-Try the following with link:grind.html[our "Fixity" compiler]:
+Some of our type-challenged compilers will happily run this crazy code.
+link:grind.html[Our "Fixity" compiler] accepts the following:
 
 ------------------------------------------------------------------------
 data Bool = True | False;
@@ -59,15 +61,14 @@ eval c = uncurry (bool (uncurry (c . bool ap const)) (eval (eval . (c .))));
 go s = eval id (encode (App (App S K) K) s);
 ------------------------------------------------------------------------
 
-Since SKK is the identity, the above just passes the input through with no
-changes.
+Since SKK is the identity, the above program just returns the input.
 
 Kiselyov's bracket abstraction algorithm leads us to wonder: why limit
 ourselves to S and K? We can, but does that mean we should? After all, we could
 prohibit lambda terms with a De Bruijn index greater than 2 and retain the
 same computing power, but nobody bothers.
 
-== Hole-in-one ==
+== Hole in one ==
 
 With no restrictions, adding combinators to the definition of CL to obtain a
 smaller self-interpreter is too easy. In the extreme, we could take a
@@ -78,7 +79,7 @@ to a CL term and interprets it.
 The set of all combinators is X, S, and K. Representing X with 1 bit trivially
 results in a 1-bit self-interpreter.
 
-== Rule-of-three ==
+== Rule of three ==
 
 Perhaps it's reasonable to say a combinator is eligible if it is equivalent to
 a closed lambda term with at most 3 lambda abstractions and at most 3
@@ -109,7 +110,7 @@ C 00001
 K 00000
 ------------------------------------------------------------------------
 
-Then the following is a self-interpreter:
+Then the following is a binary self-interpreter:
 
 ------------------------------------------------------------------------
 f c = T(V(T(V(T(T.V(V(T(c.V K C))(c S))(c.V T V)))(c B)))(f(f.(c.))))
@@ -128,10 +129,9 @@ Y = ``B``TT``CB``STT
 ------------------------------------------------------------------------
 
 which means our self-interpreter takes 232 bits, beating Tromp's Theorem
-4 result of 263 bits.
+4 par of 263 bits.
 
-The following demonstrates this self-interpreter in our "Fixity" compiler,
-interpreting `snd ("fst", "snd") = TK(SKK) ("fst", "snd")`.
+The following demonstrates this self-interpreter in our "Fixity" compiler:
 
 ------------------------------------------------------------------------
 data Bool = True | False;
@@ -155,8 +155,11 @@ encode m n = case m of
 t = uncurry;
 v = bool;
 eval c = t(v(t(v(t(t . v(v(t(c . v const flip))(c ap))(c . v t v)))(c(.)))) (eval(eval . (c .))));
-demo _ = eval id (encode (App T (App K (App (App S K) K))) ("fst", "snd"));
+demo _ = eval id (encode (App T (App K (App (App S K) K))) ("one", "two"));
 ------------------------------------------------------------------------
+
+The term `T(K(SKK))` returns the second element of a Scott-encoded pair, so
+the above computes `snd ("one", "two")`.
 
 Is it sporting to consider the Y combinator primitive? If so, we could likely
 shrink the interpreter further.

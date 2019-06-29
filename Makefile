@@ -2,7 +2,7 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION parse quest sing sem grind ioccc golf type c
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES))
 
@@ -12,6 +12,6 @@ menu.html: menu; cobble menu menu
 
 site: $(SITE)
 
-sync: site ; rsync -R -r $(SITE) blynn@xenon.stanford.edu:www/compiler/
+sync: site ; rsync -R -r $(SITE) blynn@crypto.stanford.edu:www/compiler/
 
 clean: ; -rm $(SITE)

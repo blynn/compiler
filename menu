@@ -3,12 +3,13 @@ socrates,Socrates
 lambda,Lambda Calculus
 scott,Scott Encoding
 ION,ION Machine
-parse,Parsing
+asm,ION Assembly
 quest,Compiler Quest
 sing,The Singularity
 sem,Semantically
 grind,Level Grinding
-ioccc,IOCCC
 golf,Golf
+ioccc,IOCCC
 type,Types
 c,Let me C
+eq,Equality

@@ -1,32 +1,38 @@
-= Unfinished business =
+= C Below =
 
-A C implentation of the ION machine is listed below.
+A C implementation of the ION machine is listed below.
 
 It uses a stop-the-world copying garbage collector. It turns out we should
 reduce projection functions (such as `fst` and `snd`) as we collect garbage.
 See:
 
-  * John Hughes, 'The design and implementation of programming languages" 1983
-  * Philip Wadler, 'Fixing some space leaks with a garbage collector" 1987
+  * https://www.cs.ox.ac.uk/publications/publication3788-abstract.html[John
+Hughes 1983, 'The design and implementation of programming languages']
+  * https://homepages.inf.ed.ac.uk/wadler/papers/leak/leak.ps.gz[Philip Wadler 1987, 'Fixing some space leaks with a garbage collector']
 
-We achieve this by reducing `K I T` nodes during garbage collection.
+We partially achieve this by reducing `K I T` nodes during garbage collection.
 
-== TODO ==
+Eliminating applications of `I` during garbage collection makes up for not
+doing so during evaluation.
 
-...or more likely, wishful thinking:
+== Unfinished business ==
 
+The world of Compiler Quest is rich and open-ended. My in-game Journal brims
+with objectives:
+
+  * Fill in missing type checks.
+  * Improve parsing and error messages.
+  * Optimize the generated code, e.g. inlining.
+  * Optimize the compiler, e.g. replace association lists with something faster.
   * Experiment with bulk combinators.
   * Look into http://www.cs.cornell.edu/~ross/publications/eqsat/[equality
 saturation]: automating compiler optimization.
   * Investigate automatic theorem proving, so we can generate
 programs from their types.
   * How does http://nautilus.cs.miyazaki-u.ac.jp/~skata/MagicHaskeller.html[MagicHaskeller] work?!
-It'd be nice to generate programs from test cases.
+I'd love to generate programs from test cases.
   * Simulate an ION machine in WebAssembly, allowing for a client-side web
   Haskell REPL.
-  * Keep playing Compiler Quest: fill in missing pieces, add compiler
-optimizations, add language features, improve the interface, improve parsing,
-replace association lists with something faster, etc.
   * Improve on Haskell, e.g. see suggestions by
   https://medium.com/daml-driven/four-tweaks-to-improve-haskell-b1de9c87f816[Neil Mitchell]
   and
@@ -404,7 +410,7 @@ u fp_get() {
 
 void pc(u c) { putchar(c); fflush(stdout); }
 
-void go(char *prog) {
+void lvlup(char *prog) {
   parse(buf);
   str = prog;
   buf_reset();
@@ -412,7 +418,7 @@ void go(char *prog) {
   *bufptr = 0;
 }
 
-void go_file(char *filename) {
+void lvlup_file(char *filename) {
   printf("loading %s...\n", filename);
   parse(buf);
   fp_reset(filename);
@@ -427,20 +433,20 @@ int main(int argc, char **argv) {
   bufptr = buf + 2;
 
   strcpy(buf, "I;");
-  go(parenthetically);
-  go(exponentially);
-  go(practically);
-  go(singularity);
-  go_file("singularity");
-  go_file("semantically");
-  go_file("stringy");
-  go_file("binary");
-  go_file("algebraically");
-  go_file("parity.hs");
-  go_file("fixity.hs");
-  go_file("typically.hs");
-  go_file("classy.hs");
-  go_file("classy.hs");
+  lvlup(parenthetically);
+  lvlup(exponentially);
+  lvlup(practically);
+  lvlup(singularity);
+  lvlup_file("singularity");
+  lvlup_file("semantically");
+  lvlup_file("stringy");
+  lvlup_file("binary");
+  lvlup_file("algebraically");
+  lvlup_file("parity.hs");
+  lvlup_file("fixity.hs");
+  lvlup_file("typically.hs");
+  lvlup_file("classy.hs");
+  lvlup_file("classy.hs");
 
   parse(buf); fp_reset("classy.hs"); run(fp_get, pc);
   return 0;

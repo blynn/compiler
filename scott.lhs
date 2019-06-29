@@ -1,18 +1,19 @@
 = Scott encoding =
 
-Encoding data as functions may seem strange at first, but after playing around
+Encoding data as functions may seem strange at first, but after playing
 with combinators for a while,
 https://en.wikipedia.org/wiki/Mogensen%E2%80%93Scott_encoding[the Scott
 encoding] suggests itself.
 
-Take some algebraic data type:
+Take an algebraic data type:
 
 ------------------------------------------------------------------------
 data Adt a b c = Foo a | Bar | Baz b c
 ------------------------------------------------------------------------
 
 Suppose we come across a value `x` of type `Adt`. What can we do with it?
-The only possible nontrivial action is to examine it with a case statement:
+
+The only nontrivial course of action is to scrutinize it with a case statement:
 
 ------------------------------------------------------------------------
 case x of
@@ -25,7 +26,7 @@ What's the quickest way to turn this expression into a closed lambda calculus
 term?
 
 One idea that springs to mind is to delete the keywords `case` and `of` and
-replace each data constructor in the pattern with `\`. Then we get:
+replace each data constructor in a pattern with `\`. Then we get:
 
 ------------------------------------------------------------------------
 x (\a -> f a) (\ -> g) (\b c -> h b c)
@@ -72,8 +73,8 @@ data Bool = False | True
 
 Since `False` appears before `True`, a compiler seeing this would naturally
 index them with the numbers 0 and 1 respectively, which matches common
-practice, and Haskell, too, as can be seen via various automatically generated
-functions: `fromEnum toEnum minBound maxBound succ pred`.
+practice. It matches Haskell, too, as can be seen in the functions: `fromEnum
+toEnum minBound maxBound succ pred`.
 
 Unfortunately, for the time being, we must define:
 
@@ -81,17 +82,16 @@ Unfortunately, for the time being, we must define:
 data Bool = True | False
 ------------------------------------------------------------------------
 
-so that our compiler produces the Scott encodings:
+so our compiler produces the Scott encodings:
 
 ------------------------------------------------------------------------
 True  = \x _ -> x
 False = \_ y -> y
 ------------------------------------------------------------------------
 
-This is because long before computers were commonplace, mathematicians settled
-on this particular encoding of booleans. We bow down to this convention, so
-it matches what we find when we look up "Church encoding" or "Scott
-encoding" in the literature.
+This is because long before computers were commonplace, Alonzo Church devised
+this particular encoding of booleans, which subsequently became standard.
+We bow down to this convention to avoid confusion.
 
 Peano numbers are defined by the following algebraic data type:
 
@@ -107,7 +107,7 @@ Succ n = \_ g -> g n
 ------------------------------------------------------------------------
 
 Unlike Church numerals, the predecessor function (where we define the
-predecessor of zero to be zero) is easy to find:
+predecessor of zero to be zero) is easy to write down:
 
 ------------------------------------------------------------------------
 predecessor n = case n of

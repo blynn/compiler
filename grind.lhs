@@ -1,9 +1,9 @@
 = Level grinding =
 
-We incrementally improve our compiler over and over again. We're grinding
-levels in a computer RPG; there is even a skill tree of sorts. Do we want to
-add language features? Or optimize the generated code? Or improve error
-reporting? And so on.
+We incrementally improve our compiler over and over again, which is like
+grinding levels in a computer role-playing game. There is even a skill tree of
+sorts. Do we want to add language features? Or optimize the generated code? Or
+improve error reporting? And so on.
 
 == Stringy ==
 
@@ -99,7 +99,7 @@ We can now develop using GHC with its powerful type checking and friendly
 error messages. Naturally, we switch back to our compiler when it all works,
 though we must be mindful that in our language, all operators have the same
 precedence, every identifier in an expression we're parsing must have already
-been defined, and case expressions require al data constructors to appear
+been defined, and case expressions require all data constructors to appear
 exactly once and in order.
 
 We drop support for the `@` prefix. Our language has advanced enough that we no

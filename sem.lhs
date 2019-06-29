@@ -1,6 +1,6 @@
 = LC to CL, Semantically =
 
-Compiler authors abandoned bracket abstraction long ago in favour of generating
+Compilers abandoned bracket abstraction long ago in favour of generating
 custom combinators for each particular program, known as 'supercombinators'.
 
 We'll buck this trend, partly for notoriety, but also for novelty:
@@ -134,7 +134,7 @@ babs = @Y (\r t -> t
 nolam x = babs (debruijn @K x) @I @? @?;
 ------------------------------------------------------------------------
 
-That leaves the code generator and main function that ties everything
+That leaves the code generator and the main function tying everything
 together:
 
 ------------------------------------------------------------------------

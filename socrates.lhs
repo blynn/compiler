@@ -59,9 +59,8 @@ Our condition for a compiler correctness is that for any program `p` in
 (interpret p) input == (interpretTarget (compile p)) input
 ------------------------------------------------------------------------
 
-By convention, we use juxtaposition to denote function application, and it
-associates to the left, which plays nicely with our other convention, so
-we write:
+By convention, juxtaposition denotes function application and associates to the
+left, which plays nicely with our other convention, so we write:
 
 ------------------------------------------------------------------------
 interpret p input == interpretTarget (compile p) input
@@ -80,8 +79,8 @@ compute :: Input -> Output
 
 This works if we say the input includes the entire state of the computer: every
 register value, every single bit of memory, and so on. However, we've bitten
-off far more than we can chew; how can we hope to reason about a complicated
-gigantic function?
+off far more than we can chew; how can we reason about a complicated gigantic
+function?
 
 What if we shrink the domain and range?
 
@@ -105,11 +104,11 @@ circuit, which performs the same task on a certain number of bits at a time.
 
 == Deterministic Finite Automata ==
 
-Humans and computers are so much more than mere circuits because we retain
-something from one step to use in future steps. Even though we can only read a
-few words at a time, we can absorb a complex story from a book. This is because
-after starting in one state of mind, processing a few bits can put us in
-another state of mind.
+Humans and computers are more than mere circuits because we retain something
+from one step to use in future steps. Even though we can only read a few words
+at a time, we can absorb a complex story from a book. This is because after
+starting in one state of mind, processing a few bits can put us in another
+state of mind.
 
 This leads us to consider deterministic finite automata, or finite state
 machines:
@@ -125,13 +124,13 @@ runDfa (start, step, accepts) s = go start s where
     c:rest -> go (step state c) rest
 \end{code}
 
-Briefly, we begin in some `start` state, then we update our state according to
-the current state and the next input `Char`, and repeat until the entire input
-has been processed. Certain states are considered accepting states, and we say
-we accept the input if we wind up in one.
+Briefly, the machine begins in some `start` state, then updates its state
+according to the current state and the next input `Char`, and repeats until the
+entire input has been processed. If it ends up in a state that is defined to
+be an accepting state, we say the machine accepts the input.
 
 For example, the following DFA accepts strings consisting of an odd number
-of 'x's (try `runDfa oddXs "xxxxx"`):
+of 'x's:
 
 \begin{code}
 oddXs :: Dfa
@@ -139,24 +138,18 @@ oddXs = (0, step, \state -> state == 1) where
   step 0 'x' = 1
   step 1 'x' = 0
   step _  _  = 2
+
+-- This should return True.
+demoOddXs :: Bool
+demoOddXs = runDfa oddXs "xxxxx"
 \end{code}
 
-By the way, we could have written:
-
-------------------------------------------------------------------------
-runDfa (start, step, accepts) = accepts . foldr (flip step) start
-------------------------------------------------------------------------
-
-but we prefer to avoid getting overly mixed up in Haskell library functions so
-it looks more like we're starting from first principles.
-
-We could extend the above to output characters as it computes (see
+We could extend the above to output characters as it computes; see
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
-https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]). But
-traditionally, we start with nothing but a Boolean at the end because we
-already learn a lot from this simple case. We quickly find DFAs are incapable
-of elementary tasks such as checking if a bunch of parentheses are balanced, or
-if some number of As has been followed by an equal number of Bs.
+https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines], but we already
+learn a lot as it is. We quickly find DFAs are incapable of elementary
+tasks such as checking if a bunch of parentheses are balanced, or if some
+number of As has been followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
 
@@ -182,14 +175,84 @@ runDpda (start, stackInit, step, accepts) s = go start [stackInit] s where
       where apply (nextState, stackDiff) = go nextState (stackDiff ++ rest)
 \end{code}
 
+Informally, the machine starts in a given state with a given symbol on the
+stack. On each step, it examines the stack. If empty, then the machine
+rejects, otherwise it pops off the top of the stack. The current state and the
+popped-off symbol determine the action for this step, which is one of:
+
+ * `Reject`: halt the machine and reject the input.
+
+ * `BlindPush` ignore the input, enter a given state and push a given
+sequence of symbols on the stack.
+
+ * `Push`: if at the end of input, then halt, accepting if in a given set of
+states. Otherwise consume one character of the input, which may be used to
+determine the next state and the symbols to push.
+
+For example, the following DPDA accepts strings consisting of balanced
+parentheses. As it processes characters from the input string, it records the
+current nesting depth in unary on the stack.
+
+\begin{code}
+balanced :: Dpda
+balanced = (0, '-', step, \state -> state == 0) where
+  step 0 '-' = Push (\c -> case c of
+    '(' -> (1, "1-")
+    _   -> (2, "")
+    )
+  step 1 '-' = BlindPush (0, "-")
+  step 1 '1' = Push (\c -> case c of
+    '(' -> (1, "11")
+    ')' -> (1, "")
+    _   -> (2, "")
+    )
+  step _ _   = Reject
+
+-- This should return True.
+demoBalanced :: Bool
+demoBalanced = runDpda balanced "(()())"
+\end{code}
+
 It turns out DPDAs are incapable of basic tasks such as checking if the input
 is a palindrome, or if some number of As has been followed by an equal
 number of Bs followed by an equal number of Cs.
 
 == Turing Machines ==
 
-Replacing the stack memory with a tape with a movable read/write head
-leads to Turing Machines:
+DPDAs flounder because the values popped off the stack are lost. What if we
+could save them, say, on a second stack?
+
+Also, the design of DPDAs smells. We have `Char` values on a stack, and another
+bunch of `Char` values in our input string. The former tells us whether to
+bother reading from the latter. There are two edge cases to worry about: the
+empty stack, and the end of input. More than one condition causes the machine
+to halt. Can we simplify?
+
+Let's try starting with two stacks that initially hold the input. We add
+a current state and a current `Char` value that determine our next move,
+which is either to halt, or to do all of the following:
+
+  * push a `Char` to one of the stacks;
+  * pop off a `Char` from the other, which becomes our next current value; and
+  * enter the next state.
+
+This seems promising, but we have limited our memory because each push
+corresponds to a pop. We could try allowing pushing several values at once, but
+this makes our machine uglier.
+
+Better to allow "bottomless" stacks. Rather than rejecting on an empty stack, we
+instead define the result of popping an empty stack to be a special `Char`
+value that we call a 'blank'. (We could also have unconventionally defined
+DPDAs with such a stack.)
+
+We have just described Turing machines.
+
+Usually, the two stacks and current value are explained in terms of a movable
+read/write head on a tape that is infinitely long in either direction, which is
+disconcerting since it's impossible to cram an infinite tape into a real
+computer, or for that matter, into our universe. Nonetheless we adopt
+mainstream nomenclature in our code. For example, we call a stack a one-way
+tape.
 
 \begin{code}
 data OneWayTape = Char :> OneWayTape
@@ -208,37 +271,33 @@ runTM (start, step) tape = go start tape where
       )
 \end{code}
 
-The tape starts with the input string surrounded on both sides by endless
-blanks, with the read/write head pointing at the first character. After the
-machine halts, we expect it to leave the output encoded in the same fashion.
-
-We represent a blank with the space character, though in practice we'd
-probably invent a special `Char` for this purpose.
+We represent a blank with the space character. We encode the input string
+by pushing its characters on one of the stacks, or in conventional terms,
+we write the string immediately to the right of tape head. We expect the
+output to be in the same format.
 
 \begin{code}
 blanks :: OneWayTape
 blanks = ' ' :> blanks
 
 toTape :: [Char] -> Tape
-toTape ""       = (blanks, ' ', blanks)
-toTape (c:rest) = (blanks, c  , go rest) where
+toTape s      = (blanks, ' ', go s) where
   go ""       = blanks
   go (c:rest) = c :> go rest
 
 fromTape :: Tape -> [Char]
-fromTape (_, c, rest) = go c rest where
-  go c (x :> xs) = c:if x == ' ' then "" else go x xs
+fromTape (_, _, xs) = go xs where
+  go (x :> xt) = if x == ' ' then "" else x:go xt
 
 evalTM :: TM -> String -> String
 evalTM p s = fromTape (runTM p (toTape s))
 \end{code}
 
-To simplify, we have ditched the notion of accepting states; we could trivially
-support them by tweaking our TM to write a symbol representing acceptance
-before halting.
+We ditch the notion of accepting states; we could trivially support them by
+tweaking any given TM to write a symbol representing acceptance before halting.
 
 https://en.wikipedia.org/wiki/Church%E2%80%93Turing_thesis[Turing machines
-are a good mathematical answer to "What is a computer?"]
+are a decent mathematical answer to "What is a computer?"]
 Thus we revise our definition of an interpreter, which in turn defines a
 programming language:
 
@@ -272,17 +331,22 @@ evalTM (interpret p) s == evalTM (interpretTarget (compile p)) s
 == What else is there? ==
 
 Researchers have long used interpreters to define programming languages.
-See
-https://aiplaybook.a16z.com/reference-material/mccarthy-1960.pdf[McCarthy's paper on LISP], or
-https://fi.ort.edu.uy/innovaportal/file/20124/1/22-landin_correspondence-between-algol-60-and-churchs-lambda-notation.pdf[Landin's paper on ALGOL 60].
+https://aiplaybook.a16z.com/reference-material/mccarthy-1960.pdf[McCarthy's paper on LISP] and
+https://fi.ort.edu.uy/innovaportal/file/20124/1/22-landin_correspondence-between-algol-60-and-churchs-lambda-notation.pdf[Landin's paper on ALGOL 60]
+are classics.
 This technique grew more mathematical over time, evolving into
-https://en.wikipedia.org/wiki/Denotational_semantics[denotational semantics].
+https://en.wikipedia.org/wiki/Semantics_(computer_science)[formal semantics].
+Knuth vividly recounts the history in
+https://www.win.tue.nl/~mvdbrand/courses/seminar/0809/papers/ag-genesis.pdf[a
+paper on attribute grammars]. (Attribute grammars are a venerable branch of
+formal semantics; see Backhouse,
+'https://link.springer.com/content/pdf/10.1007/3-540-46002-0_11.pdf[A
+Functional Semantics of Attribute Grammars]' for a modern take.)
 
-Incredibly, formal semantics exist for a substantial subset of C, and there
-is even http://compcert.inria.fr/[a certified C compiler], that is, a C
-compiler that a computer can prove is correct. Of course,
-https://blog.regehr.org/archives/232[like all practical C compilers, they
-ignored parts of the C standard that are abject nonsense].
+Incredibly, formal semantics exist for a substantial subset of C (provided
+we ignore https://blog.regehr.org/archives/232[parts of the C standard that are
+abject nonsense]), and there is even http://compcert.inria.fr/[a certified C
+compiler], that is, a C compiler that a computer can prove is correct.
 
 Cryptographers eventually joined the fun in 1982, when Goldwasser and Micali
 defined https://en.wikipedia.org/wiki/Semantic_security[semantic security].
@@ -296,12 +360,18 @@ and
 https://www.youtube.com/watch?v=teRC_Lf61Gw[Functional Reactive Programming,
 more elegantly specified].
 
-https://www.microsoft.com/en-us/research/uploads/prod/2018/03/build-systems-final.pdf[Build systems can be defined mathematically].
+Even
+https://www.microsoft.com/en-us/research/uploads/prod/2018/03/build-systems-final.pdf[build
+systems] and operating systems
+(https://www.sigops.org/s/conferences/sosp/2009/papers/klein-sosp09.pdf[seL4],
+http://flint.cs.yale.edu/certikos/[CertiKOS]) can be defined mathematically.
 
-Even operating systems have embraced mathematics. See
-https://www.sigops.org/s/conferences/sosp/2009/papers/klein-sosp09.pdf[seL4]
-and http://flint.cs.yale.edu/certikos/[CertiKOS].
-
-https://en.wikipedia.org/wiki/Richard_Montague[Richard Montague] believed that
+https://en.wikipedia.org/wiki/Montague_grammar[Richard Montague] believed that
 with enough research, we can show natural languages are no different to formal
 languages, so perhaps there exists a non-mathematical path to precision.
+
+Decades ago,
+http://www.cs.umd.edu/~gasarch/BLOGPAPERS/social.pdf[some argued against
+getting too formal with programming languages]. Later,
+https://eprint.iacr.org/2004/152.pdf[some cryptographers argued similarly
+against provable security]. This stance seems incompatible with Montague's.
