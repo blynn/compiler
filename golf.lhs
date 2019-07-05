@@ -17,7 +17,7 @@ pairs such as:
 (True, (False, (False, ...  (True, const) ... ))
 ------------------------------------------------------------------------
 
-where the booleans have their usual Church/Scott encodings.
+where the booleans and pairs have their usual Church/Scott encodings.
 
 If we could disable type-checking in Haskell, the interpreter is simply:
 

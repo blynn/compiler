@@ -2,9 +2,11 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES))
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js
+
+para.js: para.lhs; hastec para.lhs
 
 menu.html: menu; cobble menu menu
 

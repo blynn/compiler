@@ -13,3 +13,9 @@ ioccc,IOCCC
 type,Types
 c,Let me C
 eq,Equality
+para,Parametricity
+\
+\''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+\
+\- link:../haskell[Haskell Notes]
+\- link:../[Ben Lynn]

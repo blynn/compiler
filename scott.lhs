@@ -1,4 +1,4 @@
-= Scott encoding =
+= The Scott encoding =
 
 Encoding data as functions may seem strange at first, but after playing
 with combinators for a while,

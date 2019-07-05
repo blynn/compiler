@@ -27,7 +27,7 @@ Less well-known is that link:../lambda/[lambdas alone are equal in
 power to Turing machines]. We can toss out states, tapes, read/write heads, and
 do nothing but repeatedly substitute a variable with an expression, yet still
 compute just as effectively. If `LC` denotes the set of all closed lambda
-terms, then the following two mutually inverse functions are known to exist:
+terms, then the following mutually inverse functions are known to exist:
 
 ------------------------------------------------------------------------
 fromTM :: TM -> LC
@@ -161,8 +161,8 @@ reduce t = case t of
 The S combinator duplicates one of its arguments. Although we think of the
 result as a tree, in our implementation, we wind up with two nodes pointing to
 the same copy of the argument that is duplicated, that is, we employ 'sharing'
-to conserve memory. The S combinator also means a tree may not necessarily
-shrink after a so-called reduction.
+to conserve memory. The S combinator also means a tree need not shrink after a
+so-called reduction.
 
 If none of the patterns appear, then no reductions are possible and the term
 is said to be in 'normal form'. Otherwise there are one or more subterms that
@@ -314,10 +314,11 @@ Can all programming languages be defined with our version of lambda calculus?
 After all, we chose a particular order of evaluation.
 
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
-landmark paper of 1972] cites examples of languages defined in variants of
-lambda calculus. He then reveals this variety is unnecessary. Thanks to
-'continuation-passing style' (CPS) and 'defunctionalization', we can get by
-with a lambda calculus that only supports first-order functions, and which
+landmark paper of 1972] cites languages defined in variants of lambda calculus,
+then reveals this variety is unnecessary. Thanks to 'defunctionalization' and
+'continuation-passing style' (CPS), we can get by with a lambda calculus
+without first-class functions (is this the same as
+https://en.wikipedia.org/wiki/Kappa_calculus[kappa calculus]?), and which
 evaluates in any given order. (More recently,
 http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[Hutton and Bahr describe how to
 fuse CPS transformation and defunctionalization].)

@@ -12,13 +12,12 @@ but even after several iterations, the main conclusion most often seemed to be
 I encountered an optimization in a book by Douglas Adams: answer
 mathematically. If asked "What is the answer to the meaning of life, the
 universe, and everything?", we reply "42" and avoid those meddlesome
-contradictions. For a contradiction in mathematics in particular invalidates
-logical reasoning, the foundation of the Socratic method.
+contradictions. For if mathematics is flawed, then so is logical reasoning,
+and hence the Socratic method itself.
 
-Now the problem is finding a mathematical definition that reflects what we
-have in mind. This can be difficult, but luckily, for parts of computer
-science, mathematical definitions work well, and even guide the
-implementation.
+Now the problem is finding a mathematical definition that reflects what we have
+in mind. This can be difficult, but luckily, for some of computer science,
+mathematical definitions work well, and even guide the implementation.
 
 == What is a compiler? ==
 
@@ -35,10 +34,10 @@ meaning of the source program.
 
 == What is a programming language? ==
 
-We define a programming language mathematically with an interpreter. We view
-running a program as evaluating a function that takes a given input value to
-an output value. Then an interpreter is a function taking a program to such a
-function:
+We view running a program as evaluating a function that takes an input value to
+an output value. Thus we define a programming language to be a set of programs
+and a function, called an interpreter, that takes a program to a function
+mapping input values to output values:
 
 ------------------------------------------------------------------------
 interpret :: Language -> (Value -> Value)
@@ -71,16 +70,15 @@ are running on computers.
 
 == What is a computer? ==
 
-We could try:
+We could leave it as is:
 
 ------------------------------------------------------------------------
-compute :: Input -> Output
+compute :: Value -> Value
 ------------------------------------------------------------------------
 
 This works if we say the input includes the entire state of the computer: every
-register value, every single bit of memory, and so on. However, we've bitten
-off far more than we can chew; how can we reason about a complicated gigantic
-function?
+register, every single bit of memory, and so on. However, we've bitten off far
+more than we can chew; how can we reason about a complicated gigantic function?
 
 What if we shrink the domain and range?
 
@@ -89,22 +87,21 @@ compute :: Char -> Char
 ------------------------------------------------------------------------
 
 Here, the set `Char` is relatively small, say the set of all 32-bit words.
-We make the input and output sets are identical so we only need to deal with
-one type of `Char`; working around this restriction is left as an exercise.
 
-A list of `Char` represents inputs and outputs of arbitrary length.
+A list of `Char` can hold inputs and outputs of arbitrary length:
 
 ------------------------------------------------------------------------
 type Value = [Char]
 ------------------------------------------------------------------------
 
-The only thing our `compute` function can do to such a list is to perform the
-same operation to each element of the list. We have modeled something like a
-circuit, which performs the same task on a certain number of bits at a time.
+Unfortunately, the only thing our `compute` function can do to such a list is
+to perform the same operation to each element of the list. We have modeled
+something like a circuit, which performs the same task on a fixed number of
+bits at a time.
 
 == Deterministic Finite Automata ==
 
-Humans and computers are more than mere circuits because we retain something
+Humans and computers are more than mere circuits because we retain information
 from one step to use in future steps. Even though we can only read a few words
 at a time, we can absorb a complex story from a book. This is because after
 starting in one state of mind, processing a few bits can put us in another
@@ -144,12 +141,12 @@ demoOddXs :: Bool
 demoOddXs = runDfa oddXs "xxxxx"
 \end{code}
 
-We could extend the above to output characters as it computes; see
+We could extend the above to spit out characters as it computes; see
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
 https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines], but we already
-learn a lot as it is. We quickly find DFAs are incapable of elementary
-tasks such as checking if a bunch of parentheses are balanced, or if some
-number of As has been followed by an equal number of Bs.
+learn enough it is. We quickly find DFAs are incapable of elementary tasks such
+as checking if a bunch of parentheses are balanced, or if some number of As has
+been followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
 
@@ -236,16 +233,15 @@ which is either to halt, or to do all of the following:
   * pop off a `Char` from the other, which becomes our next current value; and
   * enter the next state.
 
-This seems promising, but we have limited our memory because each push
-corresponds to a pop. We could try allowing pushing several values at once, but
-this makes our machine uglier.
+This seems promising, but we have limited memory because each push corresponds
+to a pop. We could permit pushing several values at once, but this makes our
+machine uglier.
 
 Better to allow "bottomless" stacks. Rather than rejecting on an empty stack, we
 instead define the result of popping an empty stack to be a special `Char`
-value that we call a 'blank'. (We could also have unconventionally defined
-DPDAs with such a stack.)
+value that we call a 'blank'.
 
-We have just described Turing machines.
+We have just described 'Turing machines'.
 
 Usually, the two stacks and current value are explained in terms of a movable
 read/write head on a tape that is infinitely long in either direction, which is

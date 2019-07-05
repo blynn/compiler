@@ -1,6 +1,6 @@
 = Fighting for Equality =
 
-Suppose A = B. Then it seems reasonable to replace any instance of A with a B,
+Suppose A = B. Then it seems reasonable to replace any instance of A with B,
 and vice versa.
 
 Programmers of all stripes perform equational reasoning. For example, a
@@ -16,9 +16,10 @@ as:
 bits = 8 * (head_bytes + body_bytes);
 ------------------------------------------------------------------------
 
-Pure languages unleash the full power of equational reasoning, which is to say,
-they let programmers do what mathematicians have been doing for centuries. For
-example, using an identity we can prove by induction, we can rewrite:
+Referentially transparent languages unleash the full power of equational
+reasoning, which is to say, they let programmers do what mathematicians have
+been doing for centuries. For example, using several identities, we can
+rewrite:
 
 ------------------------------------------------------------------------
 map (foo . (4*)) (iterate (1+) 0)
@@ -30,7 +31,7 @@ as:
 map foo (iterate (4+) 0)
 ------------------------------------------------------------------------
 
-Naturally, in C, we could conceivably replace:
+In C, we could conceivably replace:
 
 ------------------------------------------------------------------------
 for (int i = 0;; i++) {
@@ -49,10 +50,10 @@ for (int i = 0;; i+=4) {
 but the reasoning is marred by details such as the variable `i`. As code grows
 more complex, such details multiply.
 
-In contrast, arbitrarily complex pure expressions remain easy to manipulate
-with equational reasoning. This is important for humans, but perhaps more
-important for computers. For example, GHC effortlessly optimizes code with
-identities such as the following fusion law:
+In contrast, arbitrarily complex referentially transparent expressions remain
+easy to manipulate with equational reasoning. This is important for humans, but
+perhaps more important for computers. For example, GHC effortlessly optimizes
+code with identities such as the following fusion law:
 
 ------------------------------------------------------------------------
 map f . map g = map (f . g)
@@ -76,8 +77,8 @@ solving an open problem that had defied generations of gifted mathematicians.
 What's more, it only took 8 days and 30 megabytes on an
 https://en.wikipedia.org/wiki/IBM_RISC_System/6000[RS/6000]. As modern
 computers are more powerful, it may be possible to write a short program
-that performs equational reasoning, and watch it quickly find the proof that
-eluded humanity for decades.
+that performs equational reasoning, and watch it find the proof that eluded
+humanity for decades.
 
 We follow along chapter 4 of John Harrison, 'Handbook of Practical Logic and
 Automated Reasoning'. Much of the below is a reworking of his OCaml code in
@@ -101,9 +102,8 @@ professional programmers are perhaps jittery when they hear the phrase
 We define a data structure to hold terms and rewriting rules, along with
 parsers for them. We store them in same link:lambda.html[tree that we used for CL terms].
 We employ some fancier Haskell extensions to automate some of the programming.
-For example, instead of writing yet another function to return the free
-variables of a term, we can rely on `Data.Foldable` and directly call `elem`
-on the CL term.
+For instance, to determine if a variable is free, we employ `Data.Foldable` and
+simply call `elem` on the CL term.
 
 \begin{code}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable #-}
@@ -302,7 +302,7 @@ our well-founded partial order, which means we must eventually reach a term for
 which no rewrite rules apply.
 
 We introduce the 'lexicographic path order' (LPO) on our terms.
-See Harrison for its motivation, and for why it works.
+See references for the motivation, and why it works.
 Our `funargs` helper uncurries the function and arguments needed by `lpoGT`.
 Harrison has no need for this because of a different data structure.
 
@@ -342,7 +342,8 @@ weigh precs (f, m) (g, n)
 
 Our group axioms all have left-hand sides greater than their right-hand sides
 by lexicographic path order, no matter what ordering we pick for the identity,
-group operation, and inverse. For now, we choose an ordering based on ASCII:
+group operation, and inverse. We confirm this fact when the ordering based on
+ASCII:
 
 \begin{code}
 prop_groupAxiomsValid =
@@ -369,7 +370,6 @@ rewrite rules that can change at least one of them.
 To find all the terms getting in the way of confluence, it turns out
 we need only apply the rewrite rules to the rewrite rules. There's no
 need to guess a term and try various rewrite strategies on it.
-Again, see Harrison for the proofs.
 
 We walk through an example. Take our first and third group axioms, and
 rename the variables to avoid confusion:
@@ -426,6 +426,8 @@ rule:
 ------------------------------------------------------------------------
 I x3 * (x3 * z1) = z1
 ------------------------------------------------------------------------
+
+This new rule may create more critical pairs.
 
 If the elements of a critical pair are incomparable, then we defer its
 processing until later. After finding and processing other crtical pairs,
@@ -492,8 +494,9 @@ equation, with no explanation:
 fixRewrite groupSystem $ mustParse expr "x * I x"
 ------------------------------------------------------------------------
 
-Getting the program to tell us what it's doing is left as an exercise.
-Which, once completed, can be used to do homework in courses on group theory!
+Getting the program to tell us what it's doing is left as an exercise. Which,
+once completed, can do some homework exercises for us in courses on group
+theory!
 
 == Equal Opportunities ==
 

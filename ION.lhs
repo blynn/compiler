@@ -9,9 +9,9 @@ could start from assembly language if we had to. Also, C compilers are
 available on countless platforms.
 
 We take a page from Knuth's 'The Art of Computer Programming' and introduce a
-mythical computer named the International Obfuscated Nonce (ION) machine, so
-named because it's based on a one-time random design used in link:ioccc.html[an
-entry to the 26th International Obfuscated C Code Contest].
+mythical computer: the International Obfuscated Nonce (ION) machine, so named
+because it's based on a one-time random design used in link:ioccc.html[an entry
+to the 26th International Obfuscated C Code Contest].
 
 The basic unit of data is a 32-bit word. Memory is an array of 32-bit words,
 indexed by 32-bit words. Among the registers are the heap pointer HP and the
@@ -124,7 +124,7 @@ We support the operations `+ - / * % = L`. The first 5 have the same meaning
 they do in C, while the last 2 are equivalent to C's `(==)` and `(<=)`.
 
 We add a couple of useful macros: the `R` combinator (equivalent to `CC`) and
-the `(:)` combinator (equivalent to `B(BK)(BCT)`), and we're done:
+the `(:)` combinator (equivalent to `B(BK)(BCT)`).
 
 Below, the I combinator is not lazy: for instance, every time we encounter the
 subterm `I(I(Ix))` we must reduce three I combinators. link:ioccc.html[The
@@ -185,7 +185,7 @@ builtin c vm = case chr c of
   lvm n f g = lazy n f g vm
 \end{code}
 
-== I/O ==
+== ION I/O ==
 
 For us, a program `P` is a function from a string to a string, where strings
 are Scott-encoded lists of characters.
