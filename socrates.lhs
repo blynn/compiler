@@ -346,6 +346,8 @@ compiler], that is, a C compiler that a computer can prove is correct.
 
 Cryptographers eventually joined the fun in 1982, when Goldwasser and Micali
 defined https://en.wikipedia.org/wiki/Semantic_security[semantic security].
+Canetti later defined
+https://en.wikipedia.org/wiki/Universal_composability[universal composability].
 
 https://www.youtube.com/watch?v=bmKYiUOEo2A[Conal Elliot gave an inspiring talk
 on 'denotational design']. He advocates mathematical thinking beyond its

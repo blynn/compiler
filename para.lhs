@@ -13,7 +13,7 @@ Want to see a magic trick? Pick a function, any function:
 <button id='fold'>fold</button>
 </p>
 <p>
-<textarea id='in' rows='1' cols='80'></textarea>
+<textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -25,7 +25,7 @@ Watch closely...
 <button id='magic'>Abracadabra!</button>
 </p>
 <p>
-<textarea id='out' rows='8' cols='80'></textarea>
+<textarea id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -51,10 +51,10 @@ list.
 Suppose `foo "schooled" == "shoe"`. What is `foo "SCHOOLED"`?
 
 It must be `"SHOE"`.
-We more-or-less relabeled the input, and since `foo` only has black-box access
-to each letter, its output must be exactly what it was before, except
-relabeled. We could go beyond letters. If we replace each input letter with its
-ASCII code, we obtain "shoe" in ASCII.
+We relabeled the input, and since `foo` only has black-box access to each
+letter, its output must be exactly what it was before, except relabeled. We
+could go beyond letters. If we replace each input letter with its ASCII code,
+we obtain "shoe" in ASCII.
 
 In other words, given a relabeling function:
 
@@ -145,8 +145,7 @@ function hideshow(s) {
 
 \begin{code}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts, LambdaCase #-}
 #ifdef __HASTE__
 {-# LANGUAGE PackageImports #-}
 import Data.List
@@ -156,10 +155,7 @@ import Control.Monad
 import Haste.DOM
 import Haste.Events
 type Parser = Parsec String ()
-lowerChar = lower
-upperChar = upper
-alphaNumChar = alphaNum
-space = spaces
+lowerChar = lower; upperChar = upper; alphaNumChar = alphaNum; space = spaces
 (<>) = (++)
 #else
 import Control.Monad.State
@@ -238,8 +234,8 @@ genVar = do
 Product and coproduct types are hopefully only a little more work, but may mean
 some shortcuts we took are unavailable.
 
-The rest of the program does the boring stuff: parsing types, pretty-printing
-theorems, interfacing with this webpage, and so on:
+That leaves the boring stuff: parsing types, pretty-printing theorems,
+interfacing with this webpage, and so on:
 
 \begin{code}
 instance Show Expr where
@@ -295,19 +291,19 @@ go s = case parse (decl <* eof) "" s of
 
 #ifdef __HASTE__
 main :: IO ()
-main = withElems ["in", "out", "magic",
-  "id", "const", "concat", "sort", "fold"] $
-    \[iEl, oEl, magicB, idB, constB, concatB, sortB, foldB] -> do
+main = withElems ["in", "out", "magic"] $ \[iEl, oEl, magicB] -> do
   let
-    concatText = "concat :: [[a]] -> a"
-    setup button text = void $ button `onEvent` Click $ const $
-        setProp iEl "value" text
-  setup idB "id :: a -> a"
-  setup constB "const :: a -> b -> a"
-  setup concatB concatText
-  setup sortB "sort :: (a -> a -> Bool) -> [a] -> [a]"
-  setup foldB "fold :: (a -> b -> b) -> b -> [a] -> b"
-  setProp iEl "value" concatText
+    setup text = do
+      let f = head $ words text
+      Just b <- elemById f
+      let act = setProp iEl "value" text
+      void $ b `onEvent` Click $ const act
+      when (f == "concat") act
+  setup "id :: a -> a"
+  setup "const :: a -> b -> a"
+  setup "concat :: [[a]] -> a"
+  setup "sort :: (a -> a -> Bool) -> [a] -> [a]"
+  setup "fold :: (a -> b -> b) -> b -> [a] -> b"
   let presto = setProp oEl "value" . go =<< getProp iEl "value"
   void $ magicB `onEvent` Click $ const $ presto
   void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)

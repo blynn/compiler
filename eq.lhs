@@ -1,5 +1,36 @@
 = Fighting for Equality =
 
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src='eq.js'></script>
+Demos:
+<p>
+<button id='peano'>Peano</button>
+<button id='sort'>Sort</button>
+<button id='one'>One Rule</button>
+<button id='group'>Group</button>
+</p>
+Rewrite rules:
+<p>
+<textarea id='rules' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
+</p>
+<p>
+<button id='knuthbendix'>Knuth-Bendix</button>
+LPO precedence: <textarea id='order' rows='1' cols='12'></textarea>
+</p>
+<p>
+<textarea id='term' rows='2' style='box-sizing:border-box;width:100%'></textarea>
+</p>
+<p>
+<button id='rewrite'>Rewrite</button>
+</p>
+<p>
+<textarea id='out' rows='2' style='box-sizing:border-box;width:100%'></textarea>
+</p>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+== Be reasonable ==
+
 Suppose A = B. Then it seems reasonable to replace any instance of A with B,
 and vice versa.
 
@@ -17,7 +48,7 @@ bits = 8 * (head_bytes + body_bytes);
 ------------------------------------------------------------------------
 
 Referentially transparent languages unleash the full power of equational
-reasoning, which is to say, they let programmers do what mathematicians have
+reasoning, which is to say they let programmers do what mathematicians have
 been doing for centuries. For example, using several identities, we can
 rewrite:
 
@@ -34,7 +65,7 @@ map foo (iterate (4+) 0)
 In C, we could conceivably replace:
 
 ------------------------------------------------------------------------
-for (int i = 0;; i++) {
+for (unsigned i = 0;; i++) {
   foo(4*i);
 }
 ------------------------------------------------------------------------
@@ -42,7 +73,7 @@ for (int i = 0;; i++) {
 with:
 
 ------------------------------------------------------------------------
-for (int i = 0;; i+=4) {
+for (unsigned i = 0;; i+=4) {
   foo(i);
 }
 ------------------------------------------------------------------------
@@ -76,16 +107,16 @@ https://en.wikipedia.org/wiki/Robbins_algebra[Robbins algebras are Boolean],
 solving an open problem that had defied generations of gifted mathematicians.
 What's more, it only took 8 days and 30 megabytes on an
 https://en.wikipedia.org/wiki/IBM_RISC_System/6000[RS/6000]. As modern
-computers are more powerful, it may be possible to write a short program
-that performs equational reasoning, and watch it find the proof that eluded
-humanity for decades.
+computers are more powerful, today it may be possible to write a short program
+that uses equational reasoning to find the proof that eluded humanity for
+decades.
 
 We follow along chapter 4 of John Harrison, 'Handbook of Practical Logic and
 Automated Reasoning'. Much of the below is a reworking of his OCaml code in
 Haskell.
 
-Seeing as we're building an equational reasoning system, we better have
-some equations. Let's take Peano arithmetic:
+We want to parse equations such as the rules of Peano arithmetic when given in
+the following form:
 
 ------------------------------------------------------------------------
 0 + x = x
@@ -94,32 +125,144 @@ S x + y = S (x + y)
 S x * y = y + (x * y)
 ------------------------------------------------------------------------
 
-By the way, some say "equational reasoning" is a folk term coined by computer
-scientists, and "term rewriting system" may be more correct. However,
-professional programmers are perhaps jittery when they hear the phrase
-"rewriting systems"!
-
-We define a data structure to hold terms and rewriting rules, along with
-parsers for them. We store them in same link:lambda.html[tree that we used for CL terms].
-We employ some fancier Haskell extensions to automate some of the programming.
+We store them in same link:lambda.html[tree that we used for CL terms].  We
+employ some fancier Haskell extensions to automate some of the programming.
 For instance, to determine if a variable is free, we employ `Data.Foldable` and
 simply call `elem` on the CL term.
 
+++++++++++
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
+<p><a onclick='hideshow("boilerplate");'>&#9654; Toggle boilerplate and UI</a></p>
+<div id='boilerplate' style='display:none'>
+++++++++++
+
 \begin{code}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, LambdaCase #-}
 import Control.Arrow
 import Data.Foldable
 import Data.Function
 import Data.List (intersect, union, delete, elemIndex)
 import Data.Maybe
+#ifdef __HASTE__
+import Control.Monad
+import Haste.DOM
+import Haste.Events
+import Text.Parsec hiding (space)
+(<>) = (++)
+type Parser = Parsec String ()
+lowerChar = lower; upperChar = upper; alphaNumChar = alphaNum;
+digitChar = digit; space = spaces; some = many1
+#else
 import Text.Megaparsec hiding (match)
 import Text.Megaparsec.Char
+type Parser = Parsec () String
+#endif
 
-data ExpF a = C String | V a | ExpF a :@ ExpF a deriving (Show, Eq, Functor, Foldable)
+#ifdef __HASTE__
+main :: IO ()
+main = withElems ["out", "rules", "order", "term", "knuthbendix", "rewrite"] $
+    \[oEl, rEl, ordEl, tEl, kbB, rwB] -> do
+  let
+    setup buttonName rs precs t = do
+      Just b <- elemById buttonName
+      let
+        go = do
+          setProp oEl "value" ""
+          setProp rEl "value" rs
+          setProp ordEl "value" precs
+          setProp tEl "value" t
+      void $ b `onEvent` Click $ const $ go
+      when (buttonName == "group") go
+  setup "group" (unlines
+    [ "(x * y) * z = x * (y * z)"
+    , "1 * x = x"
+    , "I x * x = 1"
+    ]) "1 * I" "(I x * x) * y"
+  setup "one" "F (F x) = G x" "" "F(F(F(F(F(x)))))"
+  setup "peano" (unlines
+    [ "0 + x = x"
+    , "S x + y = S (x + y)"
+    , "0 * x = 0"
+    , "S x * y = y + (x * y)"]) "" "S(S(S(S(0)))) * S(S(0)) + S(S(S(0)))"
+  setup "sort" (unlines
+    [ "Max 0 x = x"
+    , "Max x 0 = x"
+    , "Max (S x) (S y) = S (Max x y)"
+    , "Min 0 x = 0"
+    , "Min x 0 = 0"
+    , "Min (S x) (S y) = S (Min x y)"
+    , "Sort Nil = Nil"
+    , "Sort (Cons x y) = Insert x (Sort y)"
+    , "Insert x Nil = Cons x Nil"
+    , "Insert x (Cons y z) = Cons (Max x y) (Insert (Min x y) z)"
+    ]) "" $ concat
+      [ "Sort ("
+      , "Cons (S (S (S 0))) ("
+      , "Cons (S 0) ("
+      , "Cons (S (S (S (S 0)))) ("
+      , "Cons (S 0) ("
+      , "Cons (S (S (S (S (S 0)))))  Nil)))))"
+      ]
+
+  let parseRules = sequence . map (parse rule "") . lines
+  void $ kbB `onEvent` Click $ const $ do
+    parseRules <$> getProp rEl "value" >>= \case
+      Left _ -> setProp oEl "value" "bad rules: parse error"
+      Right rs -> do
+        opList <- words <$> getProp ordEl "value"
+        case knuthBendix (lpoGT $ weigh opList) rs of
+          Nothing -> setProp oEl "value" "completion failed"
+          Just rs' ->  do
+            setProp oEl "value" ""
+            setProp rEl "value" $ unlines $ show <$> rs'
+  void $ rwB `onEvent` Click $ const $ do
+    parseRules <$> getProp rEl "value" >>= \case
+      Left _ -> setProp oEl "value" "bad rules: parse error"
+      Right rs -> parse expr "" <$> getProp tEl "value" >>= \case
+        Left _ -> setProp oEl "value" "bad term: parse error"
+        Right x -> do
+          setProp oEl "value" $ show $ fixRewrite rs x
+#endif
+\end{code}
+
+Ugh.
+
+++++++++++
+</div>
+++++++++++
+
+\begin{code}
+data ExpF a = C String | V a | ExpF a :@ ExpF a deriving (Eq, Functor, Foldable)
 type Exp = ExpF String
-type Rule = (Exp, Exp)
+data Rule = Rule Exp Exp deriving Eq
 
-expr :: Parsec () [Char] Exp
+instance Show (ExpF String) where
+  show = \case
+    V v -> v
+    C s :@ x :@ y | s `elem` ["+", "*"] ->
+       showR x <> " " <> s <> " " <> showR y
+    C s
+      | s `elem` ["+", "*"] -> "(" <> s <> ")"
+      | otherwise -> s
+    x :@ y -> show x <> " " <> showR y
+    where
+    showR x | _ :@ _ <- x = "(" <> show x <> ")"
+            | otherwise   =        show x
+
+instance Show Rule where show (Rule l r) = show l <> " = " <> show r
+
+expr :: Parser Exp
 expr = foldl (&) <$> apps <*> many ((\f b a -> C f :@ a :@ b) <$> op <*> apps) where
   op   = pure <$> sp (oneOf "+*")
   apps = foldl1 (:@) <$> some (con <|> var <|> between (spch '(') (spch ')') expr)
@@ -128,9 +271,10 @@ expr = foldl (&) <$> apps <*> many ((\f b a -> C f :@ a :@ b) <$> op <*> apps) w
   con  = C <$> sp (some digitChar <|> (:) <$> upperChar <*> many alphaNumChar)
   var  = V <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
 
-rule :: Parsec () [Char] Rule
-rule = (,) <$> expr <*> (char '=' *> space *> expr)
+rule :: Parser Rule
+rule = Rule <$> expr <*> (char '=' *> space *> expr)
 
+mustParse :: Parser a -> String -> a
 mustParse p = either undefined id . parse p ""
 
 peano = mustParse rule <$>
@@ -141,10 +285,11 @@ The `mgu` and `match` functions from link:type.html[type checking] turn out to
 be exactly the tools we need, except now we run them on terms instead of types:
 
 \begin{code}
+apply :: [(String, Exp)] -> Exp -> Exp
 apply sub t = case t of
-  C _ -> t
-  V v -> maybe t id $ lookup v sub
   a :@ b -> apply sub a :@ apply sub b
+  V v    -> maybe t id $ lookup v sub
+  _      -> t
 
 (@@) s1 s2 = map (second (apply s1)) s2 <> s1
 
@@ -179,7 +324,7 @@ match h t = case h of
   _ -> Nothing
 \end{code}
 
-This is because we have already been using equality to help us program.
+This is because we have already been using equality.
 We used `mgu` to see if two types can be made equal with the appropriate
 substitutions, and we used `match` to find matching class instances.
 Now we want more: having determined two things are equal, we want to replace
@@ -198,7 +343,7 @@ it with the right-hand side, suitably substituted.
 
 \begin{code}
 findRewrite :: [Rule] -> Exp -> Maybe Exp
-findRewrite eqs t = asum $ (\(l, r) -> (`apply` r) <$> match l t) <$> eqs
+findRewrite eqs t = asum $ (\(Rule l r) -> (`apply` r) <$> match l t) <$> eqs
 
 rewrite :: [Rule] -> Exp -> Maybe Exp
 rewrite eqs t = asum $ findRewrite eqs t : case t of
@@ -224,7 +369,7 @@ fixRewrite peano $ mustParse expr
 This is "(4*2)+3", and we miraculously arrive at "11":
 
 ------------------------------------------------------------------------
-C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ (C "S" :@ C "0"))))))))))
+S (S (S (S (S (S (S (S (S (S (S 0))))))))))
 ------------------------------------------------------------------------
 
 == Group equality ==
@@ -249,11 +394,10 @@ We'd like to see "y", via the application of the third and then second axioms,
 but instead we get:
 
 ------------------------------------------------------------------------
-(C "*" :@ (C "I" :@ V "x")) :@ ((C "*" :@ V "x") :@ V "y")
+I x * (x * y)
 ------------------------------------------------------------------------
 
-That is, "I x * (x * y)". The associative law was applied first, preventing
-further rewrites.
+The associative law was applied first, preventing further rewrites.
 
 We fix this by simply adding a rewrite rule:
 
@@ -336,8 +480,12 @@ lpoGT weigh s t
 weigh :: [String] -> Weigh
 weigh precs (f, m) (g, n)
   | f == g    = m > n
-  | otherwise = wt f > wt g
-  where wt s = maybe undefined id $ elemIndex s precs
+  | otherwise = case (wt f, wt g) of
+    (Just i, Just j) -> i > j
+    (Nothing, Nothing) -> f > g
+    (Nothing, _) -> False
+    (_, Nothing) -> True
+  where wt s = elemIndex s precs
 \end{code}
 
 Our group axioms all have left-hand sides greater than their right-hand sides
@@ -347,7 +495,7 @@ ASCII:
 
 \begin{code}
 prop_groupAxiomsValid =
-  and $ uncurry (lpoGT $ \(f, _) (g, _) -> f > g) <$> groupAxioms
+  and $ (\(Rule l r) -> lpoGT (weigh []) l r) <$> groupAxioms
 \end{code}
 
 We can now define when we dislike a term. Let `t` be a term, `rules` be a
@@ -397,26 +545,27 @@ The `criticalPairs` function finds all critical pairs of two given rules.
 
 \begin{code}
 findSubs :: Rule -> Exp -> [(Exp, [(String, Exp)])]
-findSubs (l, r) t = case t of
+findSubs (Rule l r) t = case t of
   V _ -> []
   C _ -> maybe [] ((:[]) . (,) r) (mgu l t)
   x :@ y -> concat
     [ maybe [] ((:[]) . (,) r) (mgu l t)
-    , first (:@ y) <$> findSubs (l, r) x
-    , first (x :@) <$> findSubs (l, r) y
+    , first (:@ y) <$> findSubs (Rule l r) x
+    , first (x :@) <$> findSubs (Rule l r) y
     ]
 
 overlaps :: Rule -> Rule -> [Rule]
-overlaps (l, r) (l2, r2) = (\(t, sub) -> (apply sub t, apply sub r2)) <$> findSubs (l, r) l2
+overlaps (Rule l r) (Rule l2 r2) =
+  (\(t, sub) -> Rule (apply sub t) (apply sub r2)) <$> findSubs (Rule l r) l2
 
 criticalPairs :: Rule -> Rule -> [Rule]
 criticalPairs a b
   | a == b = overlaps ruleA ruleB
   | otherwise = overlaps ruleA ruleB `union` overlaps ruleB ruleA
   where
-  both f (a, b) = (f a, f b)
-  ruleA = both (('A':) <$>) a
-  ruleB = both (('B':) <$>) b
+  both f (Rule a b) = Rule (f a) (f b)
+  ruleA = both (('a':) <$>) a
+  ruleB = both (('b':) <$>) b
 \end{code}
 
 Continuing our example, we have `1 * z1 = z1` by another axiom, while no rules
@@ -442,9 +591,9 @@ that are beyond help, or we can never add enough rules to reach confluence.
 
 \begin{code}
 normalizeThenOrient :: (Exp -> Exp -> Bool) -> [Rule] -> Rule -> Maybe Rule
-normalizeThenOrient cmp eqs (rawS, rawT)
-  | s == t || cmp s t = Just (s, t)
-  | cmp t s           = Just (t, s)
+normalizeThenOrient cmp eqs (Rule rawS rawT)
+  | s == t || cmp s t = Just (Rule s t)
+  | cmp t s           = Just (Rule t s)
   | otherwise         = Nothing
   where
   s = fixRewrite eqs rawS
@@ -452,7 +601,7 @@ normalizeThenOrient cmp eqs (rawS, rawT)
 
 complete cmp eqs todo crits = case crits of
   (eq:rest) -> case normalizeThenOrient cmp eqs eq of
-    Just new@(s, t)
+    Just new@(Rule s t)
       | s == t    -> rec eqs todo rest
       | otherwise -> rec (new:eqs) todo $ rest <> (concatMap (criticalPairs new) $ new:eqs)
     Nothing       -> rec eqs (eq:todo) rest
@@ -475,7 +624,7 @@ selfCritical :: [Rule]
 selfCritical = [mustParse rule "F (F x) = G x"]
 
 selfSystem :: [Rule]
-Just selfSystem = knuthBendix (lpoGT $ \(f, _) (g, _) -> f > g) selfCritical
+Just selfSystem = knuthBendix (lpoGT (weigh [])) selfCritical
 \end{code}
 
 As for groups, it turns out a certain ordering of the identity, group
@@ -507,7 +656,10 @@ reading, as it teaches how to systematically find hypergeometric identities,
 which hitherto had been accomplished by a mathematical analogue of alchemy.
 
 We didn't make it to Robbins algebras. A big obstacle is commutativity: how
-can we handle "x + y = y + x" in our framework? See Harrison for references.
+can we handle "x + y = y + x" in our framework? See Harrison for references,
+or section 7 of
+http://www.cs.tau.ac.il/~nachum/papers/taste-fixed.pdf[Dershowitz, 'A Taste of
+Rewrite Systems']. (Our sorting demo comes from the latter.)
 
 With the help of a few identities and a cost model,
 http://www.cs.cornell.edu/~ross/publications/eqsat/[automating equational
