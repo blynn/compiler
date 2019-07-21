@@ -43,10 +43,9 @@ foo :: [a] -> [a]
 
 Evaluating `foo "schooled"` must yield a list of lowercase characters, and
 furthermore, these characters must appear in the input list. This is because
-`foo` only has black-box access to individual elements. (It's akin to a
-combinator accessing its arguments.) Thus `foo` can only perform some
-combination of rearranging or duplicating or discarding entries of the input
-list.
+`foo` has black-box access to individual elements (akin to a combinator
+accessing its arguments) so `foo` can only perform some combination of
+rearranging or duplicating or discarding entries of the input list.
 
 Suppose `foo "schooled" == "shoe"`. What is `foo "SCHOOLED"`?
 
@@ -296,7 +295,10 @@ main = withElems ["in", "out", "magic"] $ \[iEl, oEl, magicB] -> do
     setup text = do
       let f = head $ words text
       Just b <- elemById f
-      let act = setProp iEl "value" text
+      let
+        act = do
+          setProp iEl "value" text
+          setProp oEl "value" ""
       void $ b `onEvent` Click $ const act
       when (f == "concat") act
   setup "id :: a -> a"

@@ -319,9 +319,7 @@ then reveals this variety is unnecessary. Thanks to 'defunctionalization' and
 'continuation-passing style' (CPS), we can get by with a lambda calculus
 without first-class functions (is this the same as
 https://en.wikipedia.org/wiki/Kappa_calculus[kappa calculus]?), and which
-evaluates in any given order. (More recently,
-http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[Hutton and Bahr describe how to
-fuse CPS transformation and defunctionalization].)
+evaluates in any given order.
 
 A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
 Sussman wrote the famous lambda papers]: a series of cookbooks describing how
@@ -329,7 +327,8 @@ to define many practical programming constructs in lambda calculus.
 
 http://www.cs.nott.ac.uk/~pszgmh/fifty.pdf[Hutton and Bahr 'calculate' a
 correct compiler from its specification], showing the power of precise
-definitions.
+definitions. They have also http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[fused
+CPS transformation and defunctionalization] into a single step.
 
 http://conal.net/papers/compiling-to-categories/compiling-to-categories.pdf[Elliott's
 work on compiling to categories] uses bracket abstraction to yield a compelling

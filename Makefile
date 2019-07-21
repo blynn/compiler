@@ -2,7 +2,7 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js
 

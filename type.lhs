@@ -94,13 +94,13 @@ In the worst case, types are a burden, and force us to wrestle with the
 compiler. We twist our code this way and that, and add eye-watering type
 annotations until it finally compiles.
 
-On the other hand, well-designed types does more with less.
-Haskell's typeclasses give us principled overloading.
-By bestowing Prolog-like powers to the type checker, the compiler can
-predictably generate tedious code so humans can ignore irrelevant details.
+In contrast, well-designed types do more with less. Haskell's typeclasses give
+us principled overloading. By bestowing Prolog-like powers to the type
+checker, the compiler can predictably generate tedious code so humans can
+ignore irrelevant details.
 
-Again, Jones' paper provides some background. Since we're doing more than just
-checking types and also generating code, we need techniques described in
+Again, 'Typing Haskell in Haskell' provides some background. Since we're
+generating code as well as checking types, we also need techniques described in
 http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.3952&rep=rep1&type=pdf[John
 Peterson and Mark Jones, 'Implementing Type Classes'].
 

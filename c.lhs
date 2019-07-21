@@ -38,6 +38,7 @@ I'd love to generate programs from test cases.
   and
   https://gist.github.com/taktoa/a59400fd3e1c400835b60c416ad33952[Remy Goldschmidt].
 
+[source,c]
 ------------------------------------------------------------------------
 typedef unsigned u;
 #include <stdio.h>

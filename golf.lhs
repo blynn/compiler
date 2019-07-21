@@ -6,6 +6,15 @@ information theory] are exciting because he wrote real programs to make theory
 concrete. Sadly, Chaitin chose LISP due to a flawed understanding of lambda
 calculus, diminishing the beauty of his results.
 
+He's not alone.
+https://queue.acm.org/detail.cfm?id=1039523[Alan Kay described LISP as the
+"Maxwell's equations of software"] because a "half page of code" described LISP
+itself. Surely the equally powerful lambda calculus, which can describe itself
+in far less space, is more deserving of the title.
+http://www.paulgraham.com/rootsoflisp.html[Paul Graham's 'The Roots of Lisp']
+dubs the LISP self-interpreter "The Surprise" because of its supposed brevity.
+What, then, should one call the one-line lambda calculus self-interpereter?
+
 https://tromp.github.io/cl/LC.pdf[John Tromp's reworking of Chaitin's ideas in
 lambda calculus and combinatory logic] is a fascinating read. Much of the fun
 involves tiny self-interpreters that read binary encodings of themselves.
@@ -122,14 +131,14 @@ Kiselyov's algorithm yields:
 `Y``B`BT``B`S``BV``BT``S``BV``BT``B`BT``S``BV``S``BV``BT``CB``VKC`TS``CB``VTV`TB``SB``C``BBBB
 ------------------------------------------------------------------------
 
-We can define the Y combinator by:
+We define the Y combinator with:
 
 ------------------------------------------------------------------------
 Y = ``B``TT``CB``STT
 ------------------------------------------------------------------------
 
-which means our self-interpreter takes 232 bits, beating Tromp's Theorem
-4 par of 263 bits.
+so our self-interpreter takes 232 bits, beating Tromp's Theorem 4 record of 263
+bits.
 
 The following demonstrates this self-interpreter in our "Fixity" compiler:
 
