@@ -22,8 +22,8 @@ with objectives:
 
   * Fill in missing type checks.
   * Improve parsing and error messages.
-  * Optimize the generated code, e.g. inlining.
-  * Optimize the compiler, e.g. replace association lists with something faster.
+  * Optimize the generated code, e.g. specialized code for case expressions.
+  * Optimize the compiler, e.g. replace association lists.
   * Experiment with bulk combinators.
   * Look into http://www.cs.cornell.edu/~ross/publications/eqsat/[equality
 saturation]: automating compiler optimization.

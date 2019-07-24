@@ -16,6 +16,8 @@ competition for years, and thrilled to finally participate.
 
 I implemented a variant of link:ION.html[the ION machine]
 along wth a variant of link:grind.html[the "Parity" compiler].
+Rather than link:asm.html[ION assembly], it emits the values that should
+be loaded directly into memory.
 
 Instead of allowing up to 128 combinators and using ASCII codes to make
 combinator indices friendlier, the combinators are numbered consecutively

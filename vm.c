@@ -70,7 +70,7 @@ void gc() {
   hp = np;
 }
 
-u app(u f, u x) {
+static inline u app(u f, u x) {
   mem[hp] = f;
   mem[hp + 1] = x;
   hp += 2;
@@ -127,17 +127,17 @@ void parse(char *s) {
   parseMore(str_get);
 }
 
-u arg(u n) { return mem[sp [n] + 1]; }
-u num(u n) { return mem[arg(n) + 1]; }
+static inline u arg(u n) { return mem[sp [n] + 1]; }
+static inline u num(u n) { return mem[arg(n) + 1]; }
 
-void lazy(u height, u f, u x) {
+static inline void lazy(u height, u f, u x) {
   u *p = mem + sp[height];
   *p = f;
   *++p = x;
   sp += height;
 }
 
-u apparg(u i, u j) { return app(arg(i), arg(j)); }
+static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
 void run(u (*get)(), void (*put)(u)) {
   u c;
@@ -464,7 +464,25 @@ int main(int argc, char **argv) {
   lvlup_file("fixity.hs");
   lvlup_file("typically.hs");
   lvlup_file("classy.hs");
-  lvlup_file("classy.hs");
+  lvlup_file("wip.hs");
+
+  parse(buf);
+  str =
+"undefined = undefined;"
+"(.) f g x = f (g x);"
+"id x = x;"
+"data Bool = True | False;"
+"ifz n x y = case intEq 0 n of { True -> x ; False -> y };"
+"showsInt n = let"
+"  { showsNonzero n = let { q = n/10 } in"
+"    ifz n id ((.) (showsNonzero q) (chr (ord '0'+(n-(q*10))):) )"
+"  } in ifz n ('0':) (showsNonzero n);"
+"tail xs = case xs of { [] -> undefined; (:) _ t -> t };"
+"main s = showsInt 554 [];"
+;
+  buf_reset();
+  run(str_get, buf_put);
+  *bufptr = 0;
 
   parse(buf);
   // fp_reset("classy.hs"); run(fp_get, pc);
@@ -476,6 +494,8 @@ int main(int argc, char **argv) {
 "infixr 3 &&;"
 "infixr 2 ||;"
 "infixr 0 $;"
+"class Eq a where { (==) :: a -> a -> Bool };"
+"instance Eq Int where { (==) = intEq };"
 "($) f x = f x;"
 "data Bool = True | False;"
 "ife a b c = case a of { True -> b ; False -> c };"

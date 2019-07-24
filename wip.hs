@@ -1,11 +1,13 @@
-------------------------------------------------------------------------
--- Type classes.
-------------------------------------------------------------------------
 infixr 9 .;
 infixr 5 : , ++;
 infixl 4 <*> , <$> , <* , *>;
-infixl 3 <|>;
+infix 4 == , <=;
+infixl 3 && , <|>;
+infixl 2 ||;
 infixr 0 $;
+
+class Eq a where { (==) :: a -> a -> Bool };
+instance Eq Int where { (==) = intEq };
 undefined = undefined;
 ($) f x = f x;
 id x = x;
@@ -24,11 +26,17 @@ not a = case a of { True -> False; False -> True };
 (||) f g = ife f True (ife g True False);
 (&&) f g = ife f (ife g True False) False;
 flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
-lstEq xs ys = case xs of
-  { [] -> flst ys True (\h t -> False)
-  ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
-  };
 (++) xs ys = flst xs ys (\x xt -> x:xt ++ ys);
+instance Eq a => Eq [a] where { (==) xs ys = case xs of
+  { [] -> case ys of
+    { [] -> True
+    ; (:) _ _ -> False
+    }
+  ; (:) x xt -> case ys of
+    { [] -> False
+    ; (:) y yt -> x == y && xt == yt
+    }
+  }};
 
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
 
@@ -44,8 +52,7 @@ map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
-lookupWith eq s = foldr (\h t -> fpair h (\k v -> ife (eq s k) (Just v) t)) Nothing;
-lstLookup = lookupWith lstEq;
+lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 data Type = TC String | TV String | TAp Type Type;
 data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
@@ -81,7 +88,7 @@ sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f inp = bind (sat' pred) (f inp);
-want f s inp = wantWith (lstEq s) f inp;
+want f s inp = wantWith (s ==) f inp;
 
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
@@ -90,7 +97,7 @@ digit = sat \x -> (x <= '9') && ('0' <= x);
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
 conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
 keyword s = spc (want varLex s);
-varId = spc (wantWith (\s -> not (lstEq "of" s || lstEq "where" s)) varLex);
+varId = spc (wantWith (\s -> not $ s == "of" || s == "where") varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
@@ -118,9 +125,9 @@ section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
   { R s -> False
-  ; V s -> lstEq s v
+  ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
-  ; L w t -> not ((lstEq v w) || not (isFree v t))
+  ; L w t -> not (v == w || not (isFree v t))
   ; Proof _ -> False
   };
 
@@ -140,8 +147,8 @@ eqAssoc x y = case x of
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
   ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
-precOf s precTab = fmaybe (lstLookup s precTab) 5 fst;
-assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
+precOf s precTab = fmaybe (lookup s precTab) 5 fst;
+assocOf s precTab = fmaybe (lookup s precTab) LAssoc snd;
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
 opFold precTab e xs = case xs of
   { [] -> e
@@ -169,7 +176,7 @@ arr a b = TAp (TAp (TC "->") a) b;
 
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (want opLex "->"));
-typeConstant = (\s -> ife (lstEq "String" s) (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
+typeConstant = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
 aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|>
   typeConstant <|> (TV <$> varId) <|>
   (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type aType <* spch ']')));
@@ -202,13 +209,9 @@ tops precTab = sepBy
   ) (spch ';');
 program' = sp *> (concat <$> many fixity) >>= tops;
 
-eqPre = fmaybe (program' $ "class Eq a where { (==) :: a -> a -> Bool };\n" ++
-  "instance Eq Int where { (==) = intEq };\n") undefined fst;
-
 program = (
-  (eqPre ++
   [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
-  , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]) ++) <$> program';
+  , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
 
 prims = let
   { ii = arr (TC "Int") (TC "Int")
@@ -227,7 +230,7 @@ ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '[':showInt n "]") (t . succ)) undefined ds 0;
+rank ds v = foldr (\d t -> ife (v == fst d) (\n -> '[':showInt n "]") (t . succ)) undefined ds 0;
 show ds t = case t of
   { R s -> s
   ; V v -> rank ds v
@@ -239,7 +242,7 @@ data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
 debruijn n e = case e of
   { R s -> Pass (R s)
-  ; V v -> foldr (\h m -> ife (lstEq h v) Ze (Su m)) (Pass (V v)) n
+  ; V v -> foldr (\h m -> ife (h == v) Ze (Su m)) (Pass (V v)) n
   ; A x y -> App (debruijn n x) (debruijn n y)
   ; L s t -> La (debruijn (s:n) t)
   ; Proof _ -> undefined
@@ -306,7 +309,7 @@ asm ds = dump ds ds;
 
 apply sub t = case t of
   { TC v -> t
-  ; TV v -> fmaybe (lstLookup v sub) t id
+  ; TV v -> fmaybe (lookup v sub) t id
   ; TAp a b -> TAp (apply sub a) (apply sub b)
   };
 
@@ -314,19 +317,19 @@ apply sub t = case t of
 
 occurs s t = case t of
   { TC v -> False
-  ; TV v -> lstEq s v
+  ; TV v -> s == v
   ; TAp a b -> occurs s a || occurs s b
   };
 
 varBind s t = case t of
   { TC v -> Just [(s, t)]
-  ; TV v -> ife (lstEq v s) (Just []) (Just [(s, t)])
+  ; TV v -> ife (v == s) (Just []) (Just [(s, t)])
   ; TAp a b -> ife (occurs s t) Nothing (Just [(s, t)])
   };
 
 mgu unify t u = case t of
   { TC a -> case u of
-    { TC b -> ife (lstEq a b) (Just []) Nothing
+    { TC b -> ife (a == b) (Just []) Nothing
     ; TV b -> varBind b t
     ; TAp a b -> Nothing
     }
@@ -345,7 +348,7 @@ unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
-  ; TV s -> case lstLookup s tab of
+  ; TV s -> case lookup s tab of
     { Nothing -> let { va = TV (s ++ '_':showInt n "") } in ((va, n + 1), (s, va):tab)
     ; Just v -> ((v, n), tab)
     }
@@ -370,8 +373,8 @@ instantiate qt n = case qt of { Qual ps t ->
 infer' typed loc ast csn = fpair csn \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
   { R s -> ((TC "Int", ast), csn)
-  ; V s -> fmaybe (lstLookup s loc)
-    (fmaybe (lstLookup s typed) undefined
+  ; V s -> fmaybe (lookup s loc)
+    (fmaybe (lookup s typed) undefined
       \ta -> fpair (instantiate (fst ta) n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
     ((, csn) . (, ast))
   ; A x y ->
@@ -384,26 +387,26 @@ infer' typed loc ast csn = fpair csn \cs n ->
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
 
-typeEq t u = case t of
+instance Eq Type where { (==) t u = case t of
   { TC s -> case u of
-    { TC t -> lstEq t s
+    { TC t -> t == s
     ; TV _ -> False
     ; TAp _ _ -> False
     }
   ; TV s ->  case u of
     { TC _ -> False
-    ; TV t -> lstEq t s
+    ; TV t -> t == s
     ; TAp _ _ -> False
     }
   ; TAp a b -> case u of
     { TC _ -> False
     ; TV _ -> False
-    ; TAp c d -> typeEq a c && typeEq b d
+    ; TAp c d -> a == c && b == d
     }
-  };
+  }};
 
-predEq p q = case p of { Pred s a -> case q of { Pred t b ->
-  lstEq s t && typeEq a b }};
+instance Eq Pred where { (==) p q =
+  case p of { Pred s a -> case q of { Pred t b -> s == t && a == b }}};
 
 predApply sub p = onType (apply sub) p;
 
@@ -411,14 +414,14 @@ all f = foldr (&&) True . map f;
 
 filter f = foldr (\x xs ->ife (f x) (x:xs) xs) [];
 
-intersect xs ys = filter (\x -> fmaybe (find (lstEq x) ys) False (\_ -> True)) xs;
+intersect xs ys = filter (\x -> fmaybe (find (x ==) ys) False (\_ -> True)) xs;
 
-merge s1 s2 = ife (all (\v -> typeEq (apply s1 $ TV v) (apply s2 $ TV v))
+merge s1 s2 = ife (all (\v -> apply s1 (TV v) == apply s2 (TV v))
   $ map fst s1 `intersect` map fst s2) (Just $ s1 ++ s2) Nothing;
 
 match h t = case h of
   { TC a -> case t of
-    { TC b -> ife (lstEq a b) (Just []) Nothing
+    { TC b -> ife (a == b) (Just []) Nothing
     ; TV b -> Nothing
     ; TAp a b -> Nothing
     }
@@ -454,8 +457,8 @@ findInst r qn p insts = case insts of
       (r (predApply u p) qn1)) (qn, V (case p of { Pred s _ -> showPred $ Pred s h})) ps
   }}};
 
-findProof is pred psn = fpair psn \ps n -> case lookupWith predEq pred ps of
-  { Nothing -> case pred of { Pred s t -> case lstLookup s is of
+findProof is pred psn = fpair psn \ps n -> case lookup pred ps of
+  { Nothing -> case pred of { Pred s t -> case lookup s is of
     { Nothing -> undefined  -- No instances!
     ; Just insts -> findInst (findProof is) psn pred insts
     }}
@@ -483,7 +486,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv typed qi def = fpair def \s expr ->
   fpair (infer' typed [] expr (Just [], 0)) \ta msn ->
-  case lstLookup s typed of
+  case lookup s typed of
     { Nothing -> undefined -- No such method.
     -- e.g. qac = Eq a => a -> a -> Bool, some AST (product of single method)
     ; Just qac -> fpair msn \ms n -> case ms of
@@ -507,8 +510,7 @@ genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
 
 inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in
-  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct
-    $ map fst ds) (map (inferMethod ienv typed q) ds)) (map snd $ fst $ dictVars ps 0))
+  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv typed q) ds)) (map snd $ fst $ dictVars ps 0))
   };
 
 reverse = foldl (flip (:)) [];
@@ -543,7 +545,7 @@ fneat neat f = case neat of { Neat a b c -> f a b c };
 
 select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
 
-addInstance s q is = fpair (select (\kv -> lstEq s (fst kv)) is []) \m xs -> case m of
+addInstance s q is = fpair (select (\kv -> s == fst kv) is []) \m xs -> case m of
   { Nothing -> (s, [q]):xs
   ; Just sqs -> second (q:) sqs:xs
   };

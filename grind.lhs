@@ -61,6 +61,11 @@ Because of the link:scott.html[simplistic way we convert case expressions to
 lambda calculus], our compiler expects case expressions to list out each data
 constructor in the order they are given in their `data` declaration.
 
+We pay a heavy price for simplicity. When a case expression is evaluated, we
+copy the address of each alternative to the stack, only to eventually eliminate
+all but one. Furthermore, we copy and delete these addresses by evaluating
+intricate sequences of B and K combinators.
+
 ++++++++++
 <p><a onclick='hideshow("algebraically");'>&#9654; Toggle Source</a></p>
 <div id='algebraically' style='display:none'>

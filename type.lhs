@@ -197,6 +197,18 @@ to a record of functions for integer equality testing, and "Eq [a]" to a
 function that takes a "Eq a" and returns a record of functions for equality
 testing on lists of type `a`.
 
+Overloading complicates our handling of recursion. For example,
+each occurrence of `(==)` in:
+
+------------------------------------------------------------------------
+instance Eq (Int, String) where (x, y) == (z, w) = x == z && y == w
+------------------------------------------------------------------------
+
+refers to a distinct function, so introducing the `Y` combinator here is
+incorrect. We should only look for recursion after type inference expands
+them to `select-== Dict-Eq-Int` and `select-== Dict-Eq-String`, and we
+look for recursion at the level of dictionaries.
+
 Among the many deficiencies in our compiler: we lack support for class
 contexts; our code allows instances to stomp over one another; our algorithm
 for finding proofs may not terminate.
