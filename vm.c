@@ -2,6 +2,7 @@ typedef unsigned u;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 enum { FORWARD = 27, REDUCING = 9, RECUR = 10 };
 
@@ -55,7 +56,7 @@ u copy(u n) {
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
-  mem[z + 1] = x == '#' || x == '0' ? y : copy(y);
+  mem[z + 1] = x == 'a' || x == '#' || x == '0' ? y : copy(y);
   return z;
 }
 
@@ -96,6 +97,15 @@ u parseTerm(u (*get)()) {
       n = 0;
       while ((c = get()) != ']') n = 10*n + c - '0';
       return tab[n];
+    case 'a': {
+      u m = 0;
+      while ((c = get()) != ',') m = 10*m + c - '0';
+      n = 0;
+      while ((c = get()) != ',') n = 10*n + c - '0';
+      u t = 0;
+      while ((c = get()) != ',') t = 10*t + c - '0';
+      return app('a', (m<<16) + (n<<8) + t);
+    }
     default: return c;
   }
 }
@@ -134,20 +144,26 @@ static inline void lazy(u height, u f, u x) {
   u *p = mem + sp[height];
   *p = f;
   *++p = x;
-  sp += height;
+  sp += height - 1;
+  *sp = f;
 }
 
 static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
 void run(u (*get)(), void (*put)(u)) {
   u c;
+  clock_t start = clock();
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
     static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
     u x = *sp;
     if (x < 128) switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
-      case '.': printf("HP = %u\n", hp); return;
+      case '.': {
+        clock_t end = clock();
+        fprintf(stderr, "time = %lfms, HP = %u\n", (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
+        return;
+      }
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
@@ -167,6 +183,19 @@ void run(u (*get)(), void (*put)(u)) {
       case '%': lazy(2, '#', num(1) % num(2)); break;
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
+      case 'a': {
+        u mnt = arg(1);
+        u m = mnt>>16;
+        u n = (mnt>>8)&255;
+        u t = mnt&255;
+        u f = arg(1 + n + 1 + m);
+        sp += 2;
+        for (; n; n--) f = app(f, mem[*sp++ + 1]);
+        sp += t - 1;
+        mem[*sp] = 'I';
+        mem[*sp + 1] = f;
+        break;
+      }
       default: printf("?%u\n", x); die("unknown combinator");
     } else {
       *--sp = mem[x];
@@ -465,6 +494,7 @@ int main(int argc, char **argv) {
   lvlup_file("typically.hs");
   lvlup_file("classy.hs");
   lvlup_file("wip.hs");
+  lvlup_file("wip.hs");
 
   parse(buf);
   str =
@@ -473,20 +503,35 @@ int main(int argc, char **argv) {
 "id x = x;"
 "data Bool = True | False;"
 "ifz n x y = case intEq 0 n of { True -> x ; False -> y };"
+"(!!) xs n = case xs of { [] -> undefined; (:) h t -> ifz n h (t!!(n - 1)) };"
+"tail xs = case xs of { [] -> undefined; (:) _ t -> t };"
+"zipWith f xs ys = case xs of"
+"  { [] -> []"
+"  ; (:) x xt -> case ys of"
+"    { [] -> []"
+"    ; (:) y yt -> f x y : zipWith f xt yt"
+"    }"
+"  };"
+"fibs = 0 : (1 : zipWith (+) fibs (tail fibs));"
+
+"hd xs = case xs of { [] -> undefined; (:) h _ -> h };"
+"fst p = case p of { (,) x y -> x };"
 "showsInt n = let"
 "  { showsNonzero n = let { q = n/10 } in"
 "    ifz n id ((.) (showsNonzero q) (chr (ord '0'+(n-(q*10))):) )"
 "  } in ifz n ('0':) (showsNonzero n);"
-"tail xs = case xs of { [] -> undefined; (:) _ t -> t };"
-"main s = showsInt 554 [];"
+
+"main s = showsInt (fibs !! 20) \"\\n\";"
 ;
   buf_reset();
+puts("?");  // Printing this appears to improve running times?!
   run(str_get, buf_put);
   *bufptr = 0;
 
   parse(buf);
   // fp_reset("classy.hs"); run(fp_get, pc);
   str =
+/*
 "infixl 6 + , -;"
 "infixl 7 *;"
 "infixr 5 : , ++;"
@@ -503,7 +548,10 @@ int main(int argc, char **argv) {
 "foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
 "elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
 "lvlup s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
+*/
+""
 ;
   run(str_get, pc);
+
   return 0;
 }
