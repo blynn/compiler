@@ -9,7 +9,7 @@ enum { FORWARD = 27, REDUCING = 9, RECUR = 10 };
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
 enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u mem[TOP], np, *sp, *spTop, hp;
+u mem[TOP], np, *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
@@ -78,7 +78,26 @@ static inline u app(u f, u x) {
   return hp - 2;
 }
 
-u tab[TABMAX], tabn;
+void reset(u root) {
+  *(sp = spTop) = app(
+    app(app(root, app('0', '?')), '.'), app('T', '1'));
+}
+
+void loadRaw(u (*get)()) {
+  hp = 128;
+  for (;;) {
+    u c = get();
+    if (!c) break;
+    u n = 0;
+    for (;;) {
+      if (c < '0' || c > '9') break;
+      n = 10*n + c - '0';
+      c = get();
+    }
+    mem[hp++] = n;
+  }
+  reset(mem[--hp]);
+}
 
 u parseTerm(u (*get)()) {
   u n, c;
@@ -97,28 +116,15 @@ u parseTerm(u (*get)()) {
       n = 0;
       while ((c = get()) != ']') n = 10*n + c - '0';
       return tab[n];
-    case 'a': {
-      u m = 0;
-      while ((c = get()) != ',') m = 10*m + c - '0';
-      n = 0;
-      while ((c = get()) != ',') n = 10*n + c - '0';
-      u t = 0;
-      while ((c = get()) != ',') t = 10*t + c - '0';
-      return app('a', (m<<16) + (n<<8) + t);
-    }
     default: return c;
   }
 }
-
-void reset(u root) { *(sp = spTop) = root; }
 
 void parseMore(u (*get)()) {
   for(;;) {
     u c = parseTerm(get);
     if (!c) {
-      reset(app(
-            app(app(tab[tabn - 1], app('0', '?')), '.'),
-            app('T', '1')));
+      reset(tab[tabn - 1]);
       return;
     }
     if (tabn == TABMAX) die ("table overflow");
@@ -135,6 +141,11 @@ void parse(char *s) {
   tabn = 0;
   str = s;
   parseMore(str_get);
+}
+
+void parseRaw(char *s) {
+  str = s;
+  loadRaw(str_get);
 }
 
 static inline u arg(u n) { return mem[sp [n] + 1]; }
@@ -188,10 +199,10 @@ void run(u (*get)(), void (*put)(u)) {
         u m = mnt>>16;
         u n = (mnt>>8)&255;
         u t = mnt&255;
-        u f = arg(1 + n + 1 + m);
         sp += 2;
+        u f = arg(m);
         for (; n; n--) f = app(f, mem[*sp++ + 1]);
-        sp += t - 1;
+        sp += t;
         mem[*sp] = 'I';
         mem[*sp + 1] = f;
         break;
@@ -472,6 +483,15 @@ void lvlup_file(char *filename) {
   *bufptr = 0;
 }
 
+void lvlup_file_raw(char *filename) {
+  printf("loading %s...\n", filename);
+  parseRaw(buf);
+  fp_reset(filename);
+  buf_reset();
+  run(fp_get, buf_put);
+  *bufptr = 0;
+}
+
 int main(int argc, char **argv) {
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
@@ -493,10 +513,11 @@ int main(int argc, char **argv) {
   lvlup_file("fixity.hs");
   lvlup_file("typically.hs");
   lvlup_file("classy.hs");
-  lvlup_file("wip.hs");
-  lvlup_file("wip.hs");
+  lvlup_file("barely.hs");
+  lvlup_file("barely.hs");
+  lvlup_file_raw("barely.hs");
+  parseRaw(buf);
 
-  parse(buf);
   str =
 "undefined = undefined;"
 "(.) f g x = f (g x);"
@@ -528,29 +549,8 @@ puts("?");  // Printing this appears to improve running times?!
   run(str_get, buf_put);
   *bufptr = 0;
 
-  parse(buf);
-  // fp_reset("classy.hs"); run(fp_get, pc);
-  str =
-/*
-"infixl 6 + , -;"
-"infixl 7 *;"
-"infixr 5 : , ++;"
-"infix 4 == , <=;"
-"infixr 3 &&;"
-"infixr 2 ||;"
-"infixr 0 $;"
-"class Eq a where { (==) :: a -> a -> Bool };"
-"instance Eq Int where { (==) = intEq };"
-"($) f x = f x;"
-"data Bool = True | False;"
-"ife a b c = case a of { True -> b ; False -> c };"
-"flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
-"foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
-"elem k xs = foldr (\\x t -> ife (x == k) True t) False xs;"
-"lvlup s = ife (1+2*3 == 7) ('s':'u':'c':\"cess\n\") $ (\\x -> x) \"FAIL\n\";;."
-*/
-""
-;
+  parseRaw(buf);
+  str = "";
   run(str_get, pc);
 
   return 0;

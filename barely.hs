@@ -1,4 +1,6 @@
 infixr 9 .;
+infixl 7 *;
+infixl 6 + , -;
 infixr 5 : , ++;
 infixl 4 <*> , <$> , <* , *>;
 infix 4 == , <=;
@@ -42,7 +44,7 @@ maybe n j m = case m of { Nothing -> n; Just x -> j x };
 
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldr1 c l = maybe undefined id (flst l undefined (\h t -> foldr (\x m -> Just (case m of { Nothing -> x ; Just y -> c x y })) Nothing l));
-foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
+foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
@@ -55,7 +57,9 @@ fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 data Type = TC String | TV String | TAp Type Type;
-data Ast = R String | V String | A Ast Ast | L String Ast | Pick Int Int Int | Proof Pred;
+data Ast = R Int | V String | A Ast Ast | L String Ast | Pick Int Int Int | Proof Pred;
+
+ro c = R $ ord c;
 
 pure x = \inp -> Just (x, inp);
 sat' f = \h t -> ife (f h) (pure h t) Nothing;
@@ -106,8 +110,8 @@ anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (\c -> R ('#':itemize c)) (escChar <|> sat (\c -> not (c == delim)));
-litInt = R . ('(':) . (++ ")") <$> spc (some digit);
+litOne delim = fmap ro (escChar <|> sat (\c -> not (c == delim)));
+litInt = R . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
@@ -124,7 +128,7 @@ rightSect r = ((\v a -> A (A (V "\\C") (V v)) a) <$> (op <|> (itemize <$> spch '
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
-  { R s -> False
+  { R _ -> False
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w || not (isFree v t))
@@ -217,29 +221,20 @@ program = (
 prims = let
   { ii = arr (TC "Int") (TC "Int")
   ; iii = arr (TC "Int") ii
-  ; bin s = R $ "``BT`T" ++ s } in map (second (first noQual)) $
-    [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), R "Y"))
-    , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), R "C"))
-    , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "="))
-    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "L"))
-    , ("chr", (ii, R "I"))
-    , ("ord", (ii, R "I"))
-    , ("succ", (ii, R "`T`(1)+"))
-    ] ++ map (\s -> (s, (iii, bin s))) ["+", "-", "*", "/", "%"];
+  ; bin s = A (A (ro 'B') (ro 'T')) (A (ro 'T') (ro s)) } in map (second (first noQual)) $
+    [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), ro 'Y'))
+    , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), ro 'C'))
+    , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
+    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("chr", (ii, ro 'I'))
+    , ("ord", (ii, ro 'I'))
+    , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
+    ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
-rank ds v = foldr (\d t -> ife (v == fst d) (\n -> '[':showInt n "]") (t . succ)) undefined ds 0;
-show ds t = case t of
-  { R s -> s
-  ; V v -> rank ds v
-  ; A x y -> '`':show ds x ++ show ds y
-  ; L w t -> undefined
-  ; Pick m n t -> 'a':showInt m "," ++ showInt n "," ++ showInt t ","
-  ; Proof _ -> undefined
-  };
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
 debruijn n e = case e of
@@ -254,30 +249,30 @@ debruijn n e = case e of
 data Sem = Defer | Closed Ast | Need Sem | Weak Sem;
 
 ldef = \r y -> case y of
-  { Defer -> Need (Closed (A (A (R "S") (R "I")) (R "I")))
-  ; Closed d -> Need (Closed (A (R "T") d))
-  ; Need e -> Need (r (Closed (A (R "S") (R "I"))) e)
-  ; Weak e -> Need (r (Closed (R "T")) e)
+  { Defer -> Need (Closed (A (A (ro 'S') (ro 'I')) (ro 'I')))
+  ; Closed d -> Need (Closed (A (ro 'T') d))
+  ; Need e -> Need (r (Closed (A (ro 'S') (ro 'I'))) e)
+  ; Weak e -> Need (r (Closed (ro 'T')) e)
   };
 
 lclo = \r d y -> case y of
   { Defer -> Need (Closed d)
   ; Closed dd -> Closed (A d dd)
-  ; Need e -> Need (r (Closed (A (R "B") d)) e)
+  ; Need e -> Need (r (Closed (A (ro 'B') d)) e)
   ; Weak e -> Weak (r (Closed d) e)
   };
 
 lnee = \r e y -> case y of
-  { Defer -> Need (r (r (Closed (R "S")) e) (Closed (R "I")))
-  ; Closed d -> Need (r (Closed (A (R "R") d)) e)
-  ; Need ee -> Need (r (r (Closed (R "S")) e) ee)
-  ; Weak ee -> Need (r (r (Closed (R "C")) e) ee)
+  { Defer -> Need (r (r (Closed (ro 'S')) e) (Closed (ro 'I')))
+  ; Closed d -> Need (r (Closed (A (ro 'R') d)) e)
+  ; Need ee -> Need (r (r (Closed (ro 'S')) e) ee)
+  ; Weak ee -> Need (r (r (Closed (ro 'C')) e) ee)
   };
 
 lwea = \r e y -> case y of
   { Defer -> Need e
   ; Closed d -> Weak (r e (Closed d))
-  ; Need ee -> Need (r (r (Closed (R "B")) e) ee)
+  ; Need ee -> Need (r (r (Closed (ro 'B')) e) ee)
   ; Weak ee -> Weak (r e ee)
   };
 
@@ -293,13 +288,15 @@ babs t = case t of
   ; Su x -> Weak (babs x)
   ; Pass s -> Closed s
   ; La t -> case babs t of
-    { Defer -> Closed (R "I")
-    ; Closed d -> Closed (A (R "K") d)
+    { Defer -> Closed (ro 'I')
+    ; Closed d -> Closed (A (ro 'K') d)
     ; Need e -> e
-    ; Weak e -> babsa (Closed (R "K")) e
+    ; Weak e -> babsa (Closed (ro 'K')) e
     }
   ; App x y -> babsa (babs x) (babs y)
   };
+
+data Mem = Mem [(String, Int)] Int [Int];
 
 nolam x = case babs (debruijn [] x) of
   { Defer -> undefined
@@ -307,8 +304,23 @@ nolam x = case babs (debruijn [] x) of
   ; Need e -> undefined
   ; Weak e -> undefined
   };
-dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
-asm ds = dump ds ds;
+
+enc mem t = case t of
+  { R n -> (n, mem)
+  ; V v -> case mem of { Mem tab _ _ -> (fmaybe (lookup v tab) undefined id, mem) }
+  ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
+    case mem'' of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (q:p:bs)) }
+  ; L w t -> undefined
+  ; Pick m n t -> enc mem (A (ro 'a') (R $ (m + n) * 65536 + n * 256 + t))
+  ; Proof _ -> undefined
+  };
+
+prependRoot mem = case mem of {
+  Mem tab _ bs -> flst tab undefined (\x _ -> snd x):bs};
+
+asm ds = prependRoot $ foldl (\m def -> fpair def \s t ->
+  fpair (enc m $ nolam t) \p m' -> case m' of
+     { Mem tab hp bs -> Mem ((s, p):tab) hp bs }) (Mem [] 128 []) ds;
 
 apply sub t = case t of
   { TC v -> t
@@ -375,7 +387,7 @@ instantiate qt n = case qt of { Qual ps t ->
 --infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
 infer' typed loc ast csn = fpair csn \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
-  { R s -> ((TC "Int", ast), csn)
+  { R c -> ((TC "Int", A (ro '#') ast), csn)
   ; V s -> fmaybe (lookup s loc)
     (fmaybe (lookup s typed) undefined
       \ta -> fpair (instantiate (fst ta) n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
@@ -540,7 +552,7 @@ index n s ss = case ss of
 length = foldr (\_ n -> n + 1) 0;
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
-  , Pick (index 0 s $ map conOf cs) (length ts) (length cs)))
+  , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
   };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
@@ -583,5 +595,5 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
-  ; Right qas -> asm $ map (second snd) qas
+  ; Right qas -> concatMap (\n -> showInt n ";") $ reverse $ asm $ map (second snd) qas
   };
