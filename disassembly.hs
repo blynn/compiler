@@ -18,6 +18,7 @@ flip f x y = f y x;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
+pair f p = case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
 first f p = fpair p \x y -> (f x, y);
@@ -28,6 +29,7 @@ not a = case a of { True -> False; False -> True };
 (||) f g = ife f True (ife g True False);
 (&&) f g = ife f (ife g True False) False;
 flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
+lst n c xs = case xs of { [] -> n; (:) h t -> c h t };
 (++) xs ys = flst xs ys (\x xt -> x:xt ++ ys);
 instance Eq a => Eq [a] where { (==) xs ys = case xs of
   { [] -> case ys of
@@ -296,14 +298,14 @@ babs t = case t of
   ; App x y -> babsa (babs x) (babs y)
   };
 
-data Mem = Mem [(String, Int)] Int [Int];
-
 nolam x = case babs (debruijn [] x) of
   { Defer -> undefined
   ; Closed d -> d
   ; Need e -> undefined
   ; Weak e -> undefined
   };
+
+data Mem = Mem [(String, Int)] Int [Int];
 
 enc mem t = case t of
   { R n -> (n, mem)
@@ -589,6 +591,25 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
 
+swp = pair \a b -> (b, a);
+(!!) xs n = flst xs undefined (\x xt -> ifz n x (xt!!(n - 1)));
+
+disasm m = case m of { Mem tab _ bs -> let
+  { tab' = map swp tab
+  ; ram = reverse bs
+  ; decodeApp decode n = let
+    { x = ram!!(n - 128)
+    ; y = ram!!(n - 128 + 1)
+    } in "(" ++ decode x ++ " " ++ ife (x == ord 'a' || x == ord '#') (showInt y "") (decode y) ++ ")"
+  ; decode n = ife (128 <= n) (case lookup n tab' of
+    { Nothing -> decodeApp decode n
+    ; Just s -> s
+    }) (chr n:"")
+  ; decode1 n = ife (128 <= n) (decodeApp decode n) (chr n:"")
+  } in concatMap (pair \def addr ->
+    def ++ " = " ++ decode1 addr ++ "\n"
+  ) tab };
+
 prepAsm mem = reverse $ case mem of {
   Mem tab _ bs -> flst tab undefined (\x _ -> snd x):bs};
 
@@ -596,4 +617,10 @@ compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
   ; Right qas -> concatMap (\n -> showInt n ";") $ prepAsm $ asm $ map (second snd) qas
+  };
+
+dumpAsm s = fmaybe (program s) "parse error" \progRest ->
+  fpair progRest \prog rest -> case infer prog of
+  { Left err -> err
+  ; Right qas -> disasm $ asm $ map (second snd) qas
   };

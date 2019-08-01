@@ -86,7 +86,8 @@ void reset(u root) {
 void loadRaw(u (*get)()) {
   hp = 128;
   for (;;) {
-    u c = get();
+    u c;
+		do c = get(); while (c && (c < '0' || c > '9'));
     if (!c) break;
     u n = 0;
     for (;;) {
@@ -458,7 +459,10 @@ void runTests() {
 }
 
 FILE *fp;
-void fp_reset(char *f) { fp = fopen(f, "r"); }
+void fp_reset(char *f) {
+	fp = fopen(f, "r");
+	if (!fp) die("fopen failed");
+}
 u fp_get() {
   u c = fgetc(fp);
   return c == EOF ? fclose(fp), 0 : c;
@@ -475,7 +479,7 @@ void lvlup(char *prog) {
 }
 
 void lvlup_file(char *filename) {
-  printf("loading %s...\n", filename);
+  fprintf(stderr, "loading %s...\n", filename);
   parse(buf);
   fp_reset(filename);
   buf_reset();
@@ -484,7 +488,7 @@ void lvlup_file(char *filename) {
 }
 
 void lvlup_file_raw(char *filename) {
-  printf("loading %s...\n", filename);
+  fprintf(stderr, "loading %s...\n", filename);
   parseRaw(buf);
   fp_reset(filename);
   buf_reset();
@@ -492,14 +496,9 @@ void lvlup_file_raw(char *filename) {
   *bufptr = 0;
 }
 
-int main(int argc, char **argv) {
-  buf_end = buf + BUFMAX;
-  spTop = mem + TOP - 1;
-  bufptr = buf + 2;
-
-  if (argc > 1) return runTests(), 0;
-
+void rpg() {
   strcpy(buf, "I;");
+  bufptr = buf + 2;
   lvlup(parenthetically);
   lvlup(exponentially);
   lvlup(practically);
@@ -516,8 +515,23 @@ int main(int argc, char **argv) {
   lvlup_file("barely.hs");
   lvlup_file("barely.hs");
   lvlup_file_raw("barely.hs");
-  parseRaw(buf);
+  puts(buf);
+}
 
+void dis() {
+  fp_reset("raw");
+	loadRaw(fp_get);
+  fp_reset("disassembly.hs");
+  buf_reset();
+  run(fp_get, buf_put);
+  parseRaw(buf);
+  fp_reset("disassembly.hs");
+  run(fp_get, pc);
+}
+
+void fib() {
+  fp_reset("raw");
+	loadRaw(fp_get);
   str =
 "undefined = undefined;"
 "(.) f g x = f (g x);"
@@ -545,13 +559,24 @@ int main(int argc, char **argv) {
 "main s = showsInt (fibs !! 20) \"\\n\";"
 ;
   buf_reset();
-puts("?");  // Printing this appears to improve running times?!
   run(str_get, buf_put);
   *bufptr = 0;
 
   parseRaw(buf);
   str = "";
   run(str_get, pc);
+}
 
-  return 0;
+int main(int argc, char **argv) {
+  buf_end = buf + BUFMAX;
+  spTop = mem + TOP - 1;
+
+  if (argc > 1) {
+    if (!strcmp(argv[1], "test")) return runTests(), 0;
+    if (!strcmp(argv[1], "rpg")) return rpg(), 0;
+    if (!strcmp(argv[1], "fib")) return fib(), 0;
+    if (!strcmp(argv[1], "dis")) return dis(), 0;
+		return puts("bad command"), 0;
+	}
+	return 0;
 }
