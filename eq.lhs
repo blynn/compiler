@@ -102,7 +102,8 @@ Offloading equational reasoning to computers may be for the common good of all.
 
 How good are computers at equational reasoning?
 
-In 1996, the EQP program showed that
+In 1996, ftp://ftp.mcs.anl.gov/pub/tech_reports/reports/P642.pdf[McCune ran the
+EQP program] to prove that
 https://en.wikipedia.org/wiki/Robbins_algebra[Robbins algebras are Boolean],
 solving an open problem that had defied generations of gifted mathematicians.
 What's more, it only took 8 days and 30 megabytes on an
@@ -656,8 +657,8 @@ reading, as it teaches how to systematically find hypergeometric identities,
 which hitherto had been accomplished by a mathematical analogue of alchemy.
 
 We didn't make it to Robbins algebras. A big obstacle is commutativity: how
-can we handle "x + y = y + x" in our framework? See Harrison for references,
-or section 7 of
+can we handle "x + y = y + x" in our framework? See McCune or Harrison for
+references or section 7 of
 http://www.cs.tau.ac.il/~nachum/papers/taste-fixed.pdf[Dershowitz, 'A Taste of
 Rewrite Systems']. (Our sorting demo comes from the latter.)
 

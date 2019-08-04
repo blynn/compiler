@@ -515,7 +515,6 @@ void rpg() {
   lvlup_file("barely.hs");
   lvlup_file("barely.hs");
   lvlup_file_raw("barely.hs");
-  puts(buf);
 }
 
 void dis() {
@@ -573,10 +572,16 @@ int main(int argc, char **argv) {
 
   if (argc > 1) {
     if (!strcmp(argv[1], "test")) return runTests(), 0;
-    if (!strcmp(argv[1], "rpg")) return rpg(), 0;
+    if (!strcmp(argv[1], "rpg")) return rpg(), puts(buf), 0;
     if (!strcmp(argv[1], "fib")) return fib(), 0;
     if (!strcmp(argv[1], "dis")) return dis(), 0;
 		return puts("bad command"), 0;
 	}
+	rpg();
+	fp_reset("raw");
+  str = buf;
+	u c;
+	while ((c = str_get())) if (c != fp_get()) die("raw check failed!");
+	puts("OK");
 	return 0;
 }

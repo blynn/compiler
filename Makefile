@@ -2,9 +2,9 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^; closure-compiler $@ > $@.clo; mv $@.clo $@
 

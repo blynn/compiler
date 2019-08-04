@@ -85,7 +85,7 @@ point of the program.
 
 The `main()` function checks if the first memory location is zero. If so, it
 decodes the compiler into the heap. Otherwise, it sets the heap pointer and
-entry point. This check also decides whether to print a certain footer on
+entry point. This check also determines whether to print a certain footer on
 program termination.
 
 Instead of `T1`, the equivalent of link:parse.html[`wrapIO`] uses what we might
@@ -102,7 +102,7 @@ remember how it works. I believe in such cases, since the top of memory
 contains zeroes, it overwrites the contents of the first two cells, which is
 harmless because the heap starts from 24.
 
-== Hindsight ==
+== The Ideas of March ==
 
 Shortly after the contest deadline, I found I could easily shrink the code
 further. Firstly, there were many expressions of the form:

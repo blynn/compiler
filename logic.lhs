@@ -156,10 +156,10 @@ easily digestible pieces.
 
 The design of our code is similar to
 http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf[the basic
-parser combinators described by Swierstra], where a parser combinator is a
-function taking a string and returning the list of all possible ways it can
-parse the beginning of the input string. Included with each solution is the
-unparsed remainder of the string.
+parser combinators described by Swierstra]. A parser combinator is a function
+taking a string and returning the list of all possible ways it can parse the
+beginning of the input string. Included with each solution is the unparsed
+remainder of the string.
 
 There are a few primitive parser combinators that, for instance, parse a single
 character satisfying a given condition. Then there are functions that stitch
@@ -525,8 +525,7 @@ https://en.wikipedia.org/wiki/Answer_set_programming[Answer set programming
 declared. Instead of depth-first search, it uses state-of-the-art SAT-solver
 techniques.
 
-As for less arcane logic programming, researchers are tidying up by
-investigating, for example,
+Researchers are also tidying up by investigating, for example,
 https://gup.ub.gu.se/file/207634[how types can help], or
 https://pdfs.semanticscholar.org/3e0a/ff0f1e287b06deb427d56a2696af8228dd61.pdf[how to apply
 equational reasoning].
@@ -545,8 +544,9 @@ building blocks for rich data structures such as abstract syntax trees.
 My starting point was
 http://webyrd.net/scheme-2013/papers/HemannMuKanren2013.pdf[the paper on
 microKanren], which uses a Lisp-like language. I found simplifications thanks
-to Haskell's lazy evaluation, and list monad.
-On the other hand, Lisp's homoiconicity is certainly seductive.
+to Haskell's lazy evaluation, and list monad (only to discover later these
+improvements were well-known). On the other hand, Lisp's homoiconicity is
+certainly seductive.
 
 The literature mentions monads frequently (there's even a
 http://hackage.haskell.org/package/logict[LogicT monad transformer]) but I

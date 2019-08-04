@@ -27,16 +27,16 @@ with objectives:
   * Experiment with bulk combinators.
   * Look into http://www.cs.cornell.edu/~ross/publications/eqsat/[equality
 saturation]: automating compiler optimization.
-  * Investigate automatic theorem proving, so we can generate
-programs from their types.
-  * How does http://nautilus.cs.miyazaki-u.ac.jp/~skata/MagicHaskeller.html[MagicHaskeller] work?!
-I'd love to generate programs from test cases.
   * Simulate an ION machine in WebAssembly, allowing for a client-side web
   Haskell REPL.
   * Improve on Haskell, e.g. see suggestions by
   https://medium.com/daml-driven/four-tweaks-to-improve-haskell-b1de9c87f816[Neil Mitchell]
   and
   https://gist.github.com/taktoa/a59400fd3e1c400835b60c416ad33952[Remy Goldschmidt].
+  * Program synthesis:
+    - Automatic theorem proving: generate programs from their types.
+    - How does http://nautilus.cs.miyazaki-u.ac.jp/~skata/MagicHaskeller.html[MagicHaskeller] work?! It generates programs from test cases.
+    - link:differ.html[Differentiable programming]: generate approximately correct programs from test cases.
 
 [source,c]
 ------------------------------------------------------------------------

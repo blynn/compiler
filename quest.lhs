@@ -89,8 +89,8 @@ be removed before feeding.
 Our next compiler rewrites lambda expressions as combinators using the
 straightforward bracket abstraction algorithm we described earlier.
 
-We start with some defintiions that make our code more readable, but
-which are equivalent to the combinators I, K, T, C, Y, and K, respectively:
+The following are friendlier names for the combinators I, K, T, C, Y, and K,
+respectively.
 
 ------------------------------------------------------------------------
 id x = x;
@@ -260,8 +260,8 @@ unlam v t = occurs v t
 (I'm unsure if it's worth explaining the optimization in words as I only
 understood after fiddling around with combinators. Here goes anyway: I think of
 S as unconditionally passing a variable to both children of an application
-node. With a little analysis, we can tell when one or both children have no
-need for the variable.)
+node. With a little analysis, we can tell when a child has no need for the
+variable.)
 
 We rewrite these with one-character variable names and Y combinators, and
 use `@`-indexing to refer to other definitions:
