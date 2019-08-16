@@ -192,7 +192,7 @@ instance, and we have:
 ------------------------------------------------------------------------
 
 This works, because our compiler has previously processed all class and
-instance declarations, and has prepared the symbol table so that maps "Eq Int"
+instance declarations, and has prepared the symbol table to map "Eq Int"
 to a record of functions for integer equality testing, and "Eq [a]" to a
 function that takes a "Eq a" and returns a record of functions for equality
 testing on lists of type `a`.

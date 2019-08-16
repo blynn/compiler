@@ -221,3 +221,10 @@ meaningless, as Doron Zeilberger spiritedly opines].
 If this turns out to be the case, then I'll be annoyed because of the time I
 spent learning a lot of this stuff. But no matter what, it'll always be fun to
 seek tinier self-interpreters!
+
+Turing machine golf is also possible, though more painful.
+https://www.scottaaronson.com/busybeaver.pdf[Yedidia and Aaronson find small
+Turing machines] related to Busy Beaver numbers, the Goldbach conjecture, and
+the Riemann hypothesis, which were
+https://www.scottaaronson.com/blog/?p=2741[later shrunk further].
+Porting combinators to Turing machines may compare well with their approach.

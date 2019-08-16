@@ -4,10 +4,7 @@ One of the many problems with link:lambda.html[our "ultimate" compiler] is that
 we used a rich powerful language based on lambda calculus to build a shoddy
 compiler for bare-bones lambda calculus.
 
-Let us begin anew from C, which is so close to the metal that we can see how we
-could start from assembly language if we had to. Also, C compilers are
-available on countless platforms.
-
+Let us begin anew from a lower level.
 We take a page from Knuth's 'The Art of Computer Programming' and introduce a
 mythical computer: the International Obfuscated Nonce (ION) machine, so named
 because it's based on a one-time random design used in link:ioccc.html[an entry
@@ -17,12 +14,8 @@ The basic unit of data is a 32-bit word. Memory is an array of 32-bit words,
 indexed by 32-bit words. Among the registers are the heap pointer HP and the
 stack pointer SP. The instruction set consists of the usual suspects: loading
 and storing words, arithmetic, jumps. The contents of memory are initially
-undefined.
-
-Our compiler generates C code that simulates this machine, though we first
-describe it at a higher level. By abuse of notation, `Int` means the type of
-32-bit words. (Using `Word32` requires more imports and conversions here and
-there.)
+undefined. We write `Int` for the type of 32-bit words. (Using `Word32`
+requires more imports and conversions here and there.)
 
 ++++++++++
 <script>
@@ -56,9 +49,9 @@ import System.IO
 data VM = VM { sp :: Int, hp :: Int, mem :: Map Int Int }
 \end{code}
 
-We introduce a base type for 32-bit words, so we can take advantage of native
-32-bit words. We also introduce combinators that correspond to the native
-artihmetic instructions.
+We take advantage of native 32-bit words rather than encode numbers in pure
+lambda calculus, at the cost of introducing combinators that correspond to
+native artihmetic instructions.
 
 Let `n` be a 32-bit word. If `n` lies in [0..127], `n` represents a combinator,
 otherwise `n` represents the application of the expression represented by
@@ -128,8 +121,8 @@ the `(:)` combinator (equivalent to `B(BK)(BCT)`).
 
 Below, the I combinator is not lazy: for instance, every time we encounter the
 subterm `I(I(Ix))` we must reduce three I combinators. link:ioccc.html[The
-competition version of this code] does lazily evaluate `I` combinators, but as
-a result, we must tread carefully near the top of the stack.
+competition version of this code] does lazily evaluate `I` combinators, but
+consequently treads carefully near the top of the stack.
 
 \begin{code}
 arg' :: Int -> VM -> Int

@@ -134,7 +134,7 @@ Next, we remember another piece of trivia: minus 40 is the same temperature in
 Celsius and Farenheit. This gives us a second test case, that is,
 `convert p q (-40) == -40` when `p, q` are correct.
 
-Then repeatedly nudging our guesses according to our two test cases is simply:
+We repeatedly nudge our guesses according to our two test cases:
 
 \begin{code}
 rate = 0.0001
@@ -157,7 +157,7 @@ which is close to the true constants (9/5, 32).
 Why choose 0.0001? This fussy parameter is known as the 'learning rate'. The
 smaller it is, the longer it takes to reach a good answer. But if it is too
 large, those gentle nudges become violent shoves and our guesses are forever
-all over the map. Researchers have looked into many ideas to tune the learning
+all over the map. Researchers have explored many ideas to tune the learning
 rate, but in our case, we picked 0.0001 because it happened to work well for
 our toy example!
 
@@ -174,20 +174,18 @@ In short, we used differential calculus.
 
 We say "differential calculus" and not "derivative calculus", yet we tend to
 think in terms of derivatives and not differentials. Faced with an expression,
-our first instinct is to pick a variable and take a derivative with respect to
-this variable. Why?
+our first instinct is to single out a variable and take a derivative with
+respect to this variable. Why?
 
 The root cause is a myth perpetuated by generation after generation of teachers
-and textbooks, who claim the Leibniz notation $dy/dx$ is a mere mnemonic
+and textbooks, that claim the Leibniz notation $dy/dx$ is a mere mnemonic
 device. Woe betide those who dare to reason algebraically with it!
 
-This is a lie. Below, we define $d$ as a function from lambda terms to lambda
-terms, and $dy/dx$ is an algebraic expression like any other. As we'd
-expect, it means $d$ applied to the lambda term $y$ times the multiplicative
-inverse of $d$ applied to the lambda term $x$.
+This is a lie. Below, we define the differential $d$ as a function from lambda
+terms to lambda terms, and $dy/dx$ is an algebraic expression like any other.
+As we'd expect, it means $d$ applied to $y$ divided by $d$ applied to $x$.
 
-Knowing the truth lets us forget derivatives for a while so we can pay
-attention to differentials such as:
+Knowing the truth lets us forget derivatives and study differentials such as:
 
 \[
 d(3 x^2 + 2 y) = 6 x dx + 2 dy
@@ -366,10 +364,10 @@ We get:
 
 Our program isn't quite ready to take over our calculus homework because it
 fails to collect like terms and fold constants and such. However, we can
-manually simplify:
+manually simplify to get:
 
 \[
-\frac{ddy}{dx^2} - \frac{dy}{dx} \frac{ddx}{dx^2}
+\frac{d(\frac{dy}{dx})}{dx} = \frac{ddy}{dx^2} - \frac{dy}{dx} \frac{ddx}{dx^2}
 \]
 
 This is the correct way to write the second derivative.
@@ -508,6 +506,11 @@ Thus in practice, to compute this function on two given points, we roughly
 act as if were trying to derive a formula, but always use values instead of
 symbols. This is known as https://crypto.stanford.edu/miller/[Miller's
 algorithm].
+
+https://en.wikipedia.org/wiki/Automated_theorem_proving[Automated theorem
+proving] profits from turning this trick on its head. Briefly, early theorem
+provers exhaustively tried every possible value for every variable. Later
+provers improved on this by by computing with variables instead.
 
 Automatic differentiation has a 'forward mode' and a 'reverse mode'.
 The latter is also called 'backpropagation' in some contexts.

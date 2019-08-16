@@ -314,10 +314,10 @@ Can all programming languages be defined with our version of lambda calculus?
 After all, we chose a particular order of evaluation.
 
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
-landmark paper of 1972] cites languages defined in variants of lambda calculus,
-then reveals this variety is unnecessary. Thanks to 'defunctionalization' and
-'continuation-passing style' (CPS), we can get by with a lambda calculus
-without first-class functions (is this the same as
+landmark paper of 1972] surveys multiple languages defined in multiple variants
+of lambda calculus, then reveals this variety is unnecessary. Thanks to
+'defunctionalization' and 'continuation-passing style' (CPS), we can get by
+with a lambda calculus without first-class functions (is this the same as
 https://en.wikipedia.org/wiki/Kappa_calculus[kappa calculus]?), and which
 evaluates in any given order.
 

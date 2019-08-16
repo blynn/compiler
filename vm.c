@@ -517,14 +517,15 @@ void rpg() {
   lvlup_file_raw("barely.hs");
 }
 
-void dis() {
+void dis(char *file) {
   fp_reset("raw");
 	loadRaw(fp_get);
   fp_reset("disassembly.hs");
   buf_reset();
   run(fp_get, buf_put);
   parseRaw(buf);
-  fp_reset("disassembly.hs");
+  fp_reset(file);
+  fprintf(stderr, "disaseembling %s\n", file);
   run(fp_get, pc);
 }
 
@@ -574,7 +575,8 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "test")) return runTests(), 0;
     if (!strcmp(argv[1], "rpg")) return rpg(), puts(buf), 0;
     if (!strcmp(argv[1], "fib")) return fib(), 0;
-    if (!strcmp(argv[1], "dis")) return dis(), 0;
+    if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
+    if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
 		return puts("bad command"), 0;
 	}
 	rpg();

@@ -9,15 +9,15 @@ find a contradiction. Both parties gained a deeper understanding of the topic,
 but even after several iterations, the main conclusion most often seemed to be
 "X is hard to define". Awfully little to extract from such a long process.
 
-I encountered an optimization in a book by Douglas Adams: answer
-mathematically. If asked "What is the answer to the meaning of life, the
-universe, and everything?", we reply "42" and avoid those meddlesome
-contradictions. For if mathematics is flawed, then so is logical reasoning,
-and hence the Socratic method itself.
+I first encountered an optimization in a book by Douglas Adams. Reply
+mathematically! If asked "What is the answer to the meaning of life, the
+universe, and everything?", we say "42" and avoid those meddlesome
+contradictions. For if mathematics is flawed, then so is logical reasoning, and
+hence the Socratic method itself.
 
 Now the problem is finding a mathematical definition that reflects what we have
-in mind. This can be difficult, but luckily, for some of computer science,
-mathematical definitions work well, and even guide the implementation.
+in mind. This can be difficult, but often in computer science, mathematical
+definitions work well, and even guide the implementation.
 
 == What is a compiler? ==
 
@@ -141,10 +141,10 @@ demoOddXs :: Bool
 demoOddXs = runDfa oddXs "xxxxx"
 \end{code}
 
-We could extend the above to spit out characters as it computes; see
+We could extend the above to spit out characters as it computes. See
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
-https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines], but we already
-learn enough it is. We quickly find DFAs are incapable of elementary tasks such
+https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]. But we already
+learn enough as it is. We quickly find DFAs are incapable of elementary tasks such
 as checking if a bunch of parentheses are balanced, or if some number of As has
 been followed by an equal number of Bs.
 

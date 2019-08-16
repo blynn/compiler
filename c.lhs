@@ -34,7 +34,7 @@ saturation]: automating compiler optimization.
   and
   https://gist.github.com/taktoa/a59400fd3e1c400835b60c416ad33952[Remy Goldschmidt].
   * Program synthesis:
-    - Automatic theorem proving: generate programs from their types.
+    - link:atp.html[Automatic theorem proving]: generate programs from their types.
     - How does http://nautilus.cs.miyazaki-u.ac.jp/~skata/MagicHaskeller.html[MagicHaskeller] work?! It generates programs from test cases.
     - link:differ.html[Differentiable programming]: generate approximately correct programs from test cases.
 

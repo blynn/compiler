@@ -16,6 +16,7 @@ eq,Equality
 para,Parametricity
 logic,Logic Programming
 differ,Differential
+atp,Automated Proving
 \
 \''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 \
