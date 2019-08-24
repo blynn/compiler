@@ -11,6 +11,7 @@
 <button id='lem'>LEM</button>
 <button id='curry'>curry</button>
 <button id='uncurry'>uncurry</button>
+<button id='jonk'>jonk</button>
 </p>
 <p>
 <textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
@@ -50,10 +51,10 @@ odder still that we say "implies" for this symbol. Should we be saying things
 like: "a hydrogen atom contains two protons implies Beethoven wrote nine
 symphonies"?
 
-It sounds illogical because in everyday use, the word "implies" suggests
-causality. How can a proposition possibly imply an unrelated proposition?
-Yet discarding the word "implies" is out of the question, because logic ought
-to be able to deal with causal relationships.
+It sounds illogical because in everyday use, the word "implies" implies
+causation. How can a proposition possibly "imply" an unrelated proposition? Yet
+discarding the word "implies" is out of the question, because logic ought to be
+able to deal with causality.
 
 We patch this discrepancy by replacing 0 and 1 with mathematical objects called
 'proofs'. We represent a proof with an abstract syntax tree (that turns out
@@ -64,91 +65,89 @@ Q$ if we show how any proof of $P$ leads to a proof of $Q$.
 
 Instead of truth tables, we build proofs (syntax trees) from other proofs. A
 proof of the conjunction $P \wedge Q$ is a syntax tree representing the pair
-`(p, q)` where `p` is a proof of $P$ and `q` is a proof of $Q$. The disjunction
-of $P$ and $Q$ is either `Left p` where `p` is a proof of $P$ or `Right q`
-where `q` is a proof of $Q$.
+`(p, q)` where `p` is a proof of $P$ and `q` is a proof of $Q$. A proof of the
+disjunction of $P$ and $Q$ is either `Left p` where `p` is a proof of $P$ or
+`Right q` where `q` is a proof of $Q$.
 
-This leaves negation. We define a proposition $\bot$ and stipulate that a proof
+As for negation, we define a proposition $\bot$ and stipulate that a proof
 of $\bot$ immediately yields a proof of any arbitrary proposition;
 https://en.wikipedia.org/wiki/Principle_of_explosion[ex falso quodlibet]. We
 define $\neg P$ to be $P \rightarrow \bot$.
 
-Apart from fixing "implies", our logic is also 'intuitionistic',
-https://web.math.princeton.edu/~nelson/papers/rome.pdf[which adds accuracy to
-classical logic]. Roughly speaking, all the theorems are
-the same except that rather than a proof of $\exists x P(x)$, sometimes we wind
-up with a proof of $\neg \forall x \neg P(x)$, and similarly, rather than prove $A
-\vee B$ we wind up proving $\neg(\neg A \wedge \neg B)$.
+Apart from fixing "implies", our logic is also 'intuitionistic', which just
+means https://web.math.princeton.edu/~nelson/papers/rome.pdf[we've added
+accuracy to classical logic]. Roughly speaking, all the theorems are the same
+except that rather than prove $\exists x P(x)$, we sometimes prove $\neg
+\forall x \neg P(x)$, and similarly, rather than prove $A \vee B$ we sometimes
+prove $\neg(\neg A \wedge \neg B)$.
 
 Classical logic equates these formulas, while intuitionistic logic keeps them
 apart to gain one extra bit of information. This bit signals whether the proof
 is 'constructive'.
 
-For example, in intuitionistic logic, the law of the excluded middle $A \vee
-\neg A$ has no proof but the classically equivalent $\neg (A \wedge \neg A)$
-does. A proof of the former would be a decision procedure, that is, it would
-describe an algorithm to construct a proof of $A$ or a proof of $\neg A$ for
-any given $A$. The latter merely states it is impossible to have both a proof
-of $A$ and a proof of $\neg A$. [You can't have your cake and not have your
-cake.]
+For example, in intuitionistic logic, the law of the excluded middle (LEM) when
+written as $A \vee \neg A$ has no proof, but the classically equivalent $\neg (A
+\wedge \neg A)$ does. A proof of the former would be a decision procedure, that
+is, it would describe an algorithm to construct a proof of $A$ or a proof of
+$\neg A$ from any given $A$; a tall order. The latter merely states it is
+impossible to have both a proof of $A$ and a proof of $\neg A$. [You can't have
+your cake and not have your cake.]
 
 Addressing philosophical concerns is fun, but we really went to all this
-trouble for practical reasons. A Haskell type looks just like a proposition,
-and it turns out a (constructive) proof of a given proposition is in fact a
-program of a given type, a fact known as the Curry-Howard correspondence. If we
-build a system that can search for a proof of a given proposition, then we can
-automatically generate a function from its type.
+trouble for practical reasons.
+If we build a system that can generate a constructive proof of  a given
+proposition, then we can automatically generate a function of a given type,
+a fact known as the Curry-Howard correspondence.
 
 == Too much too early ==
 
-Alas, our original proof strategy is wildly inappropriate. Before, we only had
-to try two different values for each proposition.
-In contrast, there are infinitely many abstract syntax trees.
+Alas, our original proof strategy is wildly inappropriate. Recall we simply
+tried two different values for each proposition. Unfortunately, there are
+infinitely many abstract syntax trees.
 
 Even if we could magically try each one, what good would it do? Suppose we wish
-to prove $P \rightarrow P$. Our goal is to find a function that take a proof of
-$P$ and returns a proof of $P$. The identity function clearly does the job, but
-how would enumerating all possible proofs of $P$ lead to it?
+to prove $P \rightarrow P$. Our goal is to find a function that takes a proof
+of $P$ and returns a proof of $P$. The identity function clearly does the job,
+but how would enumerating all possible proofs of $P$ lead to it?
 
-We need a new approach. One idea is to enumerate all possible syntax trees and
-type-check each one. If its type matches the given proposition, then we've
-found the proof. This is only viable for the smallest of programs.
+Instead of enumerating all trees for each proposition, we could try enumerating
+them to find the proof: we type-check each tree and see if it matches the
+given proposition. However, this is only tolerable for the tiniest of proofs.
+Also this procedure never terminates when no proof exists.
 
 Chapter 4 of
 https://www.cs.cmu.edu/~fp/courses/atp/handouts/atp.pdf[Frank Pfenning's
-notes] describes a far better method based on 'sequents'. Summarizing,
-and perhaps oversimplifying, a sequent consists of:
+notes] describes a strategy based on 'sequents'. Summarizing, and perhaps
+oversimplifying, a sequent consists of:
 
-  * a list of 'passive' propositions
-  * a list of 'active' propositions
-  * a 'succedent' proposition
+  * a list of 'passive' propositions $P_1, ..., P_m$
+  * a list of 'active' propositions $A_1, ..., A_n$
+  * a 'succedent' proposition $B$
 
-Consider a sequent with passive list
-$P_1, ..., P_m$, active list $A_1, ..., A_n$ and succedent $B$.
-Then we write it as follows:
+We write:
 
 \[ P_1, ..., P_m ; A_1, ..., A_n \vdash B \]
 
-and we interpret it to mean given proofs of all the propositions in both
-lists, we can find a proof of $B$.
+We interpret this sequent to mean "given proofs of all the propositions in both
+lists, we can produce a proof of $B$".
 
 Given a proposition $B$ to prove, our strategy is to start with a sequent
-meaning that $B$ holds unconditionally:
+meaning that we can prove $B$ with no assumptions:
 
 \[
 \vdash B
 \]
 
-then apply a logic rule to transform it into one or more sequents. We iterate
-on each of these new sequents until we reach 'initial sequents', that is,
-sequents of the form:
+then apply a logic rule to transform it into one or more sequents that imply
+it. We iterate on each of these new sequents until we reach 'initial sequents',
+that is, sequents of the form:
 
 \[
 ..., P, ...; \vdash P
 \]
 
-which simply means given a proof of $P$ (and possibly other proofs), we can
-produce a proof of $P$.
+which means given a proof of $P$ (and possibly other proofs), we can produce a
+proof of $P$.
 
 Some logic rules are 'invertible': they preserve completeness, that is, they
 never change a viable sequent into sequents that eventually get stuck. Other
@@ -170,11 +169,26 @@ rules are not. This suggests the following algorithm:
 Since we're restricting ourselves to propositional logic (or equivalently,
 we have implicit universal quantifiers at the beginning of the proposition for
 each free variable), I believe we can get away with deleting a proposition $P
--> Q$ from the passive list when exploring the branch it represents. This
-guarantees termination.
+\rightarrow Q$ from the passive list when exploring the branch it represents.
+This guarantees termination.
 
 The `oracle` function below determines if a proof exists for a given proposition
 using the above algorithm.
+
+++++++++++
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
+<p><a onclick='hideshow("boilerplate");'>&#9654; Toggle boilerplate</a></p>
+<div id='boilerplate' style='display:none'>
+++++++++++
 
 \begin{code}
 {-# LANGUAGE CPP #-}
@@ -195,7 +209,13 @@ import Text.Megaparsec hiding (match)
 import Text.Megaparsec.Char
 type Parser = Parsec () String
 #endif
+\end{code}
 
+++++++++++
+</div>
+++++++++++
+
+\begin{code}
 data Prop = Var String
   | Prop :& Prop
   | Prop :| Prop
@@ -351,6 +371,11 @@ gives the proof:
 \a0 -> \a1 -> (((either \a2 -> (absurd (a2 a1))) \a3 -> a3) a0)
 ------------------------------------------------------------------------
 
+++++++++++
+<p><a onclick='hideshow("ui");'>&#9654; Toggle UI code</a></p>
+<div id='ui' style='display:none'>
+++++++++++
+
 \begin{code}
 #ifdef __HASTE__
 main :: IO ()
@@ -380,11 +405,16 @@ main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
   setup "lem" "(p, p -> Void) -> Void"
   setup "uncurry" "(a -> b -> c) -> (a, b) -> c"
   setup "curry" "((a, b) -> c) -> a -> b -> c"
+  setup "jonk" "(a -> b) -> ((a -> i) -> i) -> ((b -> i) -> i)"
   void $ goB `onEvent` Click $ const $ go
   void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)
     $ go >> preventDefault
 #endif
 \end{code}
+
+++++++++++
+</div>
+++++++++++
 
 == Q.E.D. ==
 
@@ -396,3 +426,17 @@ as well as https://www.youtube.com/watch?v=HnOix9TFy1A[Nadia Polikarpova]'s talk
 https://www.youtube.com/watch?reload=9&v=mOtKD7ml0NU[Idris 2 uses dependent
 types and linear types] to discover a function for performing matrix
 transposition.
+
+https://reasonablypolymorphic.com/blog/typeholes/[Sandy Maguire uses GHC's type
+holes to think less when programming]. But on his `jonk` example, the computer
+can in fact take over completely. We type in:
+
+------------------------------------------------------------------------
+(a -> b) -> ((a -> i) -> i) -> ((b -> i) -> i)
+------------------------------------------------------------------------
+
+and our prover finds:
+
+------------------------------------------------------------------------
+\a0 -> \a1 -> \a2 -> (a1 \a4 -> (a2 (a0 a4)))
+------------------------------------------------------------------------

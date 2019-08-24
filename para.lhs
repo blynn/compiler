@@ -31,7 +31,7 @@ Watch closely...
 
 A good candidate for link:eq.html[equational reasoning]?
 
-== The truth comes out ==
+== A rose by any other name ==
 
 How do we automatically discover a theorem for any function?
 

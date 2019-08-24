@@ -507,10 +507,9 @@ act as if were trying to derive a formula, but always use values instead of
 symbols. This is known as https://crypto.stanford.edu/miller/[Miller's
 algorithm].
 
-https://en.wikipedia.org/wiki/Automated_theorem_proving[Automated theorem
-proving] profits from turning this trick on its head. Briefly, early theorem
-provers exhaustively tried every possible value for every variable. Later
-provers improved on this by by computing with variables instead.
+Automated theorem proving profits from turning this trick on its head. Early
+theorem provers exhaustively tried every possible value for every variable.
+Later provers improved on this by by computing with variables instead.
 
 Automatic differentiation has a 'forward mode' and a 'reverse mode'.
 The latter is also called 'backpropagation' in some contexts.
