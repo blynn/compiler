@@ -237,8 +237,8 @@ This seems promising, but we have limited memory because each push corresponds
 to a pop. We could permit pushing several values at once, but this makes our
 machine uglier.
 
-Better to allow "bottomless" stacks. Rather than rejecting on an empty stack, we
-instead define the result of popping an empty stack to be a special `Char`
+Better to allow "bottomless" stacks. Rather than rejecting, we
+define the result of popping an empty stack to be a special `Char`
 value that we call a 'blank'.
 
 We have just described 'Turing machines'.

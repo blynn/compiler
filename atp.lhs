@@ -5,11 +5,11 @@
 <script src='atp.js'></script>
 <p>
 <button id='swap'>swap</button>
-<button id='dup'>dup</button>
 <button id='implies'>implies</button>
 <button id='demorgan'>De Morgan</button>
-<button id='lem'>LEM</button>
-<button id='curry'>curry</button>
+<button id='lem'>De Morgan LEM</button>
+<button id='nnlem'>&not;&not;LEM</button>
+<button id='vorobev'>Vorobev</button>
 <button id='uncurry'>uncurry</button>
 <button id='jonk'>jonk</button>
 </p>
@@ -34,10 +34,8 @@ Easy, right? Just enumerate all possibilities $P = 0, 1$ and $Q = 0, 1$, and
 check we always get $1$.
 
 ------------------------------------------------------------------------
-easy = and $ do
-  p <- [False, True]
-  q <- [False, True]]
-  pure $ (not p || q) `implies` (p `implies` q)
+easy = and [(not p || q) `implies` (p `implies` q)
+  | p <- [False, True], q <- [False, True]]
 
 implies False True = True
 implies True True = True
@@ -52,16 +50,16 @@ like: "a hydrogen atom contains two protons implies Beethoven wrote nine
 symphonies"?
 
 It sounds illogical because in everyday use, the word "implies" implies
-causation. How can a proposition possibly "imply" an unrelated proposition? Yet
-discarding the word "implies" is out of the question, because logic ought to be
-able to deal with causality.
+causation. How can a proposition imply an unrelated proposition? Yet discarding
+the word "implies" is out of the question, because logic ought to be able to
+deal with causality.
 
 We patch this discrepancy by replacing 0 and 1 with mathematical objects called
 'proofs'. We represent a proof with an abstract syntax tree (that turns out
 be a good old lambda term). Then a proof of $P \rightarrow Q$ is a syntax tree
-representing a function that takes a proof of $P$ and returns a proof of $Q$.
-The word "implies" has regained its dignity: we can only prove $P \rightarrow
-Q$ if we show how any proof of $P$ leads to a proof of $Q$.
+representing a function that maps a proof of $P$ to a proof of $Q$.
+The word "implies" has regained its dignity: we can only say "$P$ implies $Q$"
+if we show how evidence of $P$ leads to evidence of $Q$.
 
 Instead of truth tables, we build proofs (syntax trees) from other proofs. A
 proof of the conjunction $P \wedge Q$ is a syntax tree representing the pair
@@ -71,8 +69,9 @@ disjunction of $P$ and $Q$ is either `Left p` where `p` is a proof of $P$ or
 
 As for negation, we define a proposition $\bot$ and stipulate that a proof
 of $\bot$ immediately yields a proof of any arbitrary proposition;
-https://en.wikipedia.org/wiki/Principle_of_explosion[ex falso quodlibet]. We
-define $\neg P$ to be $P \rightarrow \bot$.
+https://en.wikipedia.org/wiki/Principle_of_explosion[the principle of
+explosion; ex falso quodlibet]. We define $\neg P$ to be $P \rightarrow
+\bot$.
 
 Apart from fixing "implies", our logic is also 'intuitionistic', which just
 means https://web.math.princeton.edu/~nelson/papers/rome.pdf[we've added
@@ -90,90 +89,138 @@ written as $A \vee \neg A$ has no proof, but the classically equivalent $\neg (A
 \wedge \neg A)$ does. A proof of the former would be a decision procedure, that
 is, it would describe an algorithm to construct a proof of $A$ or a proof of
 $\neg A$ from any given $A$; a tall order. The latter merely states it is
-impossible to have both a proof of $A$ and a proof of $\neg A$. [You can't have
-your cake and not have your cake.]
+impossible to have both a proof of $A$ and a proof of $\neg A$.
 
-Addressing philosophical concerns is fun, but we really went to all this
-trouble for practical reasons.
-If we build a system that can generate a constructive proof of  a given
+It's fun to split philosophical hairs, but we really went to all this trouble
+for practical reasons.
+If we build a system that can generate a constructive proof of a given
 proposition, then we can automatically generate a function of a given type,
 a fact known as the Curry-Howard correspondence.
 
 == Too much too early ==
 
-Alas, our original proof strategy is wildly inappropriate. Recall we simply
-tried two different values for each proposition. Unfortunately, there are
-infinitely many abstract syntax trees.
+We restrict ourselves to propositional logic; no predicates nor quantifiers. We
+know classical logic has a sound and complete decision procedure under these
+conditions based on truth tables. Can we adapt it for intuitionistic logic?
 
-Even if we could magically try each one, what good would it do? Suppose we wish
-to prove $P \rightarrow P$. Our goal is to find a function that takes a proof
-of $P$ and returns a proof of $P$. The identity function clearly does the job,
-but how would enumerating all possible proofs of $P$ lead to it?
+Alas, our simple strategy is wildly inappropriate. Recall we tried two
+different values for each atomic proposition.
+Unfortunately, there are infinitely many abstract syntax trees, and even if we
+could magically try each one, what good would it do? Suppose we wish to prove
+$P \rightarrow P$. Our goal is to find a function that takes a proof of $P$ and
+returns a proof of $P$. The identity function clearly does the job, but how
+would enumerating all possible proofs of $P$ lead to it?
 
-Instead of enumerating all trees for each proposition, we could try enumerating
-them to find the proof: we type-check each tree and see if it matches the
-given proposition. However, this is only tolerable for the tiniest of proofs.
-Also this procedure never terminates when no proof exists.
+We could try to enumerate all syntax trees, link:../lambda/hm.html[infer the
+type of each tree] as we go, and see if it happens to be the proposition we're
+trying to prove. However, besides being grossly inefficient, this procedure
+fails to terminates when no proof exists.
 
 Chapter 4 of
 https://www.cs.cmu.edu/~fp/courses/atp/handouts/atp.pdf[Frank Pfenning's
-notes] describes a strategy based on 'sequents'. Summarizing, and perhaps
-oversimplifying, a sequent consists of:
+notes] describes a strategy to find proofs in first-order logic based on
+'sequents'. We take the parts relevant to propositional logic.
 
-  * a list of 'passive' propositions $P_1, ..., P_m$
-  * a list of 'active' propositions $A_1, ..., A_n$
+A sequent consists of:
+
+  * a list of 'antecedent' propositions $A_1, ..., A_n$
   * a 'succedent' proposition $B$
 
-We write:
+and is written:
 
-\[ P_1, ..., P_m ; A_1, ..., A_n \vdash B \]
+\[ A_1, ..., A_n \Rightarrow B \]
 
-We interpret this sequent to mean "given proofs of all the propositions in both
-lists, we can produce a proof of $B$".
+This sequent means: "given proofs of the antecedent propositions
+$A_1, ..., A_n$, we can produce a proof of $B$".
 
-Given a proposition $B$ to prove, our strategy is to start with a sequent
-meaning that we can prove $B$ with no assumptions:
-
-\[
-\vdash B
-\]
-
-then apply a logic rule to transform it into one or more sequents that imply
-it. We iterate on each of these new sequents until we reach 'initial sequents',
-that is, sequents of the form:
+Given a proposition $B$ to prove, we start with a sequent meaning we can
+prove $B$ with no assumptions:
 
 \[
-..., P, ...; \vdash P
+\Rightarrow B
 \]
 
-which means given a proof of $P$ (and possibly other proofs), we can produce a
-proof of $P$.
+Then we apply a rule to transform it into one or more sequents from which this
+sequent can be deduced.
 
-Some logic rules are 'invertible': they preserve completeness, that is, they
-never change a viable sequent into sequents that eventually get stuck. Other
-rules are not. This suggests the following algorithm:
+We recursively apply rules on these new sequents until we reach a self-evident
+sequent. There are two kinds of such sequents. Either we have an 'initial
+sequent':
 
-  1. Apply as many invertible rules as possible to the succedent. This may
-  add propositions to the active list, but never to the passive list.
+\[
+..., P, ... \Rightarrow P
+\]
+
+which means we can produce a proof of $P$ if given a proof of $P$ (and possibly
+other proofs), or we have a sequent with $\bot$ as an antecedent:
+
+\[
+..., \bot, ... \Rightarrow P
+\]
+
+which is an incarnation of ex falso quodlibet.
+
+A rule preserving completeness is 'invertible'; such a rule never changes a
+viable sequent into sequents that eventually get stuck. Otherwise the rule is
+'non-invertible'.
+
+This suggests the following algorithm. We partition the antecedent propositions
+into two lists: the 'passive' list and the 'active' list. Then:
+
+  1. Apply as many invertible rules as possible to the succedent.
   Pfenning calls these cases 'right asynchronous'.
 
   2. Until the active list is empty, apply as many invertible rules as possible
-  to the head of the list. If no invertible rules apply, then move the head to
-  the passive list. Pfenning calls these cases 'left asynchronous'.
+  to the head of the list, then move the head to the passive list.
+  Pfenning calls these cases 'left asynchronous'.
 
-  3. At this point, any remaining rules are non-invertible. The search branches
-  on each such rule. We can use standard strategies such as breadth-first
-  search, depth-first search, or iterative deepening. A non-invertible rule
-  leads to an initial sequent or takes us to one of the previous two steps.
+	3. The active list is empty and we must choose a non-invertible rule, which
+	Pfenning calls the 'synchronous' cases. We branch on each such rule. We can
+	apply standard strategies such as breadth-first search, depth-first search, or
+	iterative deepening. A non-invertible rule leads to an initial sequent or takes
+	us to one of the previous two steps.
 
-Since we're restricting ourselves to propositional logic (or equivalently,
-we have implicit universal quantifiers at the beginning of the proposition for
-each free variable), I believe we can get away with deleting a proposition $P
-\rightarrow Q$ from the passive list when exploring the branch it represents.
-This guarantees termination.
+We've swept a potential problem under the rug. How can we avoid going around in
+circles as we apply these rules? It turns out, with one exception, all the
+rules are one-way. They each replace a sequent with simpler sequents.
 
-The `oracle` function below determines if a proof exists for a given proposition
-using the above algorithm.
+The problematic exception crops up in the last step. If we branch on an
+implication $P \rightarrow Q$ in the passive list, then a new antecedent is
+added while no existing ones are removed, which means we may later choose to
+branch on the same implication again.
+
+If a proposition has a proof, then a breadth-first search will eventually find
+it, but in general, this algorithm might never terminate on a proposition with
+no proof.
+
+For now, we sacrifice completeness to address this, and remove an implication
+antecedent when exploring it. This guarantees termination, but prevents us from
+finding proofs of certain theorems such as $\neg \neg (A \vee \neg A)$. We fix
+this later.
+
+The `incompleteOracle` function searches for a proof depth-first.  Hopefully
+our code is clear enough to describe the rules. For example, the first rule
+states if the sequent has the form:
+
+\[ A_1, ..., A_n \Rightarrow P \wedge Q \]
+
+then we desire a proof of:
+
+\[ A_1, ..., A_n \Rightarrow P \]
+
+and a proof of:
+
+\[ A_1, ..., A_n \Rightarrow Q \]
+
+A logician might summarize this as:
+
+\[
+\frac{\Gamma \Rightarrow P \quad \Gamma \Rightarrow Q} { \Gamma \Rightarrow P \wedge Q }
+\]
+
+where $\Gamma$ is a list of antecedent propositions. Since we classify the
+antecedents as passive or active, we ought to be more pedantic and split
+$\Gamma$ into two lists; see Pfenning for details.
 
 ++++++++++
 <script>
@@ -222,27 +269,27 @@ data Prop = Var String
   | Prop :-> Prop
   | Falso deriving (Show, Eq)
 
-oracle :: Prop -> Bool
-oracle = rAsyn [] [] where
-  rAsyn psv act prop = case prop of
-    a :& b -> rAsyn psv act a && rAsyn psv act b
-    a :-> b -> rAsyn psv (a:act) b
-    _ -> search psv act prop
+incompleteOracle :: Prop -> Bool
+incompleteOracle = rAsyn [] [] where
+  rAsyn pas act prop = case prop of
+    a :& b -> rAsyn pas act a && rAsyn pas act b
+    a :-> b -> rAsyn pas (a:act) b
+    _ -> search pas act prop
 
-  search psv (x:xs) rhs = case x of
+  search pas (x:xs) rhs = case x of
     Falso -> True
-    a :& b -> search psv (a:b:xs) rhs
-    a :| b -> search psv (a:xs) rhs && search psv (b:xs) rhs
-    _ -> search (x:psv) xs rhs
+    a :& b -> search pas (a:b:xs) rhs
+    a :| b -> search pas (a:xs) rhs && search pas (b:xs) rhs
+    _ -> search (x:pas) xs rhs
 
-  search psv [] prop = elem prop psv || any implyCases psv || orCases
+  search pas [] prop = elem prop pas || any implyCases pas || orCases
     where
     orCases = case prop of
-      a :| b -> rAsyn psv [] a || rAsyn psv [] b
+      a :| b -> rAsyn pas [] a || rAsyn pas [] b
       _ -> False
     implyCases p = case p of
-      a :-> b -> search psv' [b] prop && rAsyn psv' [] a
-        where psv' = delete p psv
+      a :-> b -> search pas' [b] prop && rAsyn pas' [] a
+        where pas' = delete p pas
       _ -> False
 \end{code}
 
@@ -251,93 +298,236 @@ We use Haskell notation:
 
   * The conjunction of `p` and `q` is written `(p, q)`.
   * The disjunction of `p` and `q` is written `Either p q`.
-  * Implication is `->` and associates right.
+  * Implication is written `(->)` and associates right.
   * The proposition $\bot$ is written `Void` (from the `Data.Void` package).
 
 \begin{code}
 propo :: Parser Prop
-propo = foldr1 (:->) <$> sepBy1 arg (spstr "->") where
+propo = space *> aps <* eof where
+  aps = foldr1 (:->) <$> sepBy1 arg (spstr "->")
   arg = Var <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
     <|> between (spch '(') (spch ')') prodOrProp
     <|> const Falso <$> spstr "Void"
     <|> spstr "Either" *> ((:|) <$> arg <*> arg)
-  prodOrProp = propo <**> (option id $ spch ',' *> (flip (:&) <$> propo))
+  prodOrProp = aps <**> (option id $ spch ',' *> (flip (:&) <$> aps))
   sp = (<* space)
   spch = sp . char
   spstr = sp . string
 \end{code}
 
-Success! We find our first example has a proof:
+Evaluating the following shows our first example has a proof:
 
 ------------------------------------------------------------------------
-oracle <$> parse propo "" "Either (p -> Void) q -> p -> q"
+incompleteOracle <$> parse propo "" "Either (p -> Void) q -> p -> q"
 ------------------------------------------------------------------------
+
+Let's walk through the proof it found. We start with:
+
+\[
+\Rightarrow ((P \rightarrow\bot) \vee Q) \rightarrow (P \rightarrow Q)
+\]
+
+The succedent is an implication, so the corresponding rule yields:
+
+\[
+(P\rightarrow\bot) \vee Q \Rightarrow P \rightarrow Q
+\]
+
+The succedent is an implication again, so we get:
+
+\[
+(P\rightarrow\bot) \vee Q, P \Rightarrow Q
+\]
+
+The antecedent disjunction leads to the two sequents:
+
+\[
+P \rightarrow \bot , P \Rightarrow Q
+\]
+\[
+Q, P \Rightarrow Q
+\]
+
+The second sequent is an initial sequent, while the only way to progress from
+the first sequent is to apply a non-invertible rule to the antecedent
+implication, yielding two sequents:
+
+\[
+\bot , P \Rightarrow Q
+\]
+\[
+P \Rightarrow P
+\]
+
+The first sequent has a $\bot$ antecedent, while the second is initial. Our
+search is over.
 
 == Proof by construction ==
 
-Our function has discovered a truly remarkable proof of our theorem, but the
+Our program has discovered a truly remarkable proof of our theorem, but the
 Boolean return value is too small to contain it.
 
-We remedy this by building lamba terms as we go, instead of merely returning
-whether it's possible to build a term for a given sequent. This requires
-assigning names to various propositions when we first encounter them; we pass
-around an integer to help generate unique names. Each proposition in the active
-and passive lists is associated with a lambda term representing its proof. We
-build larger lambda terms out of smaller ones using standard Haskell functions.
+We remedy this by building lamba terms, instead of just indicating whether it's
+possible to do so. This requires assigning names to various propositions when
+we first encounter them; we pass around an integer to help generate unique
+names.
 
-We also take this opportunity to switch to the algorithm from Section 4.3 of
-Pfenning's notes: a generalization of Prolog's search strategy. Again, since
-we've restricted ourselves to propositional logic, we can get away with
-removing an implication from the passive list when branching on it.
+We associate each proposition in the active and passive lists with a lambda
+term representing its proof.
 
-Below, the `prove` function performs a depth-first search to find programs
-of a given type.
+We take this opportunity to properly fix our problematic implication rule.
+We replace it with 4 rules described by Dyckhoff, ``Contraction-Free Sequent
+Calculi for Intuitionistic Logic'' rendering our prover sound and complete:
+
+\[
+\frac
+  {B,A,\Gamma\Rightarrow G \quad \text{atomic }A }
+  {A \rightarrow B,A,\Gamma\Rightarrow G}
+\]
+
+\[
+\frac
+  {(A\rightarrow B)\rightarrow C,\Gamma\Rightarrow G}
+  {(A\wedge B)\rightarrow C,\Gamma\Rightarrow G}
+\]
+
+\[
+\frac
+  {A\rightarrow B, B\rightarrow C,\Gamma\Rightarrow G}
+  {(A\vee B)\rightarrow C,\Gamma\Rightarrow G}
+\]
+
+\[
+\frac
+  {B\rightarrow C,\Gamma\Rightarrow A\rightarrow B \quad C,\Gamma\Rightarrow G}
+  {(A\rightarrow B)\rightarrow C,\Gamma\Rightarrow G}
+\]
+
+Dyckhoff attributes the underlying method to Vorobev, and mentions it's been
+rediscovered a few times.
+
+The `prove` function below performs a depth-first search to find programs of a
+given type.
 
 \begin{code}
 data Proof = V String | Lam String Proof | Proof :@ Proof
 
 prove :: Prop -> [Proof]
 prove prop = snd <$> rAsyn 0 [] [] prop where
-  rAsyn n psv lhs prop = case prop of
+  rAsyn n pas act prop = case prop of
     a :-> b -> do
       let s = 'a':show n
-      second (Lam s) <$> rAsyn (n + 1) psv ((V s, a):lhs) b
+      second (Lam s) <$> rAsyn (n + 1) pas ((V s, a):act) b
     a :& b -> do
-      (n1, f) <- rAsyn n psv lhs a
-      (n2, s) <- rAsyn n1 psv lhs b
+      (n1, f) <- rAsyn n pas act a
+      (n2, s) <- rAsyn n1 pas act b
       pure (n2, V "," :@ f :@ s)
-    _ -> lAsyn n psv lhs prop
-  lAsyn n psv [] rhs = concat $ lguesses <> rguesses where
-    lguesses = [lSyn n (filter (\p -> snd p /= snd l) psv) l rhs | l <- psv]
-    rguesses = case rhs of
-      _ :| _ -> [rSyn n psv rhs]
-      _ -> []
-  lAsyn n psv (pp@(prf, prop):ps) rhs = case prop of
+    _ -> lAsyn n pas act prop
+\end{code}
+
+The first 3 new implication rules are invertible.
+The first of them triggers on two antecedents; if the current active antecedent
+matches one of the patterns, then we search for suitable companions matching
+the other pattern in the passive list.
+
+We also drop antecedents of the form $X \rightarrow X$, as these are
+superfluous.
+
+\begin{code}
+  lAsyn n pas (pp@(prf, prop):ps) rhs = case prop of
+    a :-> b | a == b -> lAsyn n pas ps rhs
+    a@(Var _) :-> b | Just (prfA, _) <- find (\(_, a') -> a' == a) pas -> lAsyn n pas ((prf :@ prfA, b):ps) rhs
+    a@(Var _) -> lAsyn n (pp:pas') (act' <> ps) rhs
+      where
+      (pas', act') = foldl' modusPonens ([], []) pas
+      modusPonens (ps, as) x
+        | (prfImp, a'@(Var _) :-> b) <- x, a == a' = (ps, (prfImp :@ prf, b):as)
+        | otherwise = (x:ps, as)
+    (a :& b) :-> c -> lAsyn n pas
+      ((V "curry" :@ prf, a :-> (b :-> c)):ps) rhs
+    (a :| b) :-> c -> lAsyn n pas
+      ((V "." :@ prf :@ V "Left", a :-> c)
+      :(V "." :@ prf :@ V "Right", b :-> c):ps) rhs
+\end{code}
+
+The other invertible rules are straightforward:
+
+\begin{code}
     Falso  -> pure (n, V "absurd" :@ prf)
-    a :& b -> lAsyn n psv ((V "fst" :@ prf, a):(V "snd" :@ prf, b):ps) rhs
+    a :& b -> lAsyn n pas ((V "fst" :@ prf, a):(V "snd" :@ prf, b):ps) rhs
     a :| b -> do
       let l = 'a':show n
-      (n1, lp) <- lAsyn (n + 1) psv ((V l, a):ps) rhs
+      (n1, lp) <- lAsyn (n + 1) pas ((V l, a):ps) rhs
       let r = 'a':show n1
-      (n2, rp) <- lAsyn (n1 + 1) psv ((V r, b):ps) rhs
+      (n2, rp) <- lAsyn (n1 + 1) pas ((V r, b):ps) rhs
       pure (n2, V "either" :@ Lam l lp :@ Lam r rp :@ prf)
-    _ -> lAsyn n (pp:psv) ps rhs
-  rSyn n psv rhs = case rhs of
+    _ -> lAsyn n (pp:pas) ps rhs
+\end{code}
+
+It remains to describe the non-invertible rules:
+
+\begin{code}
+  lAsyn n pas [] rhs = lguesses <> rguesses where
+    lguesses = pas >>= \l -> lSyn n (filter (\p -> snd p /= snd l) pas) l rhs
+    rguesses = case rhs of
+      _ :| _ -> rSyn n pas rhs
+      _ -> []
+  rSyn n pas rhs = case rhs of
     a :| b -> as <> bs where
-      as = second (V "Left" :@) <$> rSyn n psv a
-      bs = second (V "Right" :@) <$> rSyn n psv b
-    _ -> rAsyn n psv [] rhs
-  lSyn n psv (prf, l) rhs = if l == rhs then pure (n, prf) else case l of
+      as = second (V "Left" :@) <$> rSyn n pas a
+      bs = second (V "Right" :@) <$> rSyn n pas b
+    _ -> rAsyn n pas [] rhs
+\end{code}
+
+We've saved the the non-invertible implication rule for last. It relies on the
+theorem:
+
+\[
+((A \rightarrow B) \rightarrow C) \rightarrow (A \rightarrow B)
+\iff (B \rightarrow C) \rightarrow (A \rightarrow B)
+\]
+
+I found the program corresponding to this rule tricky to generate by hand, so I
+first coded our incomplete search from above:
+
+------------------------------------------------------------------------
     a :-> b -> do
-      let v = 'x':show n
-      (n1, f) <- lSyn (n + 1) psv (prf :@ V v, b) rhs
-      (n2, arg) <- rSyn n1 psv a
-      pure (n2, sub v arg f)
-    a :& b -> as <> bs where
-      as = lSyn n psv (V "Left" :@ prf, a) rhs
-      bs = lSyn n psv (V "Right" :@ prf, b) rhs
-    _ :| _ -> lAsyn n psv [(prf, l)] rhs
-    Falso -> lAsyn n psv [(prf, l)] rhs
+      let v = 'a':show n
+      (n1, fArg) <- lAsyn (n + 1) pas [(prf :@ V v, b)] rhs
+      (n2, arg) <- rSyn n1 pas a
+      pure (n2, sub v arg fArg)
+------------------------------------------------------------------------
+
+I ran it on one direction of the theorem:
+
+------------------------------------------------------------------------
+prove <$> parse propo ""
+  "((b -> c) -> (a -> b)) -> ((a -> b) -> c) -> (a -> b))"
+------------------------------------------------------------------------
+
+which found:
+
+------------------------------------------------------------------------
+Right [\a0 -> \a1 -> \a2 -> ((a0 \a5 -> (a1 \a7 -> a5)) a2)]
+------------------------------------------------------------------------
+
+This lambda term is equivalent to:
+
+------------------------------------------------------------------------
+\a0 -> \a1 -> a0 (a1 . const)
+------------------------------------------------------------------------
+
+which teaches us how to generate the code for our fiddly implication rule:
+
+\begin{code}
+  lSyn n pas (prf, l) rhs = if l == rhs then pure (n, prf) else case l of
+    (a :-> b) :-> c -> do
+      let v = 'a':show n
+      (n1, fArg) <- lAsyn (n + 1) pas [(prf :@ V v, c)] rhs
+      let w = 'a':show n1
+      (n2, premiss1) <- rAsyn (n1 + 1) pas [(V w, b :-> c)] (a :-> b)
+      let arg = sub w (V "." :@ prf :@ V "const") premiss1
+      pure (n2, sub v arg fArg)
     _ -> []
 
 sub v arg f = case f of
@@ -354,7 +544,9 @@ We prettyprint the proofs so they look like Haskell programs.
 instance Show Proof where
   show prf = case prf of
     V s             -> s
+    V "." :@ x :@ y -> "(" <> show x <> " . " <> show y <> ")"
     V "," :@ x :@ y -> "(" <> show x <> ", " <> show y <> ")"
+    x@(Lam _ _) :@ y -> "((" <> show x <> ")" <> show y <> ")"
     x :@ y          -> "(" <> show x <> " " <> show y <> ")"
     Lam s t         -> "\\" <> s <> " -> " <> show t
 \end{code}
@@ -396,15 +588,15 @@ main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
           Left _ -> "parse error"
           Right p -> case prove p of
             [] -> "no proof found"
-            (h:_) -> show h
+            prfs -> unlines $ show <$> prfs
       setProp oEl "value" t
   setup "swap" "(a, b) -> (b, a)"
-  setup "dup" "a -> (a, a)"
   setup "demorgan" "(a -> Void, b -> Void) -> Either a b -> Void"
   setup "implies" "Either (p -> Void) q -> p -> q"
   setup "lem" "(p, p -> Void) -> Void"
+  setup "nnlem" "(Either p (p -> Void) -> Void) -> Void"
   setup "uncurry" "(a -> b -> c) -> (a, b) -> c"
-  setup "curry" "((a, b) -> c) -> a -> b -> c"
+  setup "vorobev" "(((a -> b) -> c) -> (a -> b)) -> ((b -> c) -> (a -> b))"
   setup "jonk" "(a -> b) -> ((a -> i) -> i) -> ((b -> i) -> i)"
   void $ goB `onEvent` Click $ const $ go
   void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)
@@ -438,5 +630,8 @@ can in fact take over completely. We type in:
 and our prover finds:
 
 ------------------------------------------------------------------------
-\a0 -> \a1 -> \a2 -> (a1 \a4 -> (a2 (a0 a4)))
+\a0 -> \a1 -> \a2 -> (a1 \a5 -> (a2 (a0 a5)))
 ------------------------------------------------------------------------
+
+http://hackage.haskell.org/package/djinn[The Djinn tool] is similar to what we
+built, though has considerably more features.
