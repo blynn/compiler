@@ -418,6 +418,9 @@ the same, the emphasis is no longer on crudely modeling the human brain, nor
 stitching together layers of matrix multiplications. The latest fashion is to
 program with differentiable functions and improve them with gradient descent.
 
+See Conal Elliot, 'https://github.com/conal/talk-2018-deep-learning-rebooted[A
+Functional Reboot for Deep Learning].
+
 In a 2019 paper,
 http://online.watsci.org/abstract_pdf/2019v26/v26n3a-pdf/4.pdf[Bartlett and
 Khurshudyan] overturn centuries of abuse of Leibniz notation, and bring

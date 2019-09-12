@@ -34,13 +34,12 @@ Easy, right? Just enumerate all possibilities $P = 0, 1$ and $Q = 0, 1$, and
 check we always get $1$.
 
 ------------------------------------------------------------------------
-easy = and [(not p || q) `implies` (p `implies` q)
-  | p <- [False, True], q <- [False, True]]
+easy = all (== 1) [max (1 - p) q --> (p --> q) | p <- [0, 1], q <- [0, 1]]
 
-implies False True = True
-implies True True = True
-implies True False = False
-implies False False = True
+0 --> 0 = 1
+0 --> 1 = 1
+1 --> 0 = 0
+1 --> 1 = 1
 ------------------------------------------------------------------------
 
 Perhaps the toughest part is remembering the truth table for $(\rightarrow)$.
@@ -64,8 +63,8 @@ if we show how evidence of $P$ leads to evidence of $Q$.
 Instead of truth tables, we build proofs (syntax trees) from other proofs. A
 proof of the conjunction $P \wedge Q$ is a syntax tree representing the pair
 `(p, q)` where `p` is a proof of $P$ and `q` is a proof of $Q$. A proof of the
-disjunction of $P$ and $Q$ is either `Left p` where `p` is a proof of $P$ or
-`Right q` where `q` is a proof of $Q$.
+disjunction $P \vee Q$ is either the syntax tree `Left p` where `p` is a proof
+of $P$ or `Right q` where `q` is a proof of $Q$.
 
 As for negation, we define a proposition $\bot$ and stipulate that a proof
 of $\bot$ immediately yields a proof of any arbitrary proposition;
@@ -140,8 +139,8 @@ prove $B$ with no assumptions:
 \Rightarrow B
 \]
 
-Then we apply a rule to transform it into one or more sequents from which this
-sequent can be deduced.
+Then we apply one of the rules describd below to transform it into one or more
+sequents from which this sequent can be deduced.
 
 We recursively apply rules on these new sequents until we reach a self-evident
 sequent. There are two kinds of such sequents. Either we have an 'initial
@@ -164,8 +163,9 @@ A rule preserving completeness is 'invertible'; such a rule never changes a
 viable sequent into sequents that eventually get stuck. Otherwise the rule is
 'non-invertible'.
 
-This suggests the following algorithm. We partition the antecedent propositions
-into two lists: the 'passive' list and the 'active' list. Then:
+The rules lead to the following algorithm. We partition the antecedent
+propositions into two lists: the 'passive' list and the 'active' list. Every
+antecedent proposition starts off in the active list. Then:
 
   1. Apply as many invertible rules as possible to the succedent.
   Pfenning calls these cases 'right asynchronous'.
@@ -174,11 +174,10 @@ into two lists: the 'passive' list and the 'active' list. Then:
   to the head of the list, then move the head to the passive list.
   Pfenning calls these cases 'left asynchronous'.
 
-	3. The active list is empty and we must choose a non-invertible rule, which
-	Pfenning calls the 'synchronous' cases. We branch on each such rule. We can
-	apply standard strategies such as breadth-first search, depth-first search, or
-	iterative deepening. A non-invertible rule leads to an initial sequent or takes
-	us to one of the previous two steps.
+	3. The active list is empty and we must choose a non-invertible rule.
+  We branch on each such rule. We can apply standard strategies such as
+  breadth-first search, depth-first search, or iterative deepening. Pfenning
+  calls these cases 'synchronous'.
 
 We've swept a potential problem under the rug. How can we avoid going around in
 circles as we apply these rules? It turns out, with one exception, all the
@@ -198,17 +197,58 @@ antecedent when exploring it. This guarantees termination, but prevents us from
 finding proofs of certain theorems such as $\neg \neg (A \vee \neg A)$. We fix
 this later.
 
-The `incompleteOracle` function searches for a proof depth-first.  Hopefully
-our code is clear enough to describe the rules. For example, the first rule
-states if the sequent has the form:
+Let's walk through a proof of our first example.
+
+\[
+\Rightarrow ((P \rightarrow\bot) \vee Q) \rightarrow (P \rightarrow Q)
+\]
+
+The succedent is an implication, so the corresponding rule yields:
+
+\[
+(P\rightarrow\bot) \vee Q \Rightarrow P \rightarrow Q
+\]
+
+The succedent is an implication again, so we get:
+
+\[
+(P\rightarrow\bot) \vee Q, P \Rightarrow Q
+\]
+
+The antecedent disjunction leads to the two sequents:
+
+\[
+P \rightarrow \bot , P \Rightarrow Q
+\]
+\[
+Q, P \Rightarrow Q
+\]
+
+The second sequent is an initial sequent, while the only way to progress from
+the first sequent is to apply a non-invertible rule to the antecedent
+implication, yielding two sequents:
+
+\[
+\bot , P \Rightarrow Q
+\]
+\[
+P \Rightarrow P
+\]
+
+The first sequent has a $\bot$ antecedent, while the second is initial.
+We have successfully found a proof.
+
+Below, the `incompleteOracle` function determines if a proof exists via a
+depth-first search. Hopefully our code alone is enough to explain the rules.
+For example, the first rule states if the sequent has the form:
 
 \[ A_1, ..., A_n \Rightarrow P \wedge Q \]
 
-then we desire a proof of:
+then we recurse on:
 
 \[ A_1, ..., A_n \Rightarrow P \]
 
-and a proof of:
+and:
 
 \[ A_1, ..., A_n \Rightarrow Q \]
 
@@ -271,24 +311,24 @@ data Prop = Var String
 
 incompleteOracle :: Prop -> Bool
 incompleteOracle = rAsyn [] [] where
-  rAsyn pas act prop = case prop of
+  rAsyn pas act rhs = case rhs of
     a :& b -> rAsyn pas act a && rAsyn pas act b
     a :-> b -> rAsyn pas (a:act) b
-    _ -> search pas act prop
+    _ -> lAsyn pas act rhs
 
-  search pas (x:xs) rhs = case x of
+  lAsyn pas (x:xs) rhs = case x of
     Falso -> True
-    a :& b -> search pas (a:b:xs) rhs
-    a :| b -> search pas (a:xs) rhs && search pas (b:xs) rhs
-    _ -> search (x:pas) xs rhs
+    a :& b -> lAsyn pas (a:b:xs) rhs
+    a :| b -> lAsyn pas (a:xs) rhs && lAsyn pas (b:xs) rhs
+    _ -> lAsyn (x:pas) xs rhs
 
-  search pas [] prop = elem prop pas || any implyCases pas || orCases
+  lAsyn pas [] rhs = elem rhs pas || any implyCases pas || orCases
     where
-    orCases = case prop of
+    orCases = case rhs of
       a :| b -> rAsyn pas [] a || rAsyn pas [] b
       _ -> False
     implyCases p = case p of
-      a :-> b -> search pas' [b] prop && rAsyn pas' [] a
+      a :-> b -> lAsyn pas' [b] rhs && rAsyn pas' [] a
         where pas' = delete p pas
       _ -> False
 \end{code}
@@ -315,59 +355,18 @@ propo = space *> aps <* eof where
   spstr = sp . string
 \end{code}
 
-Evaluating the following shows our first example has a proof:
+Evaluating the following confirms we can find a proof of our first example:
 
 ------------------------------------------------------------------------
 incompleteOracle <$> parse propo "" "Either (p -> Void) q -> p -> q"
 ------------------------------------------------------------------------
-
-Let's walk through the proof it found. We start with:
-
-\[
-\Rightarrow ((P \rightarrow\bot) \vee Q) \rightarrow (P \rightarrow Q)
-\]
-
-The succedent is an implication, so the corresponding rule yields:
-
-\[
-(P\rightarrow\bot) \vee Q \Rightarrow P \rightarrow Q
-\]
-
-The succedent is an implication again, so we get:
-
-\[
-(P\rightarrow\bot) \vee Q, P \Rightarrow Q
-\]
-
-The antecedent disjunction leads to the two sequents:
-
-\[
-P \rightarrow \bot , P \Rightarrow Q
-\]
-\[
-Q, P \Rightarrow Q
-\]
-
-The second sequent is an initial sequent, while the only way to progress from
-the first sequent is to apply a non-invertible rule to the antecedent
-implication, yielding two sequents:
-
-\[
-\bot , P \Rightarrow Q
-\]
-\[
-P \Rightarrow P
-\]
-
-The first sequent has a $\bot$ antecedent, while the second is initial. Our
-search is over.
 
 == Proof by construction ==
 
 Our program has discovered a truly remarkable proof of our theorem, but the
 Boolean return value is too small to contain it.
 
-We remedy this by building lamba terms, instead of just indicating whether it's
+We remedy this by building lamba terms instead of just indicating whether it's
 possible to do so. This requires assigning names to various propositions when
 we first encounter them; we pass around an integer to help generate unique
 names.
@@ -376,8 +375,8 @@ We associate each proposition in the active and passive lists with a lambda
 term representing its proof.
 
 We take this opportunity to properly fix our problematic implication rule.
-We replace it with 4 rules described by Dyckhoff, ``Contraction-Free Sequent
-Calculi for Intuitionistic Logic'' rendering our prover sound and complete:
+It turns out our prover is sound and complete if we replace it with these 4
+rules:
 
 \[
 \frac
@@ -403,9 +402,6 @@ Calculi for Intuitionistic Logic'' rendering our prover sound and complete:
   {(A\rightarrow B)\rightarrow C,\Gamma\Rightarrow G}
 \]
 
-Dyckhoff attributes the underlying method to Vorobev, and mentions it's been
-rediscovered a few times.
-
 The `prove` function below performs a depth-first search to find programs of a
 given type.
 
@@ -428,7 +424,8 @@ prove prop = snd <$> rAsyn 0 [] [] prop where
 The first 3 new implication rules are invertible.
 The first of them triggers on two antecedents; if the current active antecedent
 matches one of the patterns, then we search for suitable companions matching
-the other pattern in the passive list.
+the other pattern in the passive list. If there are any, we proceed with the
+first matching pair we find.
 
 We also drop antecedents of the form $X \rightarrow X$, as these are
 superfluous.
@@ -436,11 +433,12 @@ superfluous.
 \begin{code}
   lAsyn n pas (pp@(prf, prop):ps) rhs = case prop of
     a :-> b | a == b -> lAsyn n pas ps rhs
-    a@(Var _) :-> b | Just (prfA, _) <- find (\(_, a') -> a' == a) pas -> lAsyn n pas ((prf :@ prfA, b):ps) rhs
-    a@(Var _) -> lAsyn n (pp:pas') (act' <> ps) rhs
+    a@(Var _) :-> b | Just (prfA, _) <- find (\(_, a') -> a' == a) pas ->
+      lAsyn n pas ((prf :@ prfA, b):ps) rhs
+    a@(Var _) -> lAsyn n (pp:pas') (take 1 act' <> ps) rhs
       where
-      (pas', act') = foldl' modusPonens ([], []) pas
-      modusPonens (ps, as) x
+      (pas', act') = foldl' partitionMatch ([], []) pas
+      partitionMatch (ps, as) x
         | (prfImp, a'@(Var _) :-> b) <- x, a == a' = (ps, (prfImp :@ prf, b):as)
         | otherwise = (x:ps, as)
     (a :& b) :-> c -> lAsyn n pas
@@ -487,8 +485,8 @@ theorem:
 \iff (B \rightarrow C) \rightarrow (A \rightarrow B)
 \]
 
-I found the program corresponding to this rule tricky to generate by hand, so I
-first coded our incomplete search from above:
+I had trouble finding the program corresponding to this rule, so I first coded
+our incomplete search from above:
 
 ------------------------------------------------------------------------
     a :-> b -> do
@@ -609,6 +607,11 @@ main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
 ++++++++++
 
 == Q.E.D. ==
+
+See Dyckhoff, 'Contraction-Free Sequent Calculi for Intuitionistic Logic',
+for why we replace the non-terminating rule with 4 rules. Dyckhoff attributes
+the underlying method to Vorobev, and mentions it's been rediscovered a few
+times.
 
 http://comcom.csail.mit.edu/comcom/#Synquid[Synquid uses refinement types] to
 automatically write programs that sort, or transform a Boolean formula to

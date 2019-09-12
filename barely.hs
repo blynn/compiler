@@ -57,7 +57,7 @@ fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 data Type = TC String | TV String | TAp Type Type;
-data Ast = R Int | V String | A Ast Ast | L String Ast | Pick Int Int Int | Proof Pred;
+data Ast = R Int | V String | A Ast Ast | L String Ast | Proof Pred;
 
 ro c = R $ ord c;
 
@@ -132,7 +132,6 @@ isFree v expr = case expr of
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w || not (isFree v t))
-  ; Pick _ _ _ -> False
   ; Proof _ -> False
   };
 
@@ -242,7 +241,6 @@ debruijn n e = case e of
   ; V v -> foldr (\h m -> ife (h == v) Ze (Su m)) (Pass (V v)) n
   ; A x y -> App (debruijn n x) (debruijn n y)
   ; L s t -> La (debruijn (s:n) t)
-  ; Pick _ _ _ -> Pass e
   ; Proof _ -> undefined
   };
 
@@ -311,7 +309,6 @@ enc mem t = case t of
   ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
     case mem'' of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (q:p:bs)) }
   ; L w t -> undefined
-  ; Pick m n t -> enc mem (A (ro 'a') (R $ (m + n) * 65536 + n * 256 + t))
   ; Proof _ -> undefined
   };
 
@@ -394,7 +391,6 @@ infer' typed loc ast csn = fpair csn \cs n ->
     fpair (infer' typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, n + 1))
-  ; Pick _ _ _ -> undefined
   ; Proof _ -> undefined
   };
 
@@ -484,7 +480,6 @@ prove' ienv sub psn a = case a of
   ; A x y -> let { p1 = prove' ienv sub psn x } in fpair p1 \psn1 x1 ->
     second (A x1) (prove' ienv sub psn1 y)
   ; L s t -> second (L s) (prove' ienv sub psn t)
-  ; Pick _ _ _ -> (psn, a)
   ; Proof raw -> findProof ienv (predApply sub raw) psn
   };
 
@@ -547,10 +542,10 @@ index n s ss = case ss of
   ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
   };
 length = foldr (\_ n -> n + 1) 0;
+scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
-  , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
-  };
+  , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
 --  * instance environment

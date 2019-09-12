@@ -469,6 +469,11 @@ u fp_get() {
 }
 
 void pc(u c) { putchar(c); fflush(stdout); }
+u ioget() {
+  int c = getchar();
+  if (c == EOF) return 0;
+  return c;
+}
 
 void lvlup(char *prog) {
   parse(buf);
@@ -525,7 +530,7 @@ void dis(char *file) {
   run(fp_get, buf_put);
   parseRaw(buf);
   fp_reset(file);
-  fprintf(stderr, "disaseembling %s\n", file);
+  fprintf(stderr, "disassembling %s\n", file);
   run(fp_get, pc);
 }
 
@@ -577,6 +582,12 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "fib")) return fib(), 0;
     if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
     if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
+    if (!strcmp(argv[1], "asm")) {
+      fp_reset("raw");
+      loadRaw(fp_get);
+      run(ioget, pc);
+      return 0;
+    }
 		return puts("bad command"), 0;
 	}
 	rpg();

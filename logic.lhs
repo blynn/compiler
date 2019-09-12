@@ -3,8 +3,7 @@
 So far, substitutions have been a means to an end. Once we found the most
 general unifier, we discarded any work we did along the way.
 
-This time, the substitutions take center stage. We start with our old friend
-`mgu`:
+This time, the substitutions take center stage. We start with our trusty `mgu`:
 
 \begin{code}
 {-# LANGUAGE BlockArguments, DeriveFunctor, DeriveFoldable #-}
@@ -63,8 +62,8 @@ mustFact :: String -> Exp
 mustFact = either undefined id . parse fact ""
 \end{code}
 
-Suppose we are told `alfred` is a parent of `aethelflaed`, and then asked for a
-parent of `aethelflaed`. We can answer this query via unification:
+Suppose we are told `alfred` is a parent of `aethelflaed`, and then we are
+asked for a parent of `aethelflaed`. We can answer this query via unification:
 
 \begin{code}
 exampleTrivial = mgu fact q [] where

@@ -41,21 +41,17 @@ Consider a Haskell function:
 foo :: [a] -> [a]
 ------------------------------------------------------------------------
 
-Evaluating `foo "schooled"` must yield a list of lowercase characters, and
-furthermore, these characters must appear in the input list. This is because
-`foo` has black-box access to individual elements (akin to a combinator
-accessing its arguments) so `foo` can only perform some combination of
-rearranging or duplicating or discarding entries of the input list.
-
 Suppose `foo "schooled" == "shoe"`. What is `foo "SCHOOLED"`?
 
 It must be `"SHOE"`.
-We relabeled the input, and since `foo` only has black-box access to each
-letter, its output must be exactly what it was before, except relabeled. We
-could go beyond letters. If we replace each input letter with its ASCII code,
-we obtain "shoe" in ASCII.
+The function `foo` has black-box access to the elements of its input list, that
+is, it can only perform some combination of rearranging or duplicating or
+discarding the given letters. If `foo` were able to exploit some property of
+characters then it would instead have type `[Char] -> [Char]`. We relabeled
+the input, so the output must be exactly what it was before, except relabeled.
 
-In other words, given a relabeling function:
+We could go beyond letters. If we replace each input letter with its ASCII
+code, we obtain "shoe" in ASCII. In other words, given a relabeling function:
 
 ------------------------------------------------------------------------
 relabel :: Char -> Int
@@ -124,7 +120,7 @@ functors to stress we can replace any list with any Functor instance.
 The `theorize` function returns a list of equalities, the head of which
 is true whenever all of the equalities in the tail are true.
 
-Lists of functions are irksome. For expedience, we introduce lambdas rather
+Lists of functions are irksome. We expediently introduce lambdas rather
 than figuring out how to write the relabeling condition with combinators.
 
 ++++++++++
@@ -234,7 +230,12 @@ Product and coproduct types are hopefully only a little more work, but may mean
 some shortcuts we took are unavailable.
 
 That leaves the boring stuff: parsing types, pretty-printing theorems,
-interfacing with this webpage, and so on:
+interfacing with this webpage, and so on.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<p><a onclick='hideshow("boring");'>&#9654; Toggle boring stuff</a></p>
+<div id='boring' style='display:none'>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 \begin{code}
 instance Show Expr where
@@ -312,6 +313,10 @@ main = withElems ["in", "out", "magic"] $ \[iEl, oEl, magicB] -> do
     $ presto >> preventDefault
 #endif
 \end{code}
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+</div>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 == Already paid for ==
 
