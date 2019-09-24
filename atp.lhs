@@ -13,15 +13,10 @@
 <button id='uncurry'>uncurry</button>
 <button id='jonk'>jonk</button>
 </p>
-<p>
-<textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
-</p>
-<p>
-<button id='go'>Prove</button>
-</p>
-<p>
-<textarea id='out' rows='4' style='box-sizing:border-box;width:100%;'></textarea>
-</p>
+<p><textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea></p>
+<p><button id='go'>Prove</button></p>
+<p id='mathy'></p>
+<p><textarea id='out' rows='4' style='box-sizing:border-box;width:100%;'></textarea></p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 Prove that for any propositions P and Q:
@@ -258,9 +253,12 @@ A logician might summarize this as:
 \frac{\Gamma \Rightarrow P \quad \Gamma \Rightarrow Q} { \Gamma \Rightarrow P \wedge Q }
 \]
 
-where $\Gamma$ is a list of antecedent propositions. Since we classify the
-antecedents as passive or active, we ought to be more pedantic and split
-$\Gamma$ into two lists; see Pfenning for details.
+where $\Gamma$ is a list of antecedent propositions. Roughly speaking, this notation
+says that to prove the thing below the horizontal line, we must prove the
+things above the line.
+
+Since we classify the antecedents as passive or active, we ought to be more
+pedantic and split $\Gamma$ into two lists; see Pfenning for details.
 
 ++++++++++
 <script>
@@ -374,7 +372,14 @@ names.
 We associate each proposition in the active and passive lists with a lambda
 term representing its proof.
 
-We take this opportunity to properly fix our problematic implication rule.
+We take this opportunity to properly fix our problematic implication rule:
+
+\[
+\frac
+  {A \rightarrow B,\Gamma\Rightarrow A \quad B,\Gamma\Rightarrow G }
+  {A \rightarrow B,\Gamma\Rightarrow G}
+\]
+
 It turns out our prover is sound and complete if we replace it with these 4
 rules:
 
@@ -567,9 +572,18 @@ gives the proof:
 ++++++++++
 
 \begin{code}
+showLogic :: Prop -> String
+showLogic p = case p of
+  a :-> Falso -> "&not;" <> showLogic a
+  a :-> b -> "(" <> showLogic a <> "&rarr;" <> showLogic b <> ")"
+  a :& b -> "(" <> showLogic a <> "&and;" <> showLogic b <> ")"
+  a :| b -> "(" <> showLogic a <> "&or;" <> showLogic b <> ")"
+  Falso -> "&perp;"
+  Var s -> s
+
 #ifdef __HASTE__
 main :: IO ()
-main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
+main = withElems ["in", "out", "mathy", "go"] $ \[iEl, oEl, mEl, goB] -> do
   let
     setup button text = do
       Just b <- elemById button
@@ -577,17 +591,20 @@ main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
         act = do
           setProp iEl "value" text
           setProp oEl "value" ""
+          setProp mEl "innerHTML" ""
       void $ b `onEvent` Click $ const act
       when (button == "implies") act
     go = do
       s <- getProp iEl "value"
-      let
-        t = case parse propo "" s of
-          Left _ -> "parse error"
-          Right p -> case prove p of
+      case parse propo "" s of
+        Left _ -> do
+          setProp mEl "innerHTML" ""
+          setProp oEl "value" "parse error"
+        Right p -> do
+          setProp mEl "innerHTML" $ showLogic p
+          setProp oEl "value" $ case prove p of
             [] -> "no proof found"
             prfs -> unlines $ show <$> prfs
-      setProp oEl "value" t
   setup "swap" "(a, b) -> (b, a)"
   setup "demorgan" "(a -> Void, b -> Void) -> Either a b -> Void"
   setup "implies" "Either (p -> Void) q -> p -> q"
