@@ -367,7 +367,7 @@ exampleAppendo = pretty ["X", "Y"] <$>
 
 == Prolog forever ==
 
-To perform breadth-first search, we define a variant of `Pred` that takes an
+To perform true breadth-first search, we define a variant of `Pred` that takes an
 `Env` to a stream of lists of possible `Env` values that satisfy the predicate.
 All solutions in the same list have the same cost. The nth list holds all
 solutions of cost n.

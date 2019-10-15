@@ -228,6 +228,9 @@ prims = let
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
+    , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (ro '2')))
+    , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);

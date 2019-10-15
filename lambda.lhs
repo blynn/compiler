@@ -39,17 +39,17 @@ take us to a different program. The point is it'll behave identically to the
 original.
 
 Lambdas are easy for humans to understand. Practicians love them so much that
-popular languages eventually support them. Theoreticians define programming
-languages with lambda calculus. In fact, link:socrates.html[our implementation
-of Turing Machines] is written in syntactically sweetened lambda calculus so is
-close to a candidate for `fromTM`.
+popular languages eventually support them, while theoreticians define
+programming languages with lambda calculus. In fact, link:socrates.html[our
+implementation of Turing Machines] is written in syntactically sweetened lambda
+calculus so is close to a candidate for `fromTM`.
 
 Lambdas are easy for computers to understand. Compiler textbooks describe
 transforming source code into
 https://www.cs.princeton.edu/~appel/papers/ssafun.pdf["SSA form", another name
 for lambda calculus], so it can be readily analyzed and manipulated.
 
-Thus one way or another, a source language is defined in terms of lambda
+Thus one way or another, a source language is often defined in terms of lambda
 calculus. Accordingly, we revise our definition of a programming language to be
 a function taking a program to a closed lambda calculus term:
 
@@ -72,9 +72,9 @@ data LC = Var VarId | Lam VarId LC | LC :@ LC
 A program is represented by a 'closed' lambda term, which means every `Var`
 node must be a descendant of a `Lam` node with a matching `VarId`.
 
-As for its semantics: we define a closed lambda term to be notation for a
-combinatory logic term, which we define to be a full binary tree whose leaves
-can be one of 6 different values:
+As for its semantics, we break convention and define a closed lambda term to
+be notation for a combinatory logic term, which we define to be a full binary
+tree whose leaves can be one of 6 different values:
 
 ++++++++++
 <script>
@@ -313,6 +313,7 @@ Mission accomplished?
 Can all programming languages be defined with our version of lambda calculus?
 After all, we chose a particular order of evaluation.
 
+Yes!
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
 landmark paper of 1972] surveys multiple languages defined in multiple variants
 of lambda calculus, then reveals this variety is unnecessary. Thanks to
@@ -322,7 +323,7 @@ https://en.wikipedia.org/wiki/Kappa_calculus[kappa calculus]?), and which
 evaluates in any given order.
 
 A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
-Sussman wrote the famous lambda papers]: a series of cookbooks describing how
+Sussman wrote the lambda papers]: a series of cookbooks describing how
 to define many practical programming constructs in lambda calculus.
 
 http://www.cs.nott.ac.uk/~pszgmh/fifty.pdf[Hutton and Bahr 'calculate' a

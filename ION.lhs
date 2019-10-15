@@ -51,7 +51,7 @@ data VM = VM { sp :: Int, hp :: Int, mem :: Map Int Int }
 
 We take advantage of native 32-bit words rather than encode numbers in pure
 lambda calculus, at the cost of introducing combinators that correspond to
-native artihmetic instructions.
+native arithmetic instructions.
 
 Let `n` be a 32-bit word. If `n` lies in [0..127], `n` represents a combinator,
 otherwise `n` represents the application of the expression represented by
@@ -93,15 +93,24 @@ push n vm@VM{sp} = store (sp - 1) n $ vm{sp = sp - 1}
 == Sharing economy ==
 
 We earlier noted that applying the S combinator causes two nodes to refer to
-the same subterm. This sharing saves room, but we can save more. Our `reduce`
-function is copy-on-write, by which we mean if two nodes X and Y refer to the
-same subterm, reducing X causes X to point to a new subterm, while preserving
-Y. Instead, we should implement "don't-bother-copying-on-write", and modify
-the same subterm whether X or Y is being reduced, a strategy known as 'lazy
-evaluation'.
+the same subterm. This sharing saves room, but we can save more.
 
-We might think of this as different to normal order, because we're reducing
-both X and Y even if they are not the two left-most subterms.
+Suppose two nodes X and Y point to the same subterm T. On reducing X, our
+`reduce` function created a new subterm U, and changed X to point to U and
+left Y pointing to T (reminiscent of copy-on-write).
+
+Instead, we should simply replace T with U so that reducing either one of X
+or Y causes both to point to U afterwards. This strategy is known as 'lazy
+evaluation', and our `lazy` function below carries it out.
+
+Even though the result is the same, we see this order as different to normal
+order, because we reduce both X and Y (and possibly other nodes) even if they
+are not the two left-most subterms.
+
+The tacit application of `load n` to `load (n + 1)` creates complications
+with lazy evaluation, which we work around with the aid of the identity
+combinator. For example, if an application evaluates to `K`, then we replace
+it with `IK`.
 
 == The numbers game ==
 
@@ -236,7 +245,6 @@ Other choices for implementing lambda calculus include:
 
   * https://en.wikipedia.org/wiki/SECD_machine[SECD machine]
   * http://matt.might.net/articles/cek-machines/[CEK machine]
-  * https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[G-machine] (Chapter 3)
-  * https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[TIM machine] (Chapter 4)
+  * https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[G-machine; TIM machine] (Chapters 3 and 4)
   * https://www.microsoft.com/en-us/research/wp-content/uploads/1992/04/spineless-tagless-gmachine.pdf[Spineless Tagless G-machine]
   * https://github.com/grin-compiler/grin[GRIN: Graph Reduction Intermediate Notation]

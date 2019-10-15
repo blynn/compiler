@@ -13,7 +13,7 @@ itself. Surely the equally powerful lambda calculus, which can describe itself
 in far less space, is more deserving of the title.
 http://www.paulgraham.com/rootsoflisp.html[Paul Graham's 'The Roots of Lisp']
 dubs the LISP self-interpreter "The Surprise" because of its supposed brevity.
-What, then, should one call the one-line lambda calculus self-interpereter?
+What, then, should one call a one-line lambda calculus self-interpereter?
 
 https://tromp.github.io/cl/LC.pdf[John Tromp's reworking of Chaitin's ideas in
 lambda calculus and combinatory logic] is a fascinating read. Much of the fun
@@ -73,9 +73,9 @@ go s = eval id (encode (App (App S K) K) s);
 Since SKK is the identity, the above program just returns the input.
 
 Kiselyov's bracket abstraction algorithm leads us to wonder: why limit
-ourselves to S and K? We can, but does that mean we should? After all, we could
-prohibit lambda terms with a De Bruijn index greater than 2 and retain the
-same computing power, but nobody bothers.
+ourselves to S and K? After all, in lambda calculus, we could prohibit terms
+with a De Bruijn index greater than 2 and retain the same computing power, but
+nobody bothers. Why do we insist on two particular combinators?
 
 == Hole in one ==
 

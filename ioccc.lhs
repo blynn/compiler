@@ -6,6 +6,13 @@ of authoring an award-winning compiler!
 (Even if the award is from the https://www.ioccc.org/2019/whowon.html[26th
 International Obfuscated C Code Contest].)
 
+To see the source:
+
+------------------------------------------------------------------------
+  $ curl https://www.ioccc.org/2019/2019.tar.bz2 | tar xj
+  $ cd 2019/lynn
+------------------------------------------------------------------------
+
 == Thanks! ==
 
 Many thanks to http://ioccc.org/judges.html[the contest organizers] for
@@ -113,7 +120,7 @@ f <$> x <*> y
 
 I should have defined `liftA2` to save room.
 
-Secondly, a different mixed-radix encoding would still be invisible to
+A different mixed-radix encoding would still be invisible to
 `iocccsize` but takes less room. The corresponding decoder needs more C, but
 the savings are worth it:
 

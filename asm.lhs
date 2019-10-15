@@ -1,12 +1,12 @@
 = ION Assembly =
 
-A computer program is usually a string intended for human comprehension, while
-language specifications usually devote most of their attention to an abstract
-representation, such as a syntax tree, where we can ignore details such as
-which characters count as whitespace.
+By "computer program", we often mean a string intended for human
+comprehension. In contrast, language specifications usually involve more
+abstract objects such as syntax trees, where we can ignore details such as
+which characters are treated as whitespace.
 
-A parser maps the former to the latter, or an error if the input string is not
-a valid program.
+A parser maps a string to a syntax tree, or an error if the input string is
+not a valid program.
 
 ------------------------------------------------------------------------
 parse :: [Char] -> Either Error Language
@@ -21,16 +21,9 @@ parseCompile s = case parse s of
   Right prog -> Right (compile prog)
 ------------------------------------------------------------------------
 
-We simplify by replacing return errors with undefined behaviour when
-given an invalid program, so we can get away with:
-
-------------------------------------------------------------------------
-simpleCompile :: [Char] -> TargetLanguage
-------------------------------------------------------------------------
-
 Our `TargetLanguage` is a sort of assembly language for the ION machine, where
-we use a string representation of a list of `CL` terms. (We later explain why
-we want `[CL]` rather than a single `CL`.)
+we use a string representation of a list of `CL` terms. (Why a list instead
+of a single `CL`? See below.)
 
 ------------------------------------------------------------------------
 type TargetLanguage = [Char]
@@ -43,8 +36,7 @@ We also need some way to load an ION machine with a `[CL]`:
 load :: [CL] -> VM
 ------------------------------------------------------------------------
 
-We build `assemble` and `load` below, laying the groundwork for compilers
-of the same type as `simpleCompile`.
+We build `assemble` and `load` below:
 
 ++++++++++
 <script>
@@ -94,8 +86,7 @@ prog = term ';' [prog]
 A program is a sequence of terms terminated by semicolons.
 The entry point is the last term of the sequence.
 
-The motivation for a sequence instead of insisting on a single term is that
-rather than:
+The motivation for a list instead of a single term is that rather than:
 
 ------------------------------------------------------------------------
 norm = (\sq x y -> sq x + sq y) (\x -> x * x)
@@ -149,7 +140,7 @@ An 32-bit word constant is represented by a number in parentheses. For example,
 
 An alternative representation is to use the unary prefix operator `(#)`, in
 which case the constant is the ASCII code of the following character. Again,
-this is so we can generate code without dealing with decimal conversion.
+this is so we can generate code without worrying about converting to decimal.
 
 For example, instead of `(42)` we may write `#*`.
 
@@ -234,3 +225,22 @@ $ echo -n '``C`T?`KI;' > tail
 $ echo "tail" | ion tail
 ail
 ------------------------------------------------------------------------
+
+== Parsing Pitfalls ==
+
+Sadly, we largely ignore the topic of parsing because we wish to focus on
+lambda calculus, combinatory logic, and types. We get by with parser
+combinators, which we hardly explain.
+
+This is a pity, because my textbooks omitted several fascinating facts, partly
+due to their vintage:
+
+  * Many recommend Thompson's construction algorithm for regular expression
+  engines. In fact, link:../haskell/re.html[regular expression derivatives]
+  are superior. See also http://stedolan.net/research/semirings.pdf['Fun with Semirings'] for lesser-known connections between regular languages and other parts of computer science.
+
+  * link:../haskell/parse.html[Parsing combinators] take the tedium out of recursive descent parsers, at least in languages like Haskell.
+
+  * link:../haskell/pwd.html[Parsing with derivatives] makes it easy to write an efficient context-free parser generator.
+
+  * https://en.wikipedia.org/wiki/Parsing_expression_grammar[Parsing expression grammars] can be parsed in linear time and can even handle some context-sensitive grammars, though it is unknown whether they can handle all context-free grammars.

@@ -56,8 +56,6 @@ void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 u copy(u n) {
   if (n < 128) return n;
-  if (np < TOP/2 && n < TOP/2) return n;
-  if (np >= TOP/2 && n >= TOP/2) return n;
   u x = mem[n];
   if (x >= 128) {
     while (mem[x] == 'T') {
@@ -97,7 +95,7 @@ u copy(u n) {
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
-  mem[z + 1] = x == '#' || x == '0' ? y : copy(y);
+  mem[z + 1] = x == '#' ? y : copy(y);
   return z;
 }
 

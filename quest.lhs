@@ -126,8 +126,8 @@ type Parser x = [Char] -> Maybe (x, [Char])
 ------------------------------------------------------------------------
 
 A `Parser x` tries to parse the beginning of a given string for a value of
-type `x`. If successful, it returns the value along with the unparsed
-remainder of the input string. Otherwise t returns `Nothing`.
+type `x`. If successful, it returns `Just` the value along with the unparsed
+remainder of the input string. Otherwise it returns `Nothing`.
 
 Values of type `Parser x` compose in natural ways. See
 http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf['Combinator Parsing: A Short Tutorial` by Swierstra] for details.

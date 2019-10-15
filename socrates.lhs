@@ -10,20 +10,20 @@ but even after several iterations, the main conclusion most often seemed to be
 "X is hard to define". Awfully little to extract from such a long process.
 
 I first encountered an optimization in a book by Douglas Adams. Reply
-mathematically! If asked "What is the answer to the meaning of life, the
-universe, and everything?", we say "42" and avoid those meddlesome
+mathematically! When asked: "What is the answer to the meaning of life, the
+universe, and everything?", we say "42" and pre-empt those meddlesome
 contradictions. For if mathematics is flawed, then so is logical reasoning, and
 hence the Socratic method itself.
 
-Now the problem is finding a mathematical definition that reflects what we have
+Now the problem is to find a mathematical definition that reflects what we have
 in mind. This can be difficult, but often in computer science, mathematical
 definitions work well, and even guide the implementation.
 
 == What is a compiler? ==
 
 We define a compiler to be a translator from one programming language to
-another. More mathematically, a function from programs in the source language
-to programs in the target language:
+another. More mathematically, a compiler is a function that maps a program in
+the source language to a program in the target language:
 
 ------------------------------------------------------------------------
 compile :: Language -> TargetLanguage
@@ -34,17 +34,16 @@ meaning of the source program.
 
 == What is a programming language? ==
 
-We view running a program as evaluating a function that takes an input value to
-an output value. Thus we define a programming language to be a set of programs
-and a function, called an interpreter, that takes a program to a function
-mapping input values to output values:
+We view a program as a function that takes an input value to an output value.
+We define a programming language by means of an interpreter, which takes a
+program to a function mapping input values to output values:
 
 ------------------------------------------------------------------------
 interpret :: Language -> (Value -> Value)
 interpretTarget :: TargetLanguage -> (Value -> Value)
 ------------------------------------------------------------------------
 
-By convention, the arrow `(->)` associates to the right so we instead write:
+By convention, the arrow `(->)` associates to the right, so we write:
 
 ------------------------------------------------------------------------
 interpret :: Language -> Value -> Value
@@ -123,8 +122,8 @@ runDfa (start, step, accepts) s = go start s where
 
 Briefly, the machine begins in some `start` state, then updates its state
 according to the current state and the next input `Char`, and repeats until the
-entire input has been processed. If it ends up in a state that is defined to
-be an accepting state, we say the machine accepts the input.
+entire input has been processed. If it ends in a state designated as an
+accepting state, we say the machine accepts the input.
 
 For example, the following DFA accepts strings consisting of an odd number
 of 'x's:
@@ -143,10 +142,10 @@ demoOddXs = runDfa oddXs "xxxxx"
 
 We could extend the above to spit out characters as it computes. See
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
-https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]. But we already
-learn enough as it is. We quickly find DFAs are incapable of elementary tasks such
-as checking if a bunch of parentheses are balanced, or if some number of As has
-been followed by an equal number of Bs.
+https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]. But we've seen
+enough. We quickly find DFAs are incapable of elementary tasks such as checking
+if a bunch of parentheses are balanced, or if some number of As has been
+followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
 
@@ -179,7 +178,7 @@ popped-off symbol determine the action for this step, which is one of:
 
  * `Reject`: halt the machine and reject the input.
 
- * `BlindPush` ignore the input, enter a given state and push a given
+ * `BlindPush`: ignore the input, enter a given state and push a given
 sequence of symbols on the stack.
 
  * `Push`: if at the end of input, then halt, accepting if in a given set of
@@ -242,7 +241,6 @@ define the result of popping an empty stack to be a special `Char`
 value that we call a 'blank'.
 
 We have just described 'Turing machines'.
-
 Usually, the two stacks and current value are explained in terms of a movable
 read/write head on a tape that is infinitely long in either direction, which is
 disconcerting since it's impossible to cram an infinite tape into a real

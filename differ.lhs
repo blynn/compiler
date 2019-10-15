@@ -418,8 +418,8 @@ the same, the emphasis is no longer on crudely modeling the human brain, nor
 stitching together layers of matrix multiplications. The latest fashion is to
 program with differentiable functions and improve them with gradient descent,
 or perhaps other methods.
-See Conal Elliot, 'https://github.com/conal/talk-2018-deep-learning-rebooted[A
-Functional Reboot for Deep Learning].
+See Conal Elliot, https://github.com/conal/talk-2018-deep-learning-rebooted['A
+Functional Reboot for Deep Learning'].
 
 In a 2019 paper,
 http://online.watsci.org/abstract_pdf/2019v26/v26n3a-pdf/4.pdf[Bartlett and
@@ -499,21 +499,6 @@ An example of the second trick: if we know $(f, df) = (1, 2 dx)$ and $(g, dg) =
 (3, 4 dx)$ then the product rule gives $(f g, d(f g)) = (3, 10 dx)$. Algebra
 is great, but sticking with values sure is easier than manipulating symbols.
 
-This trick shows up elsewhere. In certain areas of cryptography, we need to
-compute a function related to https://en.wikipedia.org/wiki/Weil_pairing[the
-Weil pairing]. The numbers involved are so large that it's infeasible to write
-the function in terms of two input points given symbolically, say $(x_1, y_1)$
-and $(x_2, y_2)$.
-
-Thus in practice, to compute this function on two given points, we roughly
-act as if were trying to derive a formula, but always use values instead of
-symbols. This is known as https://crypto.stanford.edu/miller/[Miller's
-algorithm].
-
-Automated theorem proving profits from turning this trick on its head. Early
-theorem provers exhaustively tried every possible value for every variable.
-Later provers improved on this by by computing with variables instead.
-
 Automatic differentiation has a 'forward mode' and a 'reverse mode'.
 The latter is also called 'backpropagation' in some contexts.
 These modes relate to the chain rule, which in our implementation is hidden in
@@ -552,3 +537,18 @@ mode is the result of applying a fusion law to forward mode:
 ------------------------------------------------------------------------
 map (3*) . map (4*) . map (5*) = map (60*)
 ------------------------------------------------------------------------
+
+By the way, the second trick shows up elsewhere. In certain areas of
+cryptography, we need to compute a function related to
+https://en.wikipedia.org/wiki/Weil_pairing[the Weil pairing]. The numbers
+involved are so large that it's infeasible to write the function in terms of
+two input points given symbolically, say $(x_1, y_1)$ and $(x_2, y_2)$.
+
+Thus in practice, to compute this function on two given points, we roughly act
+as if were trying to derive a formula, but always use values instead of
+symbols. This is known as https://crypto.stanford.edu/miller/[Miller's
+algorithm].
+
+Automated theorem proving profits from turning this trick on its head. Early
+theorem provers exhaustively tried every possible value for every variable.
+Later provers improved on this by by computing with variables instead.

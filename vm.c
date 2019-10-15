@@ -15,8 +15,8 @@ void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 u copy(u n) {
   if (n < 128) return n;
-  if (np < TOP/2 && n < TOP/2) return n;
-  if (np >= TOP/2 && n >= TOP/2) return n;
+  // if (np < TOP/2 && n < TOP/2) return n;
+  // if (np >= TOP/2 && n >= TOP/2) return n;
   u x = mem[n];
   if (x >= 128) {
     while (mem[x] == 'T') {
@@ -56,7 +56,7 @@ u copy(u n) {
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
-  mem[z + 1] = x == 'a' || x == '#' || x == '0' ? y : copy(y);
+  mem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
   return z;
 }
 
@@ -78,7 +78,9 @@ static inline u app(u f, u x) {
   return hp - 2;
 }
 
+static u root_memo;
 void reset(u root) {
+  root_memo = root;
   *(sp = spTop) = app(
     app(app(root, app('0', '?')), '.'), app('T', '1'));
 }
@@ -208,6 +210,8 @@ void run(u (*get)(), void (*put)(u)) {
         mem[*sp + 1] = f;
         break;
       }
+      // putChar
+      case '2': put(num(1)); lazy(3, app(arg(3), 'K'), arg(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
     } else {
       *--sp = mem[x];
@@ -572,6 +576,29 @@ void fib() {
   run(str_get, pc);
 }
 
+void io() {
+  fp_reset("raw");
+	loadRaw(fp_get);
+  str =
+    "ioBind2 m k = ioBind m (\\_ -> k);"
+    "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
+    "foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
+    "(.) f g x = f (g x);"
+    "data Unit = Unit;"
+    "flip f x y = f y x;"
+    "map = flip (foldr . ((:) .)) [];"
+    "mapM_ f = foldr (ioBind2 . f) (ioPure Unit);"
+    "main = mapM_ putChar \"Hello, World!\\n\""
+    ;
+  buf_reset();
+  run(str_get, buf_put);
+  *bufptr = 0;
+  parseRaw(buf);
+  *sp = app(app(root_memo, '?'), '.');
+  str = "";
+  run(str_get, pc);
+}
+
 int main(int argc, char **argv) {
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
@@ -588,6 +615,13 @@ int main(int argc, char **argv) {
       run(ioget, pc);
       return 0;
     }
+    if (!strcmp(argv[1], "asmWith")) {
+      fp_reset(argv[2]);
+      loadRaw(fp_get);
+      run(ioget, pc);
+      return 0;
+    }
+    if (!strcmp(argv[1], "io")) return io(), 0;
 		return puts("bad command"), 0;
 	}
 	rpg();

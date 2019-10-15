@@ -44,7 +44,7 @@ like: "a hydrogen atom contains two protons implies Beethoven wrote nine
 symphonies"?
 
 It sounds illogical because in everyday use, the word "implies" implies
-causation. How can a proposition imply an unrelated proposition? Yet discarding
+causation. How can a proposition imply an unrelated proposition? Yet banishing
 the word "implies" is out of the question, because logic ought to be able to
 deal with causality.
 
@@ -87,9 +87,9 @@ impossible to have both a proof of $A$ and a proof of $\neg A$.
 
 It's fun to split philosophical hairs, but we really went to all this trouble
 for practical reasons.
-If we build a system that can generate a constructive proof of a given
-proposition, then we can automatically generate a function of a given type,
-a fact known as the Curry-Howard correspondence.
+If we can automatically generate a constructive proof of a given proposition,
+then we can automatically generate the source code of a function of a given
+type, a fact known as the Curry-Howard correspondence.
 
 == Too much too early ==
 
@@ -108,7 +108,7 @@ would enumerating all possible proofs of $P$ lead to it?
 We could try to enumerate all syntax trees, link:../lambda/hm.html[infer the
 type of each tree] as we go, and see if it happens to be the proposition we're
 trying to prove. However, besides being grossly inefficient, this procedure
-fails to terminates when no proof exists.
+fails to terminate when no proof exists.
 
 Chapter 4 of
 https://www.cs.cmu.edu/~fp/courses/atp/handouts/atp.pdf[Frank Pfenning's
@@ -134,8 +134,8 @@ prove $B$ with no assumptions:
 \Rightarrow B
 \]
 
-Then we apply one of the rules describd below to transform it into one or more
-sequents from which this sequent can be deduced.
+Then we apply one of the rules described below to transform it into one or
+more sequents that logically lead to this sequent.
 
 We recursively apply rules on these new sequents until we reach a self-evident
 sequent. There are two kinds of such sequents. Either we have an 'initial
