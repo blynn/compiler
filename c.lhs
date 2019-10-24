@@ -45,69 +45,65 @@ typedef unsigned u;
 #include <stdlib.h>
 #include <string.h>
 
-enum { FORWARD = 27, REDUCING = 9, RECUR = 10 };
+enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
 enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u mem[TOP], np, *sp, *spTop, hp;
+u mem[TOP], *sp, *spTop, hp;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 u copy(u n) {
   if (n < 128) return n;
   u x = mem[n];
-  if (x >= 128) {
-    while (mem[x] == 'T') {
-      mem[n] = mem[n + 1];
-      mem[n + 1] = mem[x + 1];
-      x = mem[n];
-    }
-    if (mem[x] == 'K') {
-      mem[n + 1] = mem[x + 1];
-      x = mem[n] = 'I';
-    }
+  while (x >= 128 && mem[x] == 'T') {
+    mem[n] = mem[n + 1];
+    mem[n + 1] = mem[x + 1];
+    x = mem[n];
+  }
+  if (x >= 128 && mem[x] == 'K') {
+    mem[n + 1] = mem[x + 1];
+    x = mem[n] = 'I';
   }
   u y = mem[n + 1];
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-      mem[n] = RECUR;
-      mem[n + 1] = np;
-      np += 2;
+  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+      mem[n] = FORWARD;
+      mem[n + 1] = hp;
+      hp += 2;
       return mem[n + 1];
-    case RECUR: return y;
     case 'I':
       mem[n] = REDUCING;
       y = copy(y);
-      if (mem[n] == RECUR) {
+      if (mem[n] == FORWARD) {
         mem[mem[n + 1]] = 'I';
         mem[mem[n + 1] + 1] = y;
       } else {
+        mem[n] = FORWARD;
         mem[n + 1] = y;
       }
-      mem[n] = FORWARD;
       return mem[n + 1];
     default: break;
   }
-  u z = np;
-  np += 2;
+  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+  u z = hp;
+  hp += 2;
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
-  mem[z + 1] = x == '#' ? y : copy(y);
+  mem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
   return z;
 }
 
 void gc() {
-  if (sp > spTop) return;
-  u *p;
-
-  np = hp < TOP/2 ? TOP/2 : 128;
-  u np0 = np;
-  for(p = sp; p <= spTop; p++) *p = copy(*p);
-  fprintf(stderr, "GC %u %ld\n", np - np0, spTop - sp);
-  hp = np;
+  hp = hp < TOP/2 ? TOP/2 : 128;
+  // u hp0 = hp;
+  sp = spTop;
+  *sp = copy(*sp);
+  // fprintf(stderr, "GC %u\n", hp - hp0);
 }
 
 u app(u f, u x) {

@@ -4,55 +4,53 @@ typedef unsigned u;
 #include <string.h>
 #include <time.h>
 
-enum { FORWARD = 27, REDUCING = 9, RECUR = 10 };
+enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u mem[TOP], np, *sp, *spTop, hp, tab[TABMAX], tabn;
+//enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
+enum { TOP = 2000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
+u mem[TOP], *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 u copy(u n) {
   if (n < 128) return n;
-  // if (np < TOP/2 && n < TOP/2) return n;
-  // if (np >= TOP/2 && n >= TOP/2) return n;
   u x = mem[n];
-  if (x >= 128) {
-    while (mem[x] == 'T') {
-      mem[n] = mem[n + 1];
-      mem[n + 1] = mem[x + 1];
-      x = mem[n];
-    }
-    if (mem[x] == 'K') {
-      mem[n + 1] = mem[x + 1];
-      x = mem[n] = 'I';
-    }
+  while (x >= 128 && mem[x] == 'T') {
+    mem[n] = mem[n + 1];
+    mem[n + 1] = mem[x + 1];
+    x = mem[n];
+  }
+  if (x >= 128 && mem[x] == 'K') {
+    mem[n + 1] = mem[x + 1];
+    x = mem[n] = 'I';
   }
   u y = mem[n + 1];
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-      mem[n] = RECUR;
-      mem[n + 1] = np;
-      np += 2;
+  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+      mem[n] = FORWARD;
+      mem[n + 1] = hp;
+      hp += 2;
       return mem[n + 1];
-    case RECUR: return y;
     case 'I':
       mem[n] = REDUCING;
       y = copy(y);
-      if (mem[n] == RECUR) {
+      if (mem[n] == FORWARD) {
         mem[mem[n + 1]] = 'I';
         mem[mem[n + 1] + 1] = y;
       } else {
+        mem[n] = FORWARD;
         mem[n + 1] = y;
       }
-      mem[n] = FORWARD;
       return mem[n + 1];
     default: break;
   }
-  u z = np;
-  np += 2;
+  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+  u z = hp;
+  hp += 2;
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
@@ -60,15 +58,33 @@ u copy(u n) {
   return z;
 }
 
-void gc() {
-  if (sp > spTop) return;
-  u *p;
+void dump(u n) {
+  if (!n) { putchar('!'); }
+  if (n < 128) {
+    putchar(n);
+    return;
+  }
+  u x = mem[n];
+  u y = mem[n + 1];
+  mem[n] = 0;
+  mem[n + 1] = 0;
 
-  np = hp < TOP/2 ? TOP/2 : 128;
-  u np0 = np;
-  for(p = sp; p <= spTop; p++) *p = copy(*p);
-  fprintf(stderr, "GC %u %ld\n", np - np0, spTop - sp);
-  hp = np;
+  putchar('(');
+  dump(x);
+  if (x == 'a' || x == '#') {
+    printf(" %u", y);
+  } else {
+    dump(y);
+  }
+  putchar(')');
+}
+
+void gc() {
+  hp = hp < TOP/2 ? TOP/2 : 128;
+  // u hp0 = hp;
+  sp = spTop;
+  *sp = copy(*sp);
+  // fprintf(stderr, "GC %u\n", hp - hp0);
 }
 
 static inline u app(u f, u x) {
@@ -169,7 +185,8 @@ void run(u (*get)(), void (*put)(u)) {
   clock_t start = clock();
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+    //static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+    if ((hp < TOP/2 && hp + 8 >= TOP/2) || mem + hp > sp - 8) gc();
     u x = *sp;
     if (x < 128) switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
