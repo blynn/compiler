@@ -15,6 +15,9 @@ We partially achieve this by reducing `K I T` nodes during garbage collection.
 Eliminating applications of `I` during garbage collection makes up for not
 doing so during evaluation.
 
+Our simple design means the only garbage collection root we need is the top of
+the stack.
+
 == Unfinished business ==
 
 The world of Compiler Quest is rich and open-ended. My in-game Journal brims
@@ -70,7 +73,6 @@ u copy(u n) {
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
       mem[n] = FORWARD;
       mem[n + 1] = hp;
       hp += 2;
@@ -88,13 +90,12 @@ u copy(u n) {
       return mem[n + 1];
     default: break;
   }
-  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
   u z = hp;
   hp += 2;
   mem[n] = FORWARD;
   mem[n + 1] = z;
   mem[z] = copy(x);
-  mem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
+  mem[z + 1] = x == '#' ? y : copy(y);
   return z;
 }
 

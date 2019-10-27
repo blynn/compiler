@@ -8,8 +8,8 @@ enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-//enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
-enum { TOP = 2000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
+enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
+//enum { TOP = 2000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
 u mem[TOP], *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
@@ -30,7 +30,7 @@ u copy(u n) {
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+      if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
       mem[n] = FORWARD;
       mem[n + 1] = hp;
       hp += 2;
@@ -56,27 +56,6 @@ u copy(u n) {
   mem[z] = copy(x);
   mem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
   return z;
-}
-
-void dump(u n) {
-  if (!n) { putchar('!'); }
-  if (n < 128) {
-    putchar(n);
-    return;
-  }
-  u x = mem[n];
-  u y = mem[n + 1];
-  mem[n] = 0;
-  mem[n + 1] = 0;
-
-  putchar('(');
-  dump(x);
-  if (x == 'a' || x == '#') {
-    printf(" %u", y);
-  } else {
-    dump(y);
-  }
-  putchar(')');
 }
 
 void gc() {
@@ -555,42 +534,15 @@ void dis(char *file) {
   run(fp_get, pc);
 }
 
-void fib() {
+void runFile(char *f) {
   fp_reset("raw");
 	loadRaw(fp_get);
-  str =
-"undefined = undefined;"
-"(.) f g x = f (g x);"
-"id x = x;"
-"data Bool = True | False;"
-"ifz n x y = case intEq 0 n of { True -> x ; False -> y };"
-"(!!) xs n = case xs of { [] -> undefined; (:) h t -> ifz n h (t!!(n - 1)) };"
-"tail xs = case xs of { [] -> undefined; (:) _ t -> t };"
-"zipWith f xs ys = case xs of"
-"  { [] -> []"
-"  ; (:) x xt -> case ys of"
-"    { [] -> []"
-"    ; (:) y yt -> f x y : zipWith f xt yt"
-"    }"
-"  };"
-"fibs = 0 : (1 : zipWith (+) fibs (tail fibs));"
-
-"hd xs = case xs of { [] -> undefined; (:) h _ -> h };"
-"fst p = case p of { (,) x y -> x };"
-"showsInt n = let"
-"  { showsNonzero n = let { q = n/10 } in"
-"    ifz n id ((.) (showsNonzero q) (chr (ord '0'+(n-(q*10))):) )"
-"  } in ifz n ('0':) (showsNonzero n);"
-
-"main s = showsInt (fibs !! 20) \"\\n\";"
-;
+  fp_reset(f);
   buf_reset();
-  run(str_get, buf_put);
+  run(fp_get, buf_put);
   *bufptr = 0;
-
   parseRaw(buf);
-  str = "";
-  run(str_get, pc);
+  run(ioget, pc);
 }
 
 void io() {
@@ -623,7 +575,8 @@ int main(int argc, char **argv) {
   if (argc > 1) {
     if (!strcmp(argv[1], "test")) return runTests(), 0;
     if (!strcmp(argv[1], "rpg")) return rpg(), puts(buf), 0;
-    if (!strcmp(argv[1], "fib")) return fib(), 0;
+    // e.g. $ vm run fib
+    if (!strcmp(argv[1], "run")) return runFile(argv[2]), 0;
     if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
     if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
     if (!strcmp(argv[1], "asm")) {

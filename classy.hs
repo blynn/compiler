@@ -217,7 +217,7 @@ prims = let
     [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), R "Y"))
     , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), R "C"))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "="))
-    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "L"))
+    , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "L"))
     , ("chr", (ii, R "I"))
     , ("ord", (ii, R "I"))
     , ("succ", (ii, R "`T`(1)+"))

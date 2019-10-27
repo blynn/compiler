@@ -7,7 +7,6 @@ infix 4 == , <=;
 infixl 3 && , <|>;
 infixl 2 ||;
 infixr 0 $;
-
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
 undefined = undefined;
@@ -16,6 +15,16 @@ id x = x;
 flip f x y = f y x;
 (&) x f = f x;
 data Bool = True | False;
+class Ord a where { (<=) :: a -> a -> Bool };
+instance Ord Int where { (<=) = intLE };
+data Ordering = LT | GT | EQ;
+compare x y = case x <= y of
+  { True -> case y <= x of
+    { True -> EQ
+    ; False -> LT
+    }
+  ; False -> GT
+  };
 data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
@@ -224,7 +233,7 @@ prims = let
     [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), ro 'Y'))
     , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), ro 'C'))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
-    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
@@ -546,6 +555,10 @@ index n s ss = case ss of
   };
 length = foldr (\_ n -> n + 1) 0;
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
+-- scottConstr t cs c = case c of { Constr s ts -> (s,
+--   ( noQual $ foldr arr t ts
+--   , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
+--   };
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
