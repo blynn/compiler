@@ -8,7 +8,7 @@ enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
+enum { TOP = 1<<25, TABMAX = 1<<10, BUFMAX = 1<<20 };
 //enum { TOP = 2000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
 u mem[TOP], *sp, *spTop, hp, tab[TABMAX], tabn;
 

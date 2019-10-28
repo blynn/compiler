@@ -25,6 +25,19 @@ compare x y = case x <= y of
     }
   ; False -> GT
   };
+instance Ord a => Ord [a] where {
+  (<=) xs ys = case xs of
+    { [] -> True
+    ; (:) x xt -> case ys of
+      { [] -> False
+      ; (:) y yt -> case compare x y of
+        { LT -> True
+        ; GT -> False
+        ; EQ -> xt <= yt
+        }
+      }
+    }
+};
 data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
@@ -65,9 +78,89 @@ any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
+-- Map.
+
+data Map k a = Tip | Bin Int k a (Map k a) (Map k a);
+size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
+node k x l r = Bin (1 + size l + size r) k x l r;
+singleton k x = Bin 1 k x Tip Tip;
+singleL k x l r = case r of
+  { Tip -> undefined
+  ; Bin _ rk rkx rl rr -> node rk rkx (node k x l rl) rr
+  };
+singleR k x l r = case l of
+  { Tip -> undefined
+  ; Bin _ lk lkx ll lr -> node lk lkx ll (node k x lr r)
+  };
+doubleL k x l r = case r of
+  { Tip -> undefined
+  ; Bin _ rk rkx rl rr -> case rl of
+    { Tip -> undefined
+    ; Bin _ rlk rlkx rll rlr -> node rlk rlkx (node k x l rll) (node rk rkx rlr rr)
+    }
+  };
+doubleR k x l r = case l of
+  { Tip -> undefined
+  ; Bin _ lk lkx ll lr -> case lr of
+    { Tip -> undefined
+    ; Bin _ lrk lrkx lrl lrr -> node lrk lrkx (node lk lkx ll lrl) (node k x lrr r)
+    }
+  };
+balance k x l r = case size l + size r <= 1 of
+  { True -> node
+  ; False -> case 5 * size l + 3 <= 2 * size r of
+    { True -> case r of
+      { Tip -> doubleL
+      ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 3 * size rr of
+        { True -> singleL
+        ; False -> doubleL
+        }
+      }
+    ; False -> case 5 * size r + 3 <= 2 * size l of
+      { True -> case l of
+        { Tip -> doubleR
+        ; Bin sz _ _ ll lr -> case 2 * size lr <= 3 * size ll of
+          { True -> singleR
+          ; False -> doubleR
+          }
+        }
+      ; False -> node
+      }
+    }
+  } k x l r;
+insert kx x t = case t of
+  { Tip -> singleton kx x
+  ; Bin sz ky y l r -> case compare kx ky of
+    { LT -> balance ky y (insert kx x l) r
+    ; GT -> balance ky y l (insert kx x r)
+    ; EQ -> Bin sz kx x l r
+    }
+  };
+mlookup kx t = case t of
+  { Tip -> Nothing
+  ; Bin _ ky y l r -> case compare kx ky of
+    { LT -> mlookup kx l
+    ; GT -> mlookup kx r
+    ; EQ -> Just y
+    }
+  };
+fromList = let
+  { ins t kx = case kx of { (,) k x -> insert k x t }
+  } in foldl ins Tip;
+
+foldrWithKey f = let
+  { go z t = case t of
+    { Tip -> z
+    ; Bin _ kx x l r -> go (f kx x (go z r)) l
+    }
+  } in go;
+
+toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
+
+-- Parsing.
+
 data Type = TC String | TV String | TAp Type Type;
 data Ast = R Int | V String | A Ast Ast | L String Ast | Proof Pred;
-
 ro c = R $ ord c;
 
 pure x = \inp -> Just (x, inp);
@@ -222,6 +315,8 @@ tops precTab = sepBy
   ) (spch ';');
 program' = sp *> (concat <$> many fixity) >>= tops;
 
+-- Primitives.
+
 program = (
   [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
@@ -246,6 +341,8 @@ ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
+-- Conversion to De Bruijn indices.
+
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
 debruijn n e = case e of
@@ -255,6 +352,8 @@ debruijn n e = case e of
   ; L s t -> La (debruijn (s:n) t)
   ; Proof _ -> undefined
   };
+
+-- Kiselyov bracket abstraction.
 
 data Sem = Defer | Closed Ast | Need Sem | Weak Sem;
 
@@ -327,6 +426,8 @@ enc mem t = case t of
 asm ds = foldl (\m def -> fpair def \s t ->
   fpair (enc m $ nolam t) \p m' -> case m' of
      { Mem tab hp bs -> Mem ((s, p):tab) hp bs }) (Mem [] 128 []) ds;
+
+-- Type checking.
 
 apply sub t = case t of
   { TC v -> t

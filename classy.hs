@@ -205,8 +205,11 @@ program' = sp *> (concat <$> many fixity) >>= tops;
 eqPre = fmaybe (program' $ "class Eq a where { (==) :: a -> a -> Bool };\n" ++
   "instance Eq Int where { (==) = intEq };\n") undefined fst;
 
+ordPre = fmaybe (program' $ "class Ord a where { (<=) :: a -> a -> Bool };\n" ++
+  "instance Ord Int where { (<=) = intLE };\n") undefined fst;
+
 program = (
-  (eqPre ++
+  (eqPre ++ ordPre ++
   [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]) ++) <$> program';
 
