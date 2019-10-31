@@ -405,7 +405,7 @@ babs t = case t of
   ; App x y -> babsa (babs x) (babs y)
   };
 
-data Mem = Mem [(String, Int)] Int [Int];
+data Mem = Mem (Map String Int) Int [Int];
 
 nolam x = case babs (debruijn [] x) of
   { Defer -> undefined
@@ -416,7 +416,7 @@ nolam x = case babs (debruijn [] x) of
 
 enc mem t = case t of
   { R n -> (n, mem)
-  ; V v -> case mem of { Mem tab _ _ -> (fmaybe (lookup v tab) undefined id, mem) }
+  ; V v -> case mem of { Mem tab _ _ -> (fmaybe (mlookup v tab) undefined id, mem) }
   ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
     case mem'' of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (q:p:bs)) }
   ; L w t -> undefined
@@ -425,7 +425,7 @@ enc mem t = case t of
 
 asm ds = foldl (\m def -> fpair def \s t ->
   fpair (enc m $ nolam t) \p m' -> case m' of
-     { Mem tab hp bs -> Mem ((s, p):tab) hp bs }) (Mem [] 128 []) ds;
+     { Mem tab hp bs -> Mem (insert s p tab) hp bs }) (Mem Tip 128 []) ds;
 
 -- Type checking.
 
@@ -701,11 +701,14 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
 
-prepAsm mem = reverse $ case mem of {
-  Mem tab _ bs -> flst tab undefined (\x _ -> snd x):bs};
+prepAsm entry mem = reverse $ case mem of {
+  Mem tab _ bs -> (maybe undefined id $ mlookup entry tab):bs};
+
+last' x xt = flst xt x \y yt -> last' y yt;
+last xs = flst xs undefined last';
 
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
-  ; Right qas -> concatMap (\n -> showInt n ";") $ prepAsm $ asm $ map (second snd) qas
+  ; Right qas -> concatMap (\n -> showInt n ";") $ prepAsm (fst $ last qas) $ asm $ map (second snd) qas
   };
