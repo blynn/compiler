@@ -8,9 +8,10 @@ enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<25, TABMAX = 1<<10, BUFMAX = 1<<20 };
-//enum { TOP = 2000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u mem[TOP], *sp, *spTop, hp, tab[TABMAX], tabn;
+enum { TOP = 1<<23, TABMAX = 1<<10, BUFMAX = 1<<20 };
+//enum { TOP = 1000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
+u arena[2][TOP];
+u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
@@ -30,7 +31,7 @@ u copy(u n) {
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-      if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+      if (hp >= TOP - 2) die("OOM");
       mem[n] = FORWARD;
       mem[n + 1] = hp;
       hp += 2;
@@ -39,8 +40,8 @@ u copy(u n) {
       mem[n] = REDUCING;
       y = copy(y);
       if (mem[n] == FORWARD) {
-        mem[mem[n + 1]] = 'I';
-        mem[mem[n + 1] + 1] = y;
+        altmem[mem[n + 1]] = 'I';
+        altmem[mem[n + 1] + 1] = y;
       } else {
         mem[n] = FORWARD;
         mem[n + 1] = y;
@@ -48,22 +49,25 @@ u copy(u n) {
       return mem[n + 1];
     default: break;
   }
-  if ((hp < TOP/2 && hp + 2 >= TOP/2) || mem + hp >= sp - 2) die("OOM");
+  if (hp >= TOP - 2) die("OOM");
   u z = hp;
   hp += 2;
   mem[n] = FORWARD;
   mem[n + 1] = z;
-  mem[z] = copy(x);
-  mem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
+  altmem[z] = copy(x);
+  altmem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
   return z;
 }
 
 void gc() {
-  hp = hp < TOP/2 ? TOP/2 : 128;
-  // u hp0 = hp;
-  sp = spTop;
-  *sp = copy(*sp);
-  // fprintf(stderr, "GC %u\n", hp - hp0);
+  hp = 128;
+  sp = altmem + TOP - 1;
+  *sp = copy(*spTop);
+  fprintf(stderr, "GC %u\n", hp - 128);
+  spTop = sp;
+  u *tmp = mem;
+  mem = altmem;
+  altmem = tmp;
 }
 
 static inline u app(u f, u x) {
@@ -165,7 +169,7 @@ void run(u (*get)(), void (*put)(u)) {
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
     //static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
-    if ((hp < TOP/2 && hp + 8 >= TOP/2) || mem + hp > sp - 8) gc();
+    if (mem + hp > sp - 8) gc();
     u x = *sp;
     if (x < 128) switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
@@ -569,6 +573,7 @@ void io() {
 }
 
 int main(int argc, char **argv) {
+  mem = arena[0]; altmem = arena[1];
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
 
