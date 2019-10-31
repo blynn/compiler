@@ -702,7 +702,7 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   };
 
 prepAsm entry mem = reverse $ case mem of {
-  Mem tab _ bs -> (maybe undefined id $ mlookup entry tab):bs};
+  Mem tab _ bs -> maybe undefined id (mlookup entry tab):bs};
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';

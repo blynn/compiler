@@ -15,15 +15,17 @@ u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
+static inline u isAddr(u n) { return n>=128; }
+
 u copy(u n) {
-  if (n < 128) return n;
+  if (!isAddr(n)) return n;
   u x = mem[n];
-  while (x >= 128 && mem[x] == 'T') {
+  while (isAddr(x) && mem[x] == 'T') {
     mem[n] = mem[n + 1];
     mem[n + 1] = mem[x + 1];
     x = mem[n];
   }
-  if (x >= 128 && mem[x] == 'K') {
+  if (isAddr(x) && mem[x] == 'K') {
     mem[n + 1] = mem[x + 1];
     x = mem[n] = 'I';
   }
@@ -171,7 +173,7 @@ void run(u (*get)(), void (*put)(u)) {
     //static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
     if (mem + hp > sp - 8) gc();
     u x = *sp;
-    if (x < 128) switch(x) {
+    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
       case '.': {
         clock_t end = clock();
@@ -213,8 +215,6 @@ void run(u (*get)(), void (*put)(u)) {
       // putChar
       case '2': put(num(1)); lazy(3, app(arg(3), 'K'), arg(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
-    } else {
-      *--sp = mem[x];
     }
   }
 }
