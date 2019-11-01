@@ -52,20 +52,23 @@ enum { FORWARD = 27, REDUCING = 9 };
 
 void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
-enum { TOP = 1<<27, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u mem[TOP], *sp, *spTop, hp;
+enum { TOP = 1<<23, TABMAX = 1<<10, BUFMAX = 1<<20 };
+u arena[2][TOP];
+u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
+static inline u isAddr(u n) { return n>=128; }
+
 u copy(u n) {
-  if (n < 128) return n;
+  if (!isAddr(n)) return n;
   u x = mem[n];
-  while (x >= 128 && mem[x] == 'T') {
+  while (isAddr(x) && mem[x] == 'T') {
     mem[n] = mem[n + 1];
     mem[n + 1] = mem[x + 1];
     x = mem[n];
   }
-  if (x >= 128 && mem[x] == 'K') {
+  if (isAddr(x) && mem[x] == 'K') {
     mem[n + 1] = mem[x + 1];
     x = mem[n] = 'I';
   }
@@ -73,6 +76,7 @@ u copy(u n) {
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
+      if (hp >= TOP - 2) die("OOM");
       mem[n] = FORWARD;
       mem[n + 1] = hp;
       hp += 2;
@@ -81,8 +85,8 @@ u copy(u n) {
       mem[n] = REDUCING;
       y = copy(y);
       if (mem[n] == FORWARD) {
-        mem[mem[n + 1]] = 'I';
-        mem[mem[n + 1] + 1] = y;
+        altmem[mem[n + 1]] = 'I';
+        altmem[mem[n + 1] + 1] = y;
       } else {
         mem[n] = FORWARD;
         mem[n + 1] = y;
@@ -90,21 +94,24 @@ u copy(u n) {
       return mem[n + 1];
     default: break;
   }
+  if (hp >= TOP - 2) die("OOM");
   u z = hp;
   hp += 2;
   mem[n] = FORWARD;
   mem[n + 1] = z;
-  mem[z] = copy(x);
-  mem[z + 1] = x == '#' ? y : copy(y);
+  altmem[z] = copy(x);
+  altmem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
   return z;
 }
 
 void gc() {
-  hp = hp < TOP/2 ? TOP/2 : 128;
-  // u hp0 = hp;
-  sp = spTop;
-  *sp = copy(*sp);
-  // fprintf(stderr, "GC %u\n", hp - hp0);
+  hp = 128;
+  sp = altmem + TOP - 1;
+  *sp = copy(*spTop);
+  spTop = sp;
+  u *tmp = mem;
+  mem = altmem;
+  altmem = tmp;
 }
 
 u app(u f, u x) {
@@ -180,11 +187,11 @@ void run(u (*get)(), void (*put)(u)) {
   u c;
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+    if (mem + hp > sp - 8) gc();
     u x = *sp;
-    if (x < 128) switch(x) {
+    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
       case FORWARD: stats(); die("stray forwarding pointer");
-      case '.': printf("HP = %u\n", hp); return;
+      case '.': return;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
@@ -205,8 +212,6 @@ void run(u (*get)(), void (*put)(u)) {
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
-    } else {
-      *--sp = mem[x];
     }
   }
 }
@@ -424,6 +429,7 @@ void lvlup_file(char *filename) {
 }
 
 int main(int argc, char **argv) {
+  mem = arena[0]; altmem = arena[1];
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
   bufptr = buf + 2;

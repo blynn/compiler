@@ -10,6 +10,7 @@ infixr 0 $;
 
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
+(<=) = intLE;
 undefined = undefined;
 ($) f x = f x;
 id x = x;
@@ -227,7 +228,7 @@ prims = let
     [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), ro 'Y'))
     , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), ro 'C'))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
-    , ("<=", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))

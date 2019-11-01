@@ -33,7 +33,6 @@ u copy(u n) {
   switch(x) {
     case FORWARD: return y;
     case REDUCING:
-      if (hp >= TOP - 2) die("OOM");
       mem[n] = FORWARD;
       mem[n + 1] = hp;
       hp += 2;
@@ -51,7 +50,6 @@ u copy(u n) {
       return mem[n + 1];
     default: break;
   }
-  if (hp >= TOP - 2) die("OOM");
   u z = hp;
   hp += 2;
   mem[n] = FORWARD;
@@ -170,7 +168,7 @@ void run(u (*get)(), void (*put)(u)) {
   clock_t start = clock();
   for(;;) {
     // static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-    //static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+    // static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
     if (mem + hp > sp - 8) gc();
     u x = *sp;
     if (isAddr(x)) *--sp = mem[x]; else switch(x) {
