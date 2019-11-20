@@ -1,0 +1,157 @@
+};
+
+enum { FORWARD = 27, REDUCING = 9 };
+
+static void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
+
+enum { TOP = 1<<23 };
+u *mem, *altmem, *sp, *spTop, hp;
+
+static void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
+
+static inline u isAddr(u n) { return n>=128; }
+
+static u copy(u n) {
+  if (!isAddr(n)) return n;
+  u x = mem[n];
+  while (isAddr(x) && mem[x] == 'T') {
+    mem[n] = mem[n + 1];
+    mem[n + 1] = mem[x + 1];
+    x = mem[n];
+  }
+  if (isAddr(x) && mem[x] == 'K') {
+    mem[n + 1] = mem[x + 1];
+    x = mem[n] = 'I';
+  }
+  u y = mem[n + 1];
+  switch(x) {
+    case FORWARD: return y;
+    case REDUCING:
+      mem[n] = FORWARD;
+      mem[n + 1] = hp;
+      hp += 2;
+      return mem[n + 1];
+    case 'I':
+      mem[n] = REDUCING;
+      y = copy(y);
+      if (mem[n] == FORWARD) {
+        altmem[mem[n + 1]] = 'I';
+        altmem[mem[n + 1] + 1] = y;
+      } else {
+        mem[n] = FORWARD;
+        mem[n + 1] = y;
+      }
+      return mem[n + 1];
+    default: break;
+  }
+  u z = hp;
+  hp += 2;
+  mem[n] = FORWARD;
+  mem[n + 1] = z;
+  altmem[z] = copy(x);
+  altmem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
+  return z;
+}
+
+static void gc() {
+  hp = 128;
+  sp = altmem + TOP - 1;
+  *sp = copy(*spTop);
+  fprintf(stderr, "GC %u\n", hp - 128);
+  spTop = sp;
+  u *tmp = mem;
+  mem = altmem;
+  altmem = tmp;
+}
+
+static inline u app(u f, u x) {
+  mem[hp] = f;
+  mem[hp + 1] = x;
+  hp += 2;
+  return hp - 2;
+}
+
+static inline u arg(u n) { return mem[sp [n] + 1]; }
+static inline u num(u n) { return mem[arg(n) + 1]; }
+
+static inline void lazy(u height, u f, u x) {
+  u *p = mem + sp[height];
+  *p = f;
+  *++p = x;
+  sp += height - 1;
+  *sp = f;
+}
+
+static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
+
+static void run(u (*get)(), void (*put)(u)) {
+  u c;
+  clock_t start = clock();
+  for(;;) {
+    if (mem + hp > sp - 8) gc();
+    u x = *sp;
+    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+      case FORWARD: stats(); die("stray forwarding pointer");
+      case '.': {
+        clock_t end = clock();
+        fprintf(stderr, "time = %lfms, HP = %u\n", (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
+        return;
+      }
+      case 'Y': lazy(1, arg(1), sp[1]); break;
+      case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
+      case 'B': lazy(3, arg(1), apparg(2, 3)); break;
+      case 'C': lazy(3, apparg(1, 3), arg(2)); break;
+      case 'R': lazy(3, apparg(2, 3), arg(1)); break;
+      case 'I': sp[1] = arg(1); sp++; break;
+      case 'T': lazy(2, arg(2), arg(1)); break;
+      case 'K': lazy(2, 'I', arg(1)); break;
+      case ':': lazy(4, apparg(4, 1), arg(2)); break;
+      case '0': c = get(); !c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?')); break;
+      case '#': lazy(2, arg(2), sp[1]); break;
+      case '1': put(num(1)); lazy(2, app(arg(2), '.'), app('T', '1')); break;
+      case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
+      case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
+      case '*': lazy(2, '#', num(1) * num(2)); break;
+      case '/': lazy(2, '#', num(1) / num(2)); break;
+      case '%': lazy(2, '#', num(1) % num(2)); break;
+      case '+': lazy(2, '#', num(1) + num(2)); break;
+      case '-': lazy(2, '#', num(1) - num(2)); break;
+      case 'a': {
+        u mnt = arg(1);
+        u m = mnt>>16;
+        u n = (mnt>>8)&255;
+        u t = mnt&255;
+        sp += 2;
+        u f = arg(m);
+        for (; n; n--) f = app(f, mem[*sp++ + 1]);
+        sp += t;
+        mem[*sp] = 'I';
+        mem[*sp + 1] = f;
+        break;
+      }
+      // putChar
+      case '2': put(num(1)); lazy(3, app(arg(3), 'K'), arg(2)); break;
+      default: printf("?%u\n", x); die("unknown combinator");
+    }
+  }
+}
+
+void ioput(u c) { putchar(c); fflush(stdout); }
+u ioget() {
+  int c = getchar();
+  if (c == EOF) return 0;
+  return c;
+}
+
+int main() {
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  spTop = mem + TOP - 1;
+  hp = 128;
+  for (u i = 1; i < sizeof(initial_contents)/sizeof(*initial_contents); i++) {
+    mem[hp++] = initial_contents[i];
+  }
+  *(sp = spTop) = app(
+    app(app(*initial_contents, app('0', '?')), '.'), app('T', '1'));
+  run(ioget, ioput);
+  return 0;
+}
