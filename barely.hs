@@ -701,8 +701,8 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
 
-prepAsm entry mem = reverse $ case mem of {
-  Mem tab _ bs -> maybe undefined id (mlookup entry tab):bs};
+prepAsm entry mem = case mem of { Mem tab _ bs ->
+  maybe undefined id (mlookup entry tab) : reverse bs };
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
@@ -710,5 +710,5 @@ last xs = flst xs undefined last';
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
-  ; Right qas -> concatMap (\n -> showInt n ";") $ prepAsm (fst $ last qas) $ asm $ map (second snd) qas
+  ; Right qas -> concatMap (\n -> showInt n ",") $ prepAsm (fst $ last qas) $ asm $ map (second snd) qas
   };

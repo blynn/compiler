@@ -1,8 +1,8 @@
-typedef unsigned u;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+typedef unsigned u;
 
 enum { FORWARD = 27, REDUCING = 9 };
 
@@ -84,7 +84,7 @@ void reset(u root) {
 }
 
 void loadRaw(u (*get)()) {
-  hp = 128;
+  hp = 128 - 1;
   for (;;) {
     u c;
 		do c = get(); while (c && (c < '0' || c > '9'));
@@ -97,7 +97,7 @@ void loadRaw(u (*get)()) {
     }
     mem[hp++] = n;
   }
-  reset(mem[--hp]);
+  reset(mem[128 - 1]);
 }
 
 u parseTerm(u (*get)()) {
