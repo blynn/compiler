@@ -10,7 +10,6 @@ void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
 
 enum { TOP = 1<<23, TABMAX = 1<<10, BUFMAX = 1<<20 };
 //enum { TOP = 1000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u arena[2][TOP];
 u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
 
 void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
@@ -571,7 +570,7 @@ void io() {
 }
 
 int main(int argc, char **argv) {
-  mem = arena[0]; altmem = arena[1];
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
 
