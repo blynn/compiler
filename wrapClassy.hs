@@ -17,5 +17,5 @@ intEq :: Int -> Int -> Bool
 intEq x y = if (x Prelude.== y) then True else False
 instance Ord Char where { (<=) x y = if (x Prelude.<= y) then True else False };
 intLE :: Int -> Int -> Bool
-intLE x y = if (x Prelude.== y) then True else False
-#include "barely.hs"
+intLE x y = if (x Prelude.<= y) then True else False
+#include "effectively.hs"

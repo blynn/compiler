@@ -1,4 +1,8 @@
-};
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+typedef unsigned u;
 
 enum { FORWARD = 27, REDUCING = 9 };
 
@@ -84,8 +88,13 @@ static inline void lazy(u height, u f, u x) {
 
 static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
-static void run(u (*get)(), void (*put)(u)) {
-  u c;
+static void foreign(u n) {
+  switch(n) {
+_FFI_CASES
+  }
+}
+
+static void run() {
   clock_t start = clock();
   for(;;) {
     if (mem + hp > sp - 8) gc();
@@ -97,6 +106,7 @@ static void run(u (*get)(), void (*put)(u)) {
         fprintf(stderr, "time = %lfms, HP = %u\n", (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
         return;
       }
+      case 'F': foreign(arg(1)); break;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
@@ -106,9 +116,7 @@ static void run(u (*get)(), void (*put)(u)) {
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
       case ':': lazy(4, apparg(4, 1), arg(2)); break;
-      case '0': c = get(); !c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?')); break;
       case '#': lazy(2, arg(2), sp[1]); break;
-      case '1': put(num(1)); lazy(2, app(arg(2), '.'), app('T', '1')); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case '*': lazy(2, '#', num(1) * num(2)); break;
@@ -129,29 +137,17 @@ static void run(u (*get)(), void (*put)(u)) {
         mem[*sp + 1] = f;
         break;
       }
-      // putChar
-      case '2': put(num(1)); lazy(3, app(arg(3), 'K'), arg(2)); break;
       default: printf("?%u\n", x); die("unknown combinator");
     }
   }
-}
-
-void ioput(u c) { putchar(c); fflush(stdout); }
-u ioget() {
-  int c = getchar();
-  if (c == EOF) return 0;
-  return c;
 }
 
 int main() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   spTop = mem + TOP - 1;
   hp = 128;
-  for (u i = 1; i < sizeof(initial_contents)/sizeof(*initial_contents); i++) {
-    mem[hp++] = initial_contents[i];
-  }
-  *(sp = spTop) = app(
-    app(app(*initial_contents, app('0', '?')), '.'), app('T', '1'));
-  run(ioget, ioput);
+  for (u i = 1; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
+  *(sp = spTop) = app(app(*prog, '?'), '.');
+  run();
   return 0;
 }

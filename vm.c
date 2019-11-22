@@ -162,6 +162,12 @@ static inline void lazy(u height, u f, u x) {
 
 static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
+static void foreign(u n) {
+  switch(n) {
+    case 1: putchar(num(2)); lazy(4, app(arg(4), 'K'), arg(3)); break;
+  };
+}
+
 void run(u (*get)(), void (*put)(u)) {
   u c;
   clock_t start = clock();
@@ -209,8 +215,7 @@ void run(u (*get)(), void (*put)(u)) {
         mem[*sp + 1] = f;
         break;
       }
-      // putChar
-      case '2': put(num(1)); lazy(3, app(arg(3), 'K'), arg(2)); break;
+      case 'F': foreign(arg(1)); break;
       default: printf("?%u\n", x); die("unknown combinator");
     }
   }
