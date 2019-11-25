@@ -16,57 +16,45 @@ void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
 
 static inline u isAddr(u n) { return n>=128; }
 
-u copy(u n) {
-  if (!isAddr(n)) return n;
-  u x = mem[n];
-  while (isAddr(x) && mem[x] == 'T') {
-    mem[n] = mem[n + 1];
-    mem[n + 1] = mem[x + 1];
-    x = mem[n];
+void evac(u n) {
+  u a = mem[n];
+  if (isAddr(a)) {
+    u x = altmem[a];
+    u y = altmem[a + 1];
+    switch(x) {
+      case FORWARD: mem[n] = y; break;
+      default:
+        mem[n] = hp;
+        mem[hp] = x;
+        mem[hp + 1] = y;
+        altmem[a] = FORWARD;
+        altmem[a + 1] = hp;
+        hp += 2;
+        break;
+    }
   }
-  if (isAddr(x) && mem[x] == 'K') {
-    mem[n + 1] = mem[x + 1];
-    x = mem[n] = 'I';
-  }
-  u y = mem[n + 1];
-  switch(x) {
-    case FORWARD: return y;
-    case REDUCING:
-      mem[n] = FORWARD;
-      mem[n + 1] = hp;
-      hp += 2;
-      return mem[n + 1];
-    case 'I':
-      mem[n] = REDUCING;
-      y = copy(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = 'I';
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
-    default: break;
-  }
-  u z = hp;
-  hp += 2;
-  mem[n] = FORWARD;
-  mem[n + 1] = z;
-  altmem[z] = copy(x);
-  altmem[z + 1] = x == 'a' || x == '#' ? y : copy(y);
-  return z;
 }
 
 void gc() {
-  hp = 128;
-  sp = altmem + TOP - 1;
-  *sp = copy(*spTop);
-  fprintf(stderr, "GC %u\n", hp - 128);
-  spTop = sp;
   u *tmp = mem;
   mem = altmem;
   altmem = tmp;
+  u di = 128;
+  hp = di + 2;
+  sp = mem + TOP - 1;
+  u root = *spTop;
+  spTop = sp;
+  mem[di] = altmem[root];
+  mem[di + 1] = altmem[root + 1];
+  *sp = di;
+  while (di < hp) {
+    u a = mem[di];
+    if (a != 35 && a != 'a') {
+      evac(di);
+      evac(di + 1);
+    }
+    di += 2;
+  }
 }
 
 static inline u app(u f, u x) {
