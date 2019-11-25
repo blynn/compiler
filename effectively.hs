@@ -163,28 +163,6 @@ balance k x l r = case size l + size r <= 1 of
       }
     }
   } k x l r;
-altbalance k x l r = case size l + size r <= 1 of
-  { True -> node
-  ; False -> case 6 * size l + 1 <= 2 * size r of
-    { True -> case r of
-      { Tip -> node
-      ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 4 * size rr of
-        { True -> singleL
-        ; False -> doubleL
-        }
-      }
-    ; False -> case 6 * size r + 1 <= 2 * size l of
-      { True -> case l of
-        { Tip -> node
-        ; Bin sz _ _ ll lr -> case 2 * size lr + 1 <= 4 * size ll of
-          { True -> singleR
-          ; False -> doubleR
-          }
-        }
-      ; False -> node
-      }
-    }
-  } k x l r;
 insert kx x t = case t of
   { Tip -> singleton kx x
   ; Bin sz ky y l r -> case compare kx ky of
@@ -296,7 +274,11 @@ isFree v expr = case expr of
 
 maybeFix s x = ife (isFree s x) (A (V "\\Y") (L s x)) x;
 
+rawOne delim = escChar <|> sat (\c -> not (c == delim));
+rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
+eqn r = Def <$> liftA2 (,) (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) (def r);
+
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 
@@ -333,7 +315,7 @@ data Constr = Constr String [Type] ;
 data Pred = Pred String Type ;
 data Qual = Qual [Pred] Type ;
 
-data Top = Adt Type [Constr] | Def (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
+data Top = Adt Type [Constr] | Def (Maybe String, (String, Ast)) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
 
 arr a b = TAp (TAp (TC "->") a) b;
 
@@ -364,9 +346,6 @@ instDecl r = keyword "instance" *>
   (((itemize .) . Pred <$> conId <*> (inst <* want op "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
-rawOne delim = escChar <|> sat (\c -> not (c == delim));
-rawStr = between (char '"') (spch '"') (many (rawOne '"'));
-
 ffiDecl = keyword "ffi" *>
   (FFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
@@ -375,7 +354,7 @@ tops precTab = sepBy
   <|> classDecl
   <|> instDecl (expr precTab 0)
   <|> ffiDecl
-  <|> Def <$> def (expr precTab 0)
+  <|> eqn (expr precTab 0)
   ) (spch ';');
 program' = sp *> (concat <$> many fixity) >>= tops;
 
@@ -768,7 +747,7 @@ mkFFIHelper n t acc = case t of
 
 untangle = foldr (\top acc -> fneat acc \ienv fs typed ffis -> case top of
   { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis
-  ; Def f -> Neat ienv (Left f : fs) typed ffis
+  ; Def ef -> fpair ef \e f -> Neat ienv (Left f : fs) typed ffis
   ; Class classId v ms -> Neat ienv fs (
     map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
     ++ typed) ffis
