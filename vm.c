@@ -35,7 +35,9 @@ void evac(u n) {
   }
 }
 
+u gccount;
 void gc() {
+  gccount++;
   u *tmp = mem;
   mem = altmem;
   altmem = tmp;
@@ -50,6 +52,23 @@ void gc() {
   while (di < hp) {
     u a = mem[di];
     if (a != 35 && a != 'a') {
+      while (isAddr(a) && altmem[a] == 'T') {
+        mem[di] = mem[di + 1];
+        mem[di + 1] = altmem[a + 1];
+        a = mem[di];
+      }
+      if (isAddr(a) && altmem[a] == 'K') {
+        mem[di + 1] = altmem[a + 1];
+        a = mem[di] = 'I';
+      }
+      while (a == 'I') {
+        u b = mem[di + 1];
+        if (isAddr(b) && altmem[b] != FORWARD) {
+          a = mem[di] = altmem[b];
+          mem[di + 1] = altmem[b + 1];
+          // We could check for T and K again.
+        } else break;
+      }
       evac(di);
       evac(di + 1);
     }
@@ -157,6 +176,7 @@ static void foreign(u n) {
 }
 
 void run(u (*get)(), void (*put)(u)) {
+  gccount = 0;
   u c;
   clock_t start = clock();
   for(;;) {
@@ -168,7 +188,7 @@ void run(u (*get)(), void (*put)(u)) {
       case FORWARD: stats(); die("stray forwarding pointer");
       case '.': {
         clock_t end = clock();
-        fprintf(stderr, "time = %lfms, HP = %u\n", (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
+        fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
         return;
       }
       case 'Y': lazy(1, arg(1), sp[1]); break;
