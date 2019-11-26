@@ -805,7 +805,7 @@ ffiDefine n ffis = case ffis of
       } in
     ("case " ++) $ showInt n $ (": " ++) $ ife (ret == "()")
       (longDistanceCall ++ ";" ++ lazyn ++ ife isPure "'I', 'K'" (aa "'K'") ++ "); break;" ++ ffiDefine (n - 1) xt)
-      (lazyn ++ ife isPure ("'#', " ++ longDistanceCall) (aa longDistanceCall) ++ "); break;" ++ ffiDefine (n - 1) xt)
+      (lazyn ++ ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++ ffiDefine (n - 1) xt)
   };
 
 compile s = fmaybe (program s) "parse error" \progRest ->
