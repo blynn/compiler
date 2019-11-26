@@ -277,7 +277,9 @@ maybeFix s x = ife (isFree s x) (A (V "\\Y") (L s x)) x;
 rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
-eqn r = Def <$> liftA2 (,) (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) (def r);
+globalDef p = Def (Nothing, second (A (V "#global")) p);
+eqn r = keyword "global" *> (globalDef <$> (def r))
+  <|> Def <$> liftA2 (,) (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) (def r);
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
@@ -378,6 +380,9 @@ prims = let
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'W'))
+    , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro 'I'))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
@@ -718,9 +723,11 @@ data Neat = Neat
   [(String, (Qual, Ast))]
   -- | FFI declarations.
   [(String, Type)]
+  -- | Exports.
+  [(String, String)]
   ;
 
-fneat neat f = case neat of { Neat a b c d -> f a b c d };
+fneat neat f = case neat of { Neat a b c d e -> f a b c d e };
 
 select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
 
@@ -745,21 +752,21 @@ mkFFIHelper n t acc = case t of
     }
   };
 
-untangle = foldr (\top acc -> fneat acc \ienv fs typed ffis -> case top of
-  { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis
-  ; Def ef -> fpair ef \e f -> Neat ienv (Left f : fs) typed ffis
+untangle = foldr (\top acc -> fneat acc \ienv fs typed ffis exs -> case top of
+  { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis exs
+  ; Def ef -> fpair ef \e f -> Neat ienv (Left f : fs) typed ffis exs
   ; Class classId v ms -> Neat ienv fs (
     map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
-    ++ typed) ffis
-  ; Inst cl q ds -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed ffis
+    ++ typed) ffis exs
+  ; Inst cl q ds -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed ffis exs
   ; FFI foreignname ourname t -> Neat ienv fs (
-    (ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) ((foreignname, t):ffis)
-  }) (Neat [] [] prims []);
+    (ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) ((foreignname, t):ffis) exs
+  }) (Neat [] [] prims [] []);
 
 showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
 
 dumpTypes s = fmaybe (program s) "parse error" \progRest ->
-  fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis -> case inferDefs ienv fs typed of
+  fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
@@ -802,7 +809,7 @@ ffiDefine n ffis = case ffis of
   };
 
 compile s = fmaybe (program s) "parse error" \progRest ->
-  fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis -> case inferDefs ienv fs typed of
+  fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
   ; Right qas -> "#define _FFI_CASES " ++ ffiDefine (length ffis - 1) ffis ++ "\nstatic const unsigned prog[]={" ++ concatMap (\n -> showInt n ",") (prepAsm (fst $ last qas) $ asm $ map (second snd) qas) ++ "};\n"
   }

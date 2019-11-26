@@ -137,6 +137,11 @@ static void run() {
         mem[*sp + 1] = f;
         break;
       }
+      case 'W':  // writeIORef
+        mem[arg(1)] = mem[arg(2)];
+        mem[arg(1) + 1] = mem[arg(2) + 1];
+        lazy(4, app(arg(4), 'K'), arg(3));
+        break;
       default: printf("?%u\n", x); die("unknown combinator");
     }
   }
