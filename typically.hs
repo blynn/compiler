@@ -30,13 +30,13 @@ lstEq xs ys = case xs of
   { [] -> flst ys True (\h t -> False)
   ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
   };
-(++) xs ys = flst xs ys (\x xt -> x:xt ++ ys);
 
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
+(++) = flip (foldr (:));
 concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];

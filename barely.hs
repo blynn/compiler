@@ -50,7 +50,6 @@ not a = case a of { True -> False; False -> True };
 (||) f g = ife f True (ife g True False);
 (&&) f g = ife f (ife g True False) False;
 flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
-(++) xs ys = flst xs ys (\x xt -> x:xt ++ ys);
 instance Eq a => Eq [a] where { (==) xs ys = case xs of
   { [] -> case ys of
     { [] -> True
@@ -70,6 +69,7 @@ foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
+(++) = flip (foldr (:));
 concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
