@@ -382,9 +382,9 @@ prims = let
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
-    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
-    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'W'))
-    , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro 'I'))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro 'r'))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'w'))
+    , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro '?'))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
