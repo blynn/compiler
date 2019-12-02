@@ -1,14 +1,26 @@
--- Concatenate output with `body` to produce a C program.
-
+-- Standalone compiler.
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;
-infixr 5 : , ++;
+infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
 infix 4 == , <=;
 infixl 3 && , <|>;
 infixl 2 ||;
 infixr 0 $;
+
+ffi "putchar" putChar :: Char -> IO ();
+ffi "getchar" getChar :: IO Int;
+
+class Functor f where { fmap :: (a -> b) -> f a -> f b };
+class Applicative f where
+{ pure :: a -> f a
+; (<*>) :: f (a -> b) -> f a -> f b
+};
+class Monad m where
+{ return :: a -> m a
+; (>>=) :: m a -> (a -> m b) -> m b
+};
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
 undefined = undefined;
@@ -162,26 +174,37 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 -- Parsing.
 
 data Type = TC String | TV String | TAp Type Type ;
-data Ast = R Int | V String | A Ast Ast | L String Ast | Proof Pred ;
-ro c = R $ ord c;
+data Parser a = Parser (String -> Maybe (a, String));
+parse p inp = case p of { Parser f -> f inp };
 
-pure x = \inp -> Just (x, inp);
-sat' f = \h t -> ife (f h) (pure h t) Nothing;
-sat f inp = flst inp Nothing (sat' f);
-bind f m = case m of
+instance Applicative Parser where
+{ pure x = Parser \inp -> Just (x, inp)
+; (<*>) x y = Parser \inp -> case parse x inp of 
   { Nothing -> Nothing
-  ; Just x -> fpair x f
+  ; Just funt -> fpair funt \fun t -> case parse y t of
+    { Nothing -> Nothing
+    ; Just argu -> fpair argu \arg u -> Just (fun arg, u)
+    }
+  }
+};
+instance Monad Parser where
+{ return = pure
+; (>>=) x f = Parser \inp -> case parse x inp of
+  { Nothing -> Nothing
+  ; Just at -> fpair at \a t -> parse (f a) t
+  }
+};
+
+sat' f = \h t -> ife (f h) (Just (h, t)) Nothing;
+sat f = Parser \inp -> flst inp Nothing (sat' f);
+
+instance Functor Parser where { fmap f x = pure f <*> x };
+(<|>) x y = Parser \inp -> case parse x inp of
+  { Nothing -> parse y inp
+  ; Just at -> Just at
   };
-ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
-(<*>) = ap;
-fmap f x = ap (pure f) x;
 (<$>) = fmap;
-(>>=) x y = \inp -> bind (\a t -> y a t) (x inp);
-(<|>) x y = \inp -> case x inp of
-  { Nothing -> y inp
-  ; Just x -> Just x
-  };
-liftA2 f x y = ap (fmap f x) y;
+liftA2 f x y = f <$> x <*> y;
 (*>) = liftA2 \x y -> y;
 (<*) = liftA2 \x y -> x;
 many p = liftA2 (:) p (many p) <|> pure [];
@@ -195,8 +218,13 @@ com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n'
 sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
-wantWith pred f inp = bind (sat' pred) (f inp);
-want f s inp = wantWith (s ==) f inp;
+
+wantWith pred f = Parser \inp -> case parse f inp of
+  { Nothing -> Nothing
+  ; Just at -> ife (pred $ fst at) (Just at) Nothing
+  };
+
+want f s = wantWith (s ==) f;
 
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
@@ -214,6 +242,7 @@ anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
+ro c = R $ ord c;
 litOne delim = fmap ro (escChar <|> sat (\c -> not (c == delim)));
 litInt = R . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
@@ -231,6 +260,7 @@ parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pu
 rightSect r = ((\v a -> A (A (V "\\C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
+data Ast = R Int | V String | A Ast Ast | L String Ast | Proof Pred ;
 isFree v expr = case expr of
   { R _ -> False
   ; V s -> s == v
@@ -330,7 +360,7 @@ program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
 -- Primitives.
 
-program = (
+program = parse $ (
   [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
 
@@ -777,8 +807,18 @@ ffiDefine n ffis = case ffis of
       (lazyn ++ ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++ ffiDefine (n - 1) xt)
   };
 
+instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
+instance Monad IO where { return = ioPure ; (>>=) = ioBind };
+instance Functor IO where { fmap f x = ioPure f <*> x };
+
+(>>) f g = f >>= \_ -> g;
+mapM_ f = foldr ((>>) . f) (pure ());
+getContents = getChar >>= \n -> ife (n <= 255) ((chr n:) <$> getContents) (pure []);
+
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
   ; Right qas -> "#define _FFI_CASES " ++ ffiDefine (length ffis - 1) ffis ++ "\nstatic const unsigned prog[]={" ++ concatMap (\n -> showInt n ",") (prepAsm (fst $ last qas) $ asm $ map (second snd) qas) ++ "};\n"
-  }
+  };
+
+main = getContents >>= mapM_ putChar . compile;

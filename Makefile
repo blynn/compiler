@@ -12,6 +12,10 @@ menu.html: menu; cobble menu menu
 
 %.html: %.lhs menu.html; cobble mathbook menu $<
 
+vm:vm.c;cc -O2 $^ -o $@
+lonely.c:vm effectively.hs lonely.hs body;(./vm run effectively.hs < lonely.hs && cat body) > lonely.c
+lonely:lonely.c;cc -O2 $^ -o $@
+
 site: $(SITE)
 
 sync: site ; rsync -R -r $(SITE) blynn@crypto.stanford.edu:www/compiler/

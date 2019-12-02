@@ -17,7 +17,7 @@ To see the source:
 
 Many thanks to http://ioccc.org/judges.html[the contest organizers] for
 volunteering so much time and energy. I've followed this incredible
-competition for years, and thrilled to finally participate.
+competition for years, and I'm thrilled to finally participate.
 
 == Spoilers ==
 
