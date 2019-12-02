@@ -173,9 +173,8 @@ subtree that can be reduced.
 
 If a term can be reduced to a normal form (which is in some sense unique by
 https://plato.stanford.edu/entries/logic-combinatory/#ChurTheoConsTheo[Church-Rosser]),
-then this strategy will find it. Other evaluation orders might never terminate
-even when a normal form exists, which correspond to Turing machines that never
-halt.
+then normal-order reduction will find it. Other evaluation orders might never
+terminate even when a normal form exists.
 
 The left 'spine' of the tree is the path that starts from the root node and
 recursively follows the left child. To evaluate in normal order,

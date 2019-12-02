@@ -29,14 +29,14 @@ the source language to a program in the target language:
 compile :: Language -> TargetLanguage
 ------------------------------------------------------------------------
 
-But not just any function will do. A correct compiler must preserve the
+But not just any function will do. A compiler must preserve the
 meaning of the source program.
 
 == What is a programming language? ==
 
-We view a program as a function that takes an input value to an output value.
-We define a programming language by means of an interpreter, which takes a
-program to a function mapping input values to output values:
+Running a program produces an output from an input, so we define a programming
+language by means of an interpreter, which takes a program to a function
+mapping input values to output values:
 
 ------------------------------------------------------------------------
 interpret :: Language -> (Value -> Value)
@@ -93,10 +93,9 @@ A list of `Char` can hold inputs and outputs of arbitrary length:
 type Value = [Char]
 ------------------------------------------------------------------------
 
-Unfortunately, the only thing our `compute` function can do to such a list is
-to perform the same operation to each element of the list. We have modeled
-something like a circuit, which performs the same task on a fixed number of
-bits at a time.
+Unfortunately, all our `compute` function can do with such a list is to perform
+the same operation to each element of the list. We have modeled something like
+a circuit, which performs the same task on a fixed number of bits at a time.
 
 == Deterministic Finite Automata ==
 
@@ -143,9 +142,10 @@ demoOddXs = runDfa oddXs "xxxxx"
 We could extend the above to spit out characters as it computes. See
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
 https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]. But we've seen
-enough. We quickly find DFAs are incapable of elementary tasks such as checking
-if a bunch of parentheses are balanced, or if some number of As has been
-followed by an equal number of Bs.
+enough. We quickly find
+https://en.wikipedia.org/wiki/Pumping_lemma_for_regular_languages[DFAs are
+incapable of elementary tasks] such as checking if a bunch of parentheses are
+balanced, or if some number of As has been followed by an equal number of Bs.
 
 == Deterministic Push-Down Automata ==
 
@@ -370,4 +370,6 @@ Decades ago,
 http://www.cs.umd.edu/~gasarch/BLOGPAPERS/social.pdf[some argued against
 getting too formal with programming languages]. Later,
 https://eprint.iacr.org/2004/152.pdf[some cryptographers argued similarly
-against provable security]. This stance seems incompatible with Montague's.
+against provable security]
+(https://eprint.iacr.org/2019/1336.pdf[see also its sequel]).
+This stance seems incompatible with Montague's.

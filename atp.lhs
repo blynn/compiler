@@ -364,7 +364,7 @@ incompleteOracle <$> parse propo "" "Either (p -> Void) q -> p -> q"
 Our program has discovered a truly remarkable proof of our theorem, but the
 Boolean return value is too small to contain it.
 
-We remedy this by building lamba terms instead of just indicating whether it's
+We remedy this by building lambda terms instead of just indicating whether it's
 possible to do so. This requires assigning names to various propositions when
 we first encounter them; we pass around an integer to help generate unique
 names.

@@ -146,5 +146,5 @@ https://www.ioccc.org/years-spoiler.html[previous IOCCC winners].
 One previous winner is built around a recursion using the Y combinator, which
 is also how our compiler supports recursive definitions.
 
-One previous winner even translates lamba calculus to combinatory logic, but
+One previous winner even translates lambda calculus to combinatory logic, but
 luckily for me, was written before Kiselyov published his algorithm.
