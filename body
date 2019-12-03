@@ -1,12 +1,14 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+void *malloc(unsigned long);
+int putchar(int);
+int getchar();
 typedef unsigned u;
 
-enum { FORWARD = 27, REDUCING = 9 };
+static const u prog[];
+static const u prog_size;
+static u root[];
+static const u root_size;
 
-static void die(char *s) { fprintf(stderr, "error: %s\n", s); exit(1); }
+enum { FORWARD = 27, REDUCING = 9 };
 
 enum { TOP = 1<<23 };
 u *mem, *altmem, *sp, *spTop, hp;
@@ -59,8 +61,8 @@ static void gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
+  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
   *sp = evac(*spTop);
-  //fprintf(stderr, "GC %u\n", hp - 128);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
@@ -93,18 +95,14 @@ static inline void lazy(u height, u f, u x) {
 
 static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
-static void foreign(u n) {
-  switch(n) {
-_FFI_CASES
-  }
-}
+static void foreign(u n);
 
 static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
     if (isAddr(x)) *--sp = mem[x]; else switch(x) {
-      case FORWARD: die("stray forwarding pointer");
+      case FORWARD: return;  // die("stray forwarding pointer");
       case '.': return;
       case 'F': foreign(arg(1)); break;
       case 'Y': lazy(1, arg(1), sp[1]); break;
@@ -147,17 +145,22 @@ static void run() {
         mem[arg(1) + 1] = arg(2);
         lazy(4, app(arg(4), 'K'), arg(3));
         break;
-      default: printf("?%u\n", x); die("unknown combinator");
+      default: return;  // printf("?%u\n", x); die("unknown combinator");
     }
   }
 }
 
-int main() {
-  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
-  spTop = mem + TOP - 1;
-  hp = 128;
-  for (u i = 1; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
-  *(sp = spTop) = app(app(*prog, '?'), '.');
+static void reduce(u n) {
+  *(sp = spTop) = app(app(n, '?'), '.');
   run();
-  return 0;
 }
+
+void rts_init() __attribute__((visibility("default")));
+void rts_init() {
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  hp = 128;
+  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
+  spTop = mem + TOP - 1;
+}
+
+#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){reduce(root[n]);}

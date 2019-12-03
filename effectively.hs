@@ -245,9 +245,9 @@ rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
-globalDef p = Def (Nothing, second (A (V "#global")) p);
+globalDef p = Def Nothing (second (A (V "#global")) p);
 eqn r = keyword "global" *> (globalDef <$> (def r))
-  <|> Def <$> liftA2 (,) (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) (def r);
+  <|> Def <$> (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) <*> def r;
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
@@ -285,7 +285,7 @@ data Constr = Constr String [Type] ;
 data Pred = Pred String Type ;
 data Qual = Qual [Pred] Type ;
 
-data Top = Adt Type [Constr] | Def (Maybe String, (String, Ast)) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
+data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
 
 arr a b = TAp (TAp (TC "->") a) b;
 
@@ -723,7 +723,11 @@ mkFFIHelper n t acc = case t of
 
 untangle = foldr (\top acc -> fneat acc \ienv fs typed ffis exs -> case top of
   { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis exs
-  ; Def ef -> fpair ef \e f -> Neat ienv (Left f : fs) typed ffis exs
+  ; Def e f -> Neat ienv (Left f : fs) typed ffis $ case e of
+    { Nothing -> id
+    ; Just name -> ((name, fst f):)
+    }
+    exs
   ; Class classId v ms -> Neat ienv fs (
     map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
     ++ typed) ffis exs
@@ -739,9 +743,6 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   { Left err -> err
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
-
-prepAsm entry mem = case mem of { Mem tab _ bs ->
-  maybe undefined id (mlookup entry tab) : reverse bs };
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
@@ -777,8 +778,22 @@ ffiDefine n ffis = case ffis of
       (lazyn ++ ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++ ffiDefine (n - 1) xt)
   };
 
+upFrom n = n : upFrom (n + 1);
+zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt;
+
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
-  ; Right qas -> "#define _FFI_CASES " ++ ffiDefine (length ffis - 1) ffis ++ "\nstatic const unsigned prog[]={" ++ concatMap (\n -> showInt n ",") (prepAsm (fst $ last qas) $ asm $ map (second snd) qas) ++ "};\n"
-  }
+  ; Right qas -> case asm $ map (second snd) qas of { Mem tab _ bs -> concat
+    [ "static void foreign(u n) {\n  switch(n) {\n"
+    , ffiDefine (length ffis - 1) ffis
+    , "\n  }\n}\n"
+    , "static const u prog[]={"
+    , concatMap (\n -> showInt n ",") $ reverse bs
+    , "};\nstatic const u prog_size = sizeof(prog)/sizeof(*prog);\n"
+    , "static u root[] = {", concatMap (\p -> fpair p \x y -> showInt (maybe undefined id $ mlookup y tab) ", ") exs, "};\n"
+    , "static const u root_size = ", showInt (length exs) ";\n"
+    , flst exs ("int main(){rts_init();reduce(" ++ showInt (maybe undefined id $ mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
+      concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
+    ]}
+  };

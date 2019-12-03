@@ -13,7 +13,7 @@ menu.html: menu; cobble menu menu
 %.html: %.lhs menu.html; cobble mathbook menu $<
 
 vm:vm.c;cc -O2 $^ -o $@
-lonely.c:vm effectively.hs lonely.hs body;(./vm run effectively.hs < lonely.hs && cat body) > lonely.c
+lonely.c:vm effectively.hs lonely.hs body;(cat body && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c;cc -O2 $^ -o $@
 
 site: $(SITE)
