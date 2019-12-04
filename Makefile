@@ -15,6 +15,8 @@ menu.html: menu; cobble menu menu
 vm:vm.c;cc -O2 $^ -o $@
 lonely.c:vm effectively.hs lonely.hs body;(cat body && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c;cc -O2 $^ -o $@
+test/mandelbrot.c:test/mandelbrot.hs lonely;(cat body && ./lonely < $<) > $@
+test/mandelbrot:test/mandelbrot.c;cc -O2 $^ -o $@
 
 site: $(SITE)
 
