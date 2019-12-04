@@ -1,0 +1,66 @@
+= Compiling to WebAssembly =
+
+This page loads wasm that draws a set studied by Douady and Hubbard.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<canvas id="canvas" width="640" height="400"></canvas>
+<script>
+var e;
+var ctx = document.getElementById("canvas").getContext("2d");
+
+function sq(x, y) { ctx.fillRect(x*4, y*4, 4, 4); }
+
+WebAssembly.instantiateStreaming(fetch('douady.wasm'), {
+    env:{ plot:sq }
+  }).then(obj => {
+  e = obj.instance.exports;
+  e.rts_init();
+  e.draw();
+});
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The Haskell source:
+
+[source,haskell]
+------------------------------------------------------------------------
+include::wasm/douady.hs[]
+------------------------------------------------------------------------
+
+To turn the output of our compiler into wasm, we need minimal implementations
+of `malloc` and `memcpy`:
+
+[source,c]
+------------------------------------------------------------------------
+include::wasm/std.c[]
+------------------------------------------------------------------------
+
+Then we supply certain options to Clang:
+
+------------------------------------------------------------------------
+$ (cat rts.c && lonely < douady.hs) > douady.c
+$ alias wcc=clang -O3 -c --target=wasm32 -Wall
+$ alias wld=wasm-ld-8 --export-dynamic --allow-undefined --no-entry
+$ wcc douady.c std.c
+$ wld --initial-memory=33554432 douady.o std.o -o douady.wasm
+------------------------------------------------------------------------
+
+== The Configuration Problem ==
+
+On the web, JavaScript can call any exported function of a wasm binary.
+What if different exported functions need access to the same state?
+
+The principled solution seems to require JavaScript to pass in an argument that
+references the state to each function. However, I'm trying out an alternative:
+I've added a `global` keyword which can appear at the top-level that behaves
+like `newIORef`.
+
+------------------------------------------------------------------------
+ffi "out" out :: Int -> IO ();
+
+global foo = 42;
+
+export "f" f = ioBind (readIORef foo) out;
+
+export "g" g = writeIORef foo 999;
+------------------------------------------------------------------------

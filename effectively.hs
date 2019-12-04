@@ -1,5 +1,4 @@
--- Concatenate output with `body` to produce a C program.
-
+-- Effects with IO monad.
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;
@@ -291,7 +290,7 @@ arr a b = TAp (TAp (TC "->") a) b;
 
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (want opLex "->"));
-typeConstant = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (ife (s == "Char") (TC "Int") $ TC s)) <$> conId;
+typeConstant = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
 aType = spch '(' *> (spch ')' *> pure (TC "()") <|> ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <* spch ')') <|>
   typeConstant <|> (TV <$> varId) <|>
   (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type aType <* spch ']')));
@@ -466,9 +465,11 @@ varBind s t = case t of
   ; TAp a b -> ife (occurs s t) Nothing (Just [(s, t)])
   };
 
+charIsInt s = ife (s == "Char") "Int" s;
+
 mgu unify t u = case t of
   { TC a -> case u of
-    { TC b -> ife (a == b) (Just []) Nothing
+    { TC b -> ife (charIsInt a == charIsInt b) (Just []) Nothing
     ; TV b -> varBind b t
     ; TAp a b -> Nothing
     }
@@ -746,6 +747,43 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
+init xs = flst xs undefined \x xt -> flst xt [] \_ _ -> x : init xt;
+intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt;
+
+argList t = case t of
+  { TC s -> [TC s]
+  ; TV s -> [TV s]
+  ; TAp g y -> case g of
+    { TC s -> case y of
+      { TC u -> ife (s == "IO") [TC u] undefined
+      ; TV _ -> undefined
+      ; TAp _ _ -> undefined
+      }
+    ; TV s -> undefined
+    ; TAp f x -> case f of
+      { TC s -> ife (s == "->") (x : argList y) undefined
+      ; TV s -> undefined
+      ; TAp _ _ -> undefined
+      }
+    }
+  };
+
+cTypeName t = case t of
+  { TC s -> ife (s == "()") "void" $
+    ife (s == "Int") "int" $
+    ife (s == "Char") "char" undefined
+  ; TV _ -> undefined
+  ; TAp _ _ -> undefined
+  };
+
+ffiDeclare namet = fpair namet \name t -> let { tys = argList t } in concat
+  [ cTypeName $ last tys
+  , " "
+  , name
+  , "("
+  , intercalate "," $ map cTypeName $ init tys
+  , ");\n"
+  ];
 
 ffiArgs n t = case t of
   { TC s -> ("", ((True, s), n))
@@ -785,7 +823,8 @@ compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
   ; Right qas -> case asm $ map (second snd) qas of { Mem tab _ bs -> concat
-    [ "static void foreign(u n) {\n  switch(n) {\n"
+    [ concatMap ffiDeclare ffis
+    , "static void foreign(u n) {\n  switch(n) {\n"
     , ffiDefine (length ffis - 1) ffis
     , "\n  }\n}\n"
     , "static const u prog[]={"

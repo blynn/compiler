@@ -1,4 +1,3 @@
--- A set first studied by Douady and Hubbard.
 infixr 9 .;
 infixl 7 * , /;
 infixl 6 + , -;
@@ -43,12 +42,7 @@ norm p = fpair p \x y -> sh (x*x + y*y);
 
 douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0);
 
-x80 = take 80 $ iterate (1+) 0;
-y24 = take 24 $ iterate (1+) 0;
-
-str = foldr ($) "" $ map (\y -> (map (\x -> ife (douady (616*x - 2*prec, 1502*y - 18022)) '*' ' ') x80 ++) . ("\n" ++)) y24;
-
-ffi "putchar" putChar :: Char -> IO ();
+ffi "plot" plot :: Int -> Int -> IO ();
 
 instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };
@@ -57,4 +51,6 @@ instance Functor IO where { fmap f x = ioPure f <*> x };
 (>>) f g = f >>= \_ -> g;
 mapM_ f = foldr ((>>) . f) (pure ());
 
-main = mapM_ (\y -> (mapM_ (\x -> putChar $ ife (douady (616*x - 2*prec, 1502*y - 18022)) '*' ' ') x80) >> putChar '\n') y24;
+nats = iterate (1+) 0;
+
+export "draw" main = mapM_ (\y -> (mapM_ (\x -> ife (douady (308*x - 2*prec, 375*y - 18022)) (plot x y) (pure ())) $ take 160 nats)) $ take 96 nats;

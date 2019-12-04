@@ -1,3 +1,4 @@
+-- Output bare memory dump instead of ION assembly.
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;

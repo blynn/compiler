@@ -114,8 +114,9 @@ The `Ext String` field comes into play later, when we want to mix external
 functions with our combinators.
 
 The `rewrite` function below rewrites a closed LC term as a CL term, using an
-algorithm known as 'bracket abstraction'. See Smullyan's "To Mock a
-Mockingbird" for a particularly enjoyable explanation.
+algorithm known as 'bracket abstraction'. See
+https://en.wikipedia.org/wiki/To_Mock_a_Mockingbird[Smullyan's "To Mock a
+Mockingbird"] for a particularly enjoyable explanation.
 
 \begin{code}
 type VarId = String
