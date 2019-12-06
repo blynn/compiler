@@ -10,7 +10,8 @@ infixr 0 $;
 
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
-(<=) = intLE;
+class Ord a where { (<=) :: a -> a -> Bool };
+instance Ord Int where { (<=) = intLE };
 undefined = undefined;
 ($) f x = f x;
 id x = x;
@@ -601,14 +602,14 @@ disasm m = case m of { Mem tab _ bs -> let
   ; decodeApp decode n = let
     { x = ram!!(n - 128)
     ; y = ram!!(n - 128 + 1)
-    } in "(" ++ decode x ++ " " ++ ife (x == ord 'a' || x == ord '#') (showInt y "") (decode y) ++ ")"
+    } in ('(':) . decode x . (' ':) . ife (x == ord 'a' || x == ord '#') (showInt y) (decode y . (')':))
   ; decode n = ife (128 <= n) (case lookup n tab' of
     { Nothing -> decodeApp decode n
-    ; Just s -> s
-    }) (chr n:"")
-  ; decode1 n = ife (128 <= n) (decodeApp decode n) (chr n:"")
-  } in concatMap (pair \def addr ->
-    def ++ " = " ++ decode1 addr ++ "\n"
+    ; Just s -> (s ++)
+    }) (chr n:)
+  ; decode1 n = ife (128 <= n) (decodeApp decode n) (chr n:)
+  } in foldr ($) "" $ map (pair \def addr ->
+    (def ++) . (" = " ++) . decode1 addr . ("\n" ++)
   ) tab };
 
 prepAsm mem = reverse $ case mem of {

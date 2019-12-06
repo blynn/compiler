@@ -592,7 +592,6 @@ int main(int argc, char **argv) {
   if (argc > 1) {
     if (!strcmp(argv[1], "test")) return runTests(), 0;
     if (!strcmp(argv[1], "rpg")) return rpg(), puts(buf), 0;
-    // e.g. $ vm run fib
     if (!strcmp(argv[1], "run")) return runFile(argv[2]), 0;
     if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
     if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
