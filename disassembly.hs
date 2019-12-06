@@ -56,7 +56,6 @@ concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
-any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 

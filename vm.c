@@ -484,6 +484,16 @@ u fp_get() {
   return c == EOF ? fclose(fp), 0 : c;
 }
 
+const char iocccshim[] = "infixr 5 ++;(<=) = intLE;";
+const char *iocccp;
+u ioccc_reset(char *f) {
+  fp_reset(f);
+  iocccp = iocccshim;
+}
+u ioccc_get() {
+  return *iocccp ? *iocccp++ : fp_get();
+}
+
 void pc(u c) { putchar(c); fflush(stdout); }
 u ioget() {
   int c = getchar();
@@ -561,7 +571,18 @@ void runFile(char *f) {
   run(ioget, pc);
 }
 
-void io() {
+void ioccc(char *f) {
+  fp_reset("raw");
+	loadRaw(fp_get);
+  ioccc_reset(f);
+  buf_reset();
+  run(ioccc_get, buf_put);
+  *bufptr = 0;
+  parseRaw(buf);
+  run(ioget, pc);
+}
+
+void iotest() {
   fp_reset("raw");
 	loadRaw(fp_get);
   str =
@@ -591,8 +612,18 @@ int main(int argc, char **argv) {
 
   if (argc > 1) {
     if (!strcmp(argv[1], "test")) return runTests(), 0;
-    if (!strcmp(argv[1], "rpg")) return rpg(), puts(buf), 0;
+    if (!strcmp(argv[1], "iotest")) return iotest(), 0;
+    if (!strcmp(argv[1], "rawck")) {
+      rpg();
+      fp_reset("raw");
+      str = buf;
+      u c;
+      while ((c = str_get())) if (c != fp_get()) die("raw check failed!");
+      puts("OK");
+      return 0;
+    }
     if (!strcmp(argv[1], "run")) return runFile(argv[2]), 0;
+    if (!strcmp(argv[1], "ioccc")) return ioccc(argv[2]), 0;
     if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
     if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
     if (!strcmp(argv[1], "asm")) {
@@ -607,14 +638,9 @@ int main(int argc, char **argv) {
       run(ioget, pc);
       return 0;
     }
-    if (!strcmp(argv[1], "io")) return io(), 0;
 		return puts("bad command"), 0;
 	}
 	rpg();
-	fp_reset("raw");
-  str = buf;
-	u c;
-	while ((c = str_get())) if (c != fp_get()) die("raw check failed!");
-	puts("OK");
-	return 0;
+  puts(buf);
+  return 0;
 }

@@ -8,7 +8,7 @@ static const u root_size;
 
 enum { FORWARD = 27, REDUCING = 9 };
 
-enum { TOP = 1<<21 };
+enum { TOP = 1<<22 };
 u *mem, *altmem, *sp, *spTop, hp;
 
 static inline u isAddr(u n) { return n>=128; }

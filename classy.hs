@@ -42,7 +42,6 @@ concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
-any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookupWith eq s = foldr (\h t -> fpair h (\k v -> ife (eq s k) (Just v) t)) Nothing;
 lstLookup = lookupWith lstEq;
@@ -200,7 +199,7 @@ tops precTab = sepBy
   <|> classDecl
   <|> instDecl (expr precTab 0)
   ) (spch ';');
-program' = sp *> (concat <$> many fixity) >>= tops;
+program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
 eqPre = fmaybe (program' $ "class Eq a where { (==) :: a -> a -> Bool };\n" ++
   "instance Eq Int where { (==) = intEq };\n") undefined fst;

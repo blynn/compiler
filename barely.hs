@@ -2,7 +2,7 @@
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;
-infixr 5 : , ++;
+infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
 infix 4 == , <=;
 infixl 3 && , <|>;
@@ -75,7 +75,6 @@ concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
-any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
@@ -210,7 +209,6 @@ op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
 anyOne = fmap itemize (spc (sat (\c -> True)));
-lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = fmap ro (escChar <|> sat (\c -> not (c == delim)));
@@ -224,6 +222,8 @@ braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
+lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
+lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r)));
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
@@ -333,7 +333,7 @@ prims = let
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
-    , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (A (ro 'F') (ro 1))))
+    , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (A (ro 'F') (ro $ chr 1))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
@@ -450,9 +450,11 @@ varBind s t = case t of
   ; TAp a b -> ife (occurs s t) Nothing (Just [(s, t)])
   };
 
+charIsInt s = ife (s == "Char") "Int" s;
+
 mgu unify t u = case t of
   { TC a -> case u of
-    { TC b -> ife (a == b) (Just []) Nothing
+    { TC b -> ife (charIsInt a == charIsInt b) (Just []) Nothing
     ; TV b -> varBind b t
     ; TAp a b -> Nothing
     }

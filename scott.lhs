@@ -129,7 +129,7 @@ Not so! We may define numbers in binary instead of unary:
 data Binary = End | Nil Binary | One Binary
 ------------------------------------------------------------------------
 
-But we may as well use a list of booleans instead. 
+But we may as well use a list of booleans instead.
 A list is defined by:
 
 ------------------------------------------------------------------------
@@ -196,4 +196,4 @@ encode n = if n == 0 then [] else case divMod n 2 of
 
 We have no need for these since we'll extend CL to support the native integer
 types of the underlying machine. But we stress again pure lambda calculus
-numerals are not condemned to be unary! 
+numerals are not condemned to be unary!

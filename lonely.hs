@@ -89,7 +89,6 @@ concat = foldr (++) [];
 itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
-any f xs = foldr (\x t -> ife (f x) True t) False xs;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
@@ -180,7 +179,7 @@ parse p inp = case p of { Parser f -> f inp };
 
 instance Applicative Parser where
 { pure x = Parser \inp -> Just (x, inp)
-; (<*>) x y = Parser \inp -> case parse x inp of 
+; (<*>) x y = Parser \inp -> case parse x inp of
   { Nothing -> Nothing
   ; Just funt -> fpair funt \fun t -> case parse y t of
     { Nothing -> Nothing
@@ -240,7 +239,6 @@ op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
 anyOne = fmap itemize (spc (sat (\c -> True)));
-lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 ro c = R $ ord c;
@@ -255,6 +253,8 @@ braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
+lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
+lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r)));
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
@@ -844,8 +844,8 @@ ffiDefine n ffis = case ffis of
       ; longDistanceCall = name ++ "(" ++ args ++ ")"
       } in
     ("case " ++) . showInt n . (": " ++) . ife (ret == "()")
-      ((longDistanceCall ++) . (';':) . lazyn . (ife isPure "'I', 'K'" (aa "'K'") ++ "); break;" ++) . ffiDefine (n - 1) xt)
-      (lazyn . (ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++) . ffiDefine (n - 1) xt)
+      ((longDistanceCall ++) . (';':) . lazyn . ((ife isPure "'I', 'K'" (aa "'K'") ++ "); break;") ++) . ffiDefine (n - 1) xt)
+      (lazyn . ((ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt)
   };
 
 instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
@@ -868,14 +868,15 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
     ("static const u prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse bs) $
-    concat
-    [ "};\nstatic const u prog_size = sizeof(prog)/sizeof(*prog);\n"
-    , "static u root[] = {", concatMap (\p -> fpair p \x y -> showInt (maybe undefined id $ mlookup y tab) ", ") exs, "};\n"
-    , "static const u root_size = ", showInt (length exs) ";\n"
-    , flst exs ("int main(){rts_init();reduce(" ++ showInt (maybe undefined id $ mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
+    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse bs) .
+    ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
+    ("static u root[]={" ++) .
+    foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
+    ("};\n" ++) .
+    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
+    flst exs ("int main(){rts_init();reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
       concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
-    ]}
+    }
   };
 
 main = getContents >>= mapM_ (putChar . ord) . compile;
