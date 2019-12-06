@@ -111,7 +111,7 @@ balance k x l r = case size l + size r <= 1 of
   { True -> node
   ; False -> case 5 * size l + 3 <= 2 * size r of
     { True -> case r of
-      { Tip -> doubleL
+      { Tip -> node
       ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 3 * size rr of
         { True -> singleL
         ; False -> doubleL
@@ -119,8 +119,8 @@ balance k x l r = case size l + size r <= 1 of
       }
     ; False -> case 5 * size r + 3 <= 2 * size l of
       { True -> case l of
-        { Tip -> doubleR
-        ; Bin sz _ _ ll lr -> case 2 * size lr <= 3 * size ll of
+        { Tip -> node
+        ; Bin sz _ _ ll lr -> case 2 * size lr + 1 <= 3 * size ll of
           { True -> singleR
           ; False -> doubleR
           }
@@ -314,7 +314,7 @@ tops precTab = sepBy
   <|> classDecl
   <|> instDecl (expr precTab 0)
   ) (spch ';');
-program' = sp *> (concat <$> many fixity) >>= tops;
+program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
 -- Primitives.
 

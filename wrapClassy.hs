@@ -21,4 +21,4 @@ intLE x y = if (x Prelude.<= y) then True else False
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
-#include "lonely.hs"
+#include "effectively.hs"

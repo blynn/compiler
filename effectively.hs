@@ -2,7 +2,7 @@
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;
-infixr 5 : , ++;
+infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
 infix 4 == , <=;
 infixl 3 && , <|>;
@@ -812,8 +812,8 @@ ffiDefine n ffis = case ffis of
       ; longDistanceCall = name ++ "(" ++ args ++ ")"
       } in
     ("case " ++) . showInt n . (": " ++) . ife (ret == "()")
-      ((longDistanceCall ++) . (';':) . lazyn . (ife isPure "'I', 'K'" (aa "'K'") ++ "); break;" ++) . ffiDefine (n - 1) xt)
-      (lazyn . (ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++) . ffiDefine (n - 1) xt)
+      ((longDistanceCall ++) . (';':) . lazyn . ((ife isPure "'I', 'K'" (aa "'K'") ++ "); break;") ++) . ffiDefine (n - 1) xt)
+      (lazyn . ((ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt)
   };
 
 upFrom n = n : upFrom (n + 1);
