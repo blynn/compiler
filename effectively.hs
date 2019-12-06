@@ -804,16 +804,16 @@ ffiArgs n t = case t of
   };
 
 ffiDefine n ffis = case ffis of
-  { [] -> ""
+  { [] -> id
   ; (:) x xt -> fpair x \name t -> fpair (ffiArgs 2 t) \args pRetCount -> fpair pRetCount \pRet count -> fpair pRet \isPure ret ->
     let
-      { lazyn = "lazy(" ++ showInt (ife isPure (count - 1) (count + 1)) ", "
+      { lazyn = ("lazy(" ++) . showInt (ife isPure (count - 1) (count + 1)) . (", " ++)
       ; aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
       ; longDistanceCall = name ++ "(" ++ args ++ ")"
       } in
-    ("case " ++) $ showInt n $ (": " ++) $ ife (ret == "()")
-      (longDistanceCall ++ ";" ++ lazyn ++ ife isPure "'I', 'K'" (aa "'K'") ++ "); break;" ++ ffiDefine (n - 1) xt)
-      (lazyn ++ ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++ ffiDefine (n - 1) xt)
+    ("case " ++) . showInt n . (": " ++) . ife (ret == "()")
+      ((longDistanceCall ++) . (';':) . lazyn . (ife isPure "'I', 'K'" (aa "'K'") ++ "); break;" ++) . ffiDefine (n - 1) xt)
+      (lazyn . (ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;" ++) . ffiDefine (n - 1) xt)
   };
 
 upFrom n = n : upFrom (n + 1);
@@ -822,14 +822,15 @@ zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f 
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
-  ; Right qas -> case asm $ map (second snd) qas of { Mem tab _ bs -> concat
-    [ concatMap ffiDeclare ffis
-    , "static void foreign(u n) {\n  switch(n) {\n"
-    , ffiDefine (length ffis - 1) ffis
-    , "\n  }\n}\n"
-    , "static const u prog[]={"
-    , concatMap (\n -> showInt n ",") $ reverse bs
-    , "};\nstatic const u prog_size = sizeof(prog)/sizeof(*prog);\n"
+  ; Right qas -> case asm $ map (second snd) qas of { Mem tab _ bs ->
+    (concatMap ffiDeclare ffis ++) .
+    ("static void foreign(u n) {\n  switch(n) {\n" ++) .
+    ffiDefine (length ffis - 1) ffis .
+    ("\n  }\n}\n" ++) .
+    ("static const u prog[]={" ++) .
+    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse bs) $
+    concat
+    [ "};\nstatic const u prog_size = sizeof(prog)/sizeof(*prog);\n"
     , "static u root[] = {", concatMap (\p -> fpair p \x y -> showInt (maybe undefined id $ mlookup y tab) ", ") exs, "};\n"
     , "static const u root_size = ", showInt (length exs) ";\n"
     , flst exs ("int main(){rts_init();reduce(" ++ showInt (maybe undefined id $ mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->

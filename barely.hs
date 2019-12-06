@@ -711,5 +711,5 @@ last xs = flst xs undefined last';
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
-  ; Right qas -> concatMap (\n -> showInt n ",") (prepAsm (fst $ last qas) $ asm $ map (second snd) qas) ++ rest
+  ; Right qas -> foldr (\n s -> showInt n $ ',':s) rest $ prepAsm (fst $ last qas) $ asm $ map (second snd) qas
   }

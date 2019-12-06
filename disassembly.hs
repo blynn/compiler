@@ -609,7 +609,7 @@ disasm m = case m of { Mem tab _ bs -> let
     }) (chr n:)
   ; decode1 n = ife (128 <= n) (decodeApp decode n) (chr n:)
   } in foldr ($) "" $ map (pair \def addr ->
-    (def ++) . (" = " ++) . decode1 addr . ("\n" ++)
+    (def ++) . (" = " ++) . decode1 addr . ('\n':)
   ) tab };
 
 prepAsm mem = reverse $ case mem of {
