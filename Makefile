@@ -13,7 +13,8 @@ menu.html: menu; cobble menu menu
 %.html: %.lhs menu.html; cobble mathbook menu $<
 
 vm:vm.c;cc -O2 $^ -o $@
-lonely.c:vm effectively.hs lonely.hs rts.c;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
+raw:vm;./vm > raw
+lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c;cc -O2 $^ -o $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c;cc -O2 $^ -o $@

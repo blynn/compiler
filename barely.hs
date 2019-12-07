@@ -342,11 +342,15 @@ showInt n s = ifz n ('0':) (showInt' n) s;
 
 -- Conversion to De Bruijn indices.
 
-data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
+data LC = Ze | Su LC | Pass Int | La LC | App LC LC;
 
 debruijn m n e = case e of
-  { E _ -> Pass e
-  ; V v -> maybe (fmaybe (mlookup v m) undefined (Pass . E . Basic)) id $
+  { E x -> case x of
+    { Basic b -> Pass b
+    ; Const c -> App (Pass $ ord '#') (Pass c)
+    ; Proof _ -> undefined
+    }
+  ; V v -> maybe (fmaybe (mlookup v m) undefined Pass) id $
     foldr (\h found -> ife (h == v) (Just Ze) (maybe Nothing (Just . Su) found)) Nothing n
   ; A x y -> App (debruijn m n x) (debruijn m n y)
   ; L s t -> La (debruijn m (s:n) t)
@@ -354,33 +358,36 @@ debruijn m n e = case e of
 
 -- Kiselyov bracket abstraction.
 
-data Sem = Defer | Closed Ast | Need Sem | Weak Sem;
+data IntTree = Lf Int | Nd IntTree IntTree;
+data Sem = Defer | Closed IntTree | Need Sem | Weak Sem;
+
+lf = Lf . ord;
 
 ldef = \r y -> case y of
-  { Defer -> Need (Closed (A (A (ro 'S') (ro 'I')) (ro 'I')))
-  ; Closed d -> Need (Closed (A (ro 'T') d))
-  ; Need e -> Need (r (Closed (A (ro 'S') (ro 'I'))) e)
-  ; Weak e -> Need (r (Closed (ro 'T')) e)
+  { Defer -> Need (Closed (Nd (Nd (lf 'S') (lf 'I')) (lf 'I')))
+  ; Closed d -> Need (Closed (Nd (lf 'T') d))
+  ; Need e -> Need (r (Closed (Nd (lf 'S') (lf 'I'))) e)
+  ; Weak e -> Need (r (Closed (lf 'T')) e)
   };
 
 lclo = \r d y -> case y of
   { Defer -> Need (Closed d)
-  ; Closed dd -> Closed (A d dd)
-  ; Need e -> Need (r (Closed (A (ro 'B') d)) e)
+  ; Closed dd -> Closed (Nd d dd)
+  ; Need e -> Need (r (Closed (Nd (lf 'B') d)) e)
   ; Weak e -> Weak (r (Closed d) e)
   };
 
 lnee = \r e y -> case y of
-  { Defer -> Need (r (r (Closed (ro 'S')) e) (Closed (ro 'I')))
-  ; Closed d -> Need (r (Closed (A (ro 'R') d)) e)
-  ; Need ee -> Need (r (r (Closed (ro 'S')) e) ee)
-  ; Weak ee -> Need (r (r (Closed (ro 'C')) e) ee)
+  { Defer -> Need (r (r (Closed (lf 'S')) e) (Closed (lf 'I')))
+  ; Closed d -> Need (r (Closed (Nd (lf 'R') d)) e)
+  ; Need ee -> Need (r (r (Closed (lf 'S')) e) ee)
+  ; Weak ee -> Need (r (r (Closed (lf 'C')) e) ee)
   };
 
 lwea = \r e y -> case y of
   { Defer -> Need e
   ; Closed d -> Weak (r e (Closed d))
-  ; Need ee -> Need (r (r (Closed (ro 'B')) e) ee)
+  ; Need ee -> Need (r (r (Closed (lf 'B')) e) ee)
   ; Weak ee -> Weak (r e ee)
   };
 
@@ -394,12 +401,12 @@ babsa x y = case x of
 babs t = case t of
   { Ze -> Defer
   ; Su x -> Weak (babs x)
-  ; Pass s -> Closed s
+  ; Pass n -> Closed (Lf n)
   ; La t -> case babs t of
-    { Defer -> Closed (ro 'I')
-    ; Closed d -> Closed (A (ro 'K') d)
+    { Defer -> Closed (lf 'I')
+    ; Closed d -> Closed (Nd (lf 'K') d)
     ; Need e -> e
-    ; Weak e -> babsa (Closed (ro 'K')) e
+    ; Weak e -> babsa (Closed (lf 'K')) e
     }
   ; App x y -> babsa (babs x) (babs y)
   };
@@ -412,15 +419,9 @@ nolam m x = case babs $ debruijn m [] x of
   };
 
 enc mem t = case t of
-  { E x -> case x of
-    { Basic b -> (b, mem)
-    ; Const n -> fpair mem \hp bs -> (hp, (hp + 2, n:ord '#':bs))
-    ; Proof _ -> undefined
-    }
-  ; V v -> undefined
-  ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
+  { Lf n -> (n, mem)
+  ; Nd x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
     fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
-  ; L w t -> undefined
   };
 
 asm ds = foldl (\tabmem def -> fpair def \s t -> fpair tabmem \tab mem ->
