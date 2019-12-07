@@ -344,11 +344,12 @@ showInt n s = ifz n ('0':) (showInt' n) s;
 
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
-debruijn n e = case e of
+debruijn m n e = case e of
   { E _ -> Pass e
-  ; V v -> foldr (\h m -> ife (h == v) Ze (Su m)) (Pass (V v)) n
-  ; A x y -> App (debruijn n x) (debruijn n y)
-  ; L s t -> La (debruijn (s:n) t)
+  ; V v -> maybe (fmaybe (mlookup v m) undefined (Pass . E . Basic)) id $
+    foldr (\h found -> ife (h == v) (Just Ze) (maybe Nothing (Just . Su) found)) Nothing n
+  ; A x y -> App (debruijn m n x) (debruijn m n y)
+  ; L s t -> La (debruijn m (s:n) t)
   };
 
 -- Kiselyov bracket abstraction.
@@ -403,9 +404,7 @@ babs t = case t of
   ; App x y -> babsa (babs x) (babs y)
   };
 
-data Mem = Mem (Map String Int) Int [Int];
-
-nolam x = case babs (debruijn [] x) of
+nolam m x = case babs $ debruijn m [] x of
   { Defer -> undefined
   ; Closed d -> d
   ; Need e -> undefined
@@ -415,18 +414,18 @@ nolam x = case babs (debruijn [] x) of
 enc mem t = case t of
   { E x -> case x of
     { Basic b -> (b, mem)
-    ; Const n -> case mem of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (n:ord '#':bs)) }
+    ; Const n -> fpair mem \hp bs -> (hp, (hp + 2, n:ord '#':bs))
     ; Proof _ -> undefined
     }
-  ; V v -> case mem of { Mem tab _ _ -> (fmaybe (mlookup v tab) undefined id, mem) }
+  ; V v -> undefined
   ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
-    case mem'' of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (q:p:bs)) }
+    fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
   ; L w t -> undefined
   };
 
-asm ds = foldl (\m def -> fpair def \s t ->
-  fpair (enc m $ nolam t) \p m' -> case m' of
-     { Mem tab hp bs -> Mem (insert s p tab) hp bs }) (Mem Tip 128 []) ds;
+asm ds = foldl (\tabmem def -> fpair def \s t -> fpair tabmem \tab mem ->
+  fpair (enc mem $ nolam tab t) \p m' -> (insert s p tab, m'))
+  (Tip, (128, [])) ds;
 
 -- Type checking.
 
@@ -717,8 +716,8 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   ; Right typed -> concatMap (\p -> fpair p \s qa -> s ++ " :: " ++ showQual (fst qa) ++ "\n") typed
   };
 
-prepAsm entry mem = case mem of { Mem tab _ bs ->
-  maybe undefined id (mlookup entry tab) : reverse bs };
+prepAsm entry tabmem = fpair tabmem \tab mem ->
+  maybe undefined id (mlookup entry tab) : reverse (snd mem);
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
