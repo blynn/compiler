@@ -595,6 +595,8 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
 swp = pair \a b -> (b, a);
 (!!) xs n = flst xs undefined (\x xt -> ifz n x (xt!!(n - 1)));
 
+showSyms tab = foldr (\p f -> fpair p \s n -> (s ++) . (' ':) . showInt n . ('\n':) . f) id tab;
+
 disasm m = case m of { Mem tab _ bs -> let
   { tab' = map swp tab
   ; ram = reverse bs
@@ -607,7 +609,8 @@ disasm m = case m of { Mem tab _ bs -> let
     ; Just s -> (s ++)
     }) (chr n:)
   ; decode1 n = ife (128 <= n) (decodeApp decode n) (chr n:)
-  } in foldr ($) "" $ map (pair \def addr ->
+  } in  -- showSyms tab $
+    foldr ($) "" $ map (pair \def addr ->
     (def ++) . (" = " ++) . decode1 addr . ('\n':)
   ) tab };
 

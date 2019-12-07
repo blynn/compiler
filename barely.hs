@@ -160,8 +160,9 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 -- Parsing.
 
 data Type = TC String | TV String | TAp Type Type;
-data Ast = R Int | V String | A Ast Ast | L String Ast | Proof Pred;
-ro c = R $ ord c;
+data Extra = Basic Int | Const Int | Proof Pred;
+data Ast = E Extra | V String | A Ast Ast | L String Ast;
+ro = E . Basic . ord;
 
 pure x = \inp -> Just (x, inp);
 sat' f = \h t -> ife (f h) (pure h t) Nothing;
@@ -211,8 +212,8 @@ var = varId <|> paren (spc opLex);
 anyOne = fmap itemize (spc (sat (\c -> True)));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap ro (escChar <|> sat (\c -> not (c == delim)));
-litInt = R . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+litOne delim = fmap (E . Const . ord) (escChar <|> sat (\c -> not (c == delim)));
+litInt = E . Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
@@ -227,18 +228,17 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (V "\\C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
-  { R _ -> False
+  { E _ -> False
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w || not (isFree v t))
-  ; Proof _ -> False
   };
 
-maybeFix s x = ife (isFree s x) (A (V "\\Y") (L s x)) x;
+maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
@@ -283,9 +283,9 @@ arr a b = TAp (TAp (TC "->") a) b;
 
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (want opLex "->"));
-typeConstant = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
+typeConst = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
 aType = paren ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <|>
-  typeConstant <|> (TV <$> varId) <|>
+  typeConst <|> (TV <$> varId) <|>
   (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type aType <* spch ']')));
 
 simpleType c vs = foldl TAp (TC c) (map TV vs);
@@ -326,13 +326,11 @@ prims = let
   { ii = arr (TC "Int") (TC "Int")
   ; iii = arr (TC "Int") ii
   ; bin s = A (A (ro 'B') (ro 'T')) (A (ro 'T') (ro s)) } in map (second (first noQual)) $
-    [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), ro 'Y'))
-    , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), ro 'C'))
-    , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
+    [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
-    , ("succ", (ii, A (ro 'T') (A (A (ro '#') (R 1)) (ro '+'))))
+    , ("succ", (ii, A (ro 'T') (A (E $ Const $ 1) (ro '+'))))
     , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (A (ro 'F') (ro $ chr 1))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
@@ -347,11 +345,10 @@ showInt n s = ifz n ('0':) (showInt' n) s;
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 
 debruijn n e = case e of
-  { R s -> Pass e
+  { E _ -> Pass e
   ; V v -> foldr (\h m -> ife (h == v) Ze (Su m)) (Pass (V v)) n
   ; A x y -> App (debruijn n x) (debruijn n y)
   ; L s t -> La (debruijn (s:n) t)
-  ; Proof _ -> undefined
   };
 
 -- Kiselyov bracket abstraction.
@@ -416,12 +413,15 @@ nolam x = case babs (debruijn [] x) of
   };
 
 enc mem t = case t of
-  { R n -> (n, mem)
+  { E x -> case x of
+    { Basic b -> (b, mem)
+    ; Const n -> case mem of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (n:ord '#':bs)) }
+    ; Proof _ -> undefined
+    }
   ; V v -> case mem of { Mem tab _ _ -> (fmaybe (mlookup v tab) undefined id, mem) }
   ; A x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
     case mem'' of { Mem tab hp bs -> (hp, Mem tab (hp + 2) (q:p:bs)) }
   ; L w t -> undefined
-  ; Proof _ -> undefined
   };
 
 asm ds = foldl (\m def -> fpair def \s t ->
@@ -496,18 +496,28 @@ instantiate qt n = case qt of { Qual ps t ->
 
 --infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
 infer' typed loc ast csn = fpair csn \cs n ->
-  let { va = TV ('_':showInt n "") } in case ast of
-  { R c -> ((TC "Int", A (ro '#') ast), csn)
+  let
+    { va = TV ('_':showInt n "")
+    ; insta ty = fpair (instantiate ty n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map (E . Proof) preds)), (cs, n1)) }
+    }
+  in case ast of
+  { E x -> case x of
+    { Basic b -> ife (b == ord 'Y')
+      (insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a"))
+      $ ife (b == ord 'C')
+      (insta $ noQual $ arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
+      undefined
+    ; Const c -> ((TC "Int",  ast), csn)
+    ; Proof _ -> undefined
+    }
   ; V s -> fmaybe (lookup s loc)
-    (fmaybe (lookup s typed) undefined
-      \ta -> fpair (instantiate (fst ta) n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map Proof preds)), (cs, n1)) })
+    (fmaybe (lookup s typed) undefined $ insta . fst)
     ((, csn) . (, ast))
   ; A x y ->
     fpair (infer' typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
     fpair (infer' typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, n + 1))
-  ; Proof _ -> undefined
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -591,12 +601,15 @@ findProof is pred psn = fpair psn \ps n -> case lookup pred ps of
   };
 
 prove' ienv sub psn a = case a of
-  { R _ -> (psn, a)
+  { E x -> case x of
+    { Basic _ -> (psn, a)
+    ; Const _ -> (psn, a)
+    ; Proof raw -> findProof ienv (predApply sub raw) psn
+    }
   ; V _ -> (psn, a)
   ; A x y -> let { p1 = prove' ienv sub psn x } in fpair p1 \psn1 x1 ->
     second (A x1) (prove' ienv sub psn1 y)
   ; L s t -> second (L s) (prove' ienv sub psn t)
-  ; Proof raw -> findProof ienv (predApply sub raw) psn
   };
 
 --prove :: [(String, [Qual])] -> (Type, Ast) -> Subst -> (Qual, Ast)
