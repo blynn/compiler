@@ -421,8 +421,12 @@ nolam m x = case babs $ debruijn m [] x of
 enc mem t = case t of
   { Lf n -> (n, mem)
   ; Nd x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
-    ife (p == ord 'C' && q == ord 'I') (ord 'T', mem) $
-    ife (p == ord 'B' && q == ord 'I') (ord 'I', mem) $
+    ife (p == ord 'I') (q, mem'') $
+    ife (q == ord 'I') (
+      ife (p == ord 'C') (ord 'T', mem) $
+      ife (p == ord 'B') (ord 'I', mem) $
+      fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+    ) $
     fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
   };
 
