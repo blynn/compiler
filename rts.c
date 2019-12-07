@@ -104,6 +104,7 @@ static void run() {
       case '.': return;
       case 'F': foreign(arg(1)); break;
       case 'Y': lazy(1, arg(1), sp[1]); break;
+      case 'Q': lazy(3, arg(3), apparg(2, 1)); break;
       case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
       case 'C': lazy(3, apparg(1, 3), arg(2)); break;
