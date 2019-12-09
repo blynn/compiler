@@ -82,7 +82,7 @@ lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a);
 size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
-node k x l r = Bin (1 + size l + size r) k x l r;
+node k x l r = Bin (succ $ size l + size r) k x l r;
 singleton k x = Bin 1 k x Tip Tip;
 singleL k x l r = case r of
   { Tip -> undefined
@@ -111,17 +111,17 @@ balance k x l r = case size l + size r <= 1 of
   ; False -> case 5 * size l + 3 <= 2 * size r of
     { True -> case r of
       { Tip -> node
-      ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 3 * size rr of
-        { True -> singleL
-        ; False -> doubleL
+      ; Bin sz _ _ rl rr -> case 3 * size rr <= 2 * size rl of
+        { True -> doubleL
+        ; False -> singleL
         }
       }
     ; False -> case 5 * size r + 3 <= 2 * size l of
       { True -> case l of
         { Tip -> node
-        ; Bin sz _ _ ll lr -> case 2 * size lr + 1 <= 3 * size ll of
-          { True -> singleR
-          ; False -> doubleR
+        ; Bin sz _ _ ll lr -> case 3 * size ll <= 2 * size lr of
+          { True -> doubleR
+          ; False -> singleR
           }
         }
       ; False -> node
@@ -483,7 +483,7 @@ unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s 
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
   ; TV s -> case lookup s tab of
-    { Nothing -> let { va = TV (s ++ '_':showInt n "") } in ((va, n + 1), (s, va):tab)
+    { Nothing -> let { va = TV (s ++ '_':showInt n "") } in ((va, succ n), (s, va):tab)
     ; Just v -> ((v, n), tab)
     }
   ; TAp x y ->
@@ -524,10 +524,10 @@ infer' typed loc ast csn = fpair csn \cs n ->
     (fmaybe (lookup s typed) undefined $ insta . fst)
     ((, csn) . (, ast))
   ; A x y ->
-    fpair (infer' typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
+    fpair (infer' typed loc x (cs, succ n)) \tax csn1 -> fpair tax \tx ax ->
     fpair (infer' typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, n + 1))
+  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, succ n))
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -595,7 +595,7 @@ showPred p = case p of { Pred s t -> s ++ (' ':showType t) ++ " => "};
 
 findInst r qn p insts = case insts of
   { [] ->
-    fpair qn \q n -> let { v = '*':showInt n "" } in (((p, v):q, n + 1), V v)
+    fpair qn \q n -> let { v = '*':showInt n "" } in (((p, v):q, succ n), V v)
   ; (:) i is -> case i of { Qual ps h -> case matchPred h p of
     { Nothing -> findInst r qn p is
     ; Just u -> foldl (\qnt p -> fpair qnt \qn1 t -> second (A t)
@@ -630,7 +630,7 @@ prove ienv ta sub = fpair ta \t a ->
 
 data Either a b = Left a | Right b;
 
-dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
+dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ succ n);
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv typed qi def = fpair def \s expr ->
@@ -679,9 +679,9 @@ mkCase t cs = (concatMap (('|':) . conOf) cs,
 mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
 index n s ss = case ss of
   { [] -> undefined
-  ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
+  ; (:) t ts -> ife (s == t) n $ index (succ n) s ts
   };
-length = foldr (\_ n -> n + 1) 0;
+length = foldr (\_ n -> succ n) 0;
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 -- scottConstr t cs c = case c of { Constr s ts -> (s,
 --   ( noQual $ foldr arr t ts
