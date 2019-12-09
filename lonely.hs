@@ -174,7 +174,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 -- Parsing.
 
 data Type = TC String | TV String | TAp Type Type ;
-data Extra = Basic Int | Const Int | Proof Pred;
+data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
 data Ast = E Extra | V String | A Ast Ast | L String Ast;
 data Parser a = Parser (String -> Maybe (a, String));
 parse p inp = case p of { Parser f -> f inp };
@@ -241,14 +241,14 @@ op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
 
 anyOne = fmap itemize (spc (sat (\c -> True)));
-listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
+listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (E . Const . ord) (escChar <|> sat (\c -> not (c == delim)));
+litOne delim = escChar <|> sat \c -> not (c == delim);
 litInt = E . Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
-litChar = between (char '\'') (spch '\'') (litOne '\'');
+litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
+litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
-sqLst r = listify (between (spch '[') (spch ']') (sepBy r (spch ',')));
+sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
 alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
@@ -395,6 +395,7 @@ debruijn m n e = case e of
   { E x -> case x of
     { Basic b -> Pass b
     ; Const c -> App (Pass $ ord '#') (Pass c)
+    ; StrCon s -> foldr (\h t -> App (App (Pass $ ord ':') (App (Pass $ ord '#') (Pass $ ord h))) t) (Pass $ ord 'K') s
     ; Proof _ -> undefined
     }
   ; V v -> maybe (fmaybe (mlookup v m) undefined Pass) id $
@@ -561,6 +562,7 @@ infer' typed loc ast csn = fpair csn \cs n ->
       (insta $ noQual $ arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
       undefined
     ; Const c -> ((TC "Int",  ast), csn)
+    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
     ; Proof _ -> undefined
     }
   ; V s -> fmaybe (lookup s loc)
@@ -657,6 +659,7 @@ prove' ienv sub psn a = case a of
   { E x -> case x of
     { Basic _ -> (psn, a)
     ; Const _ -> (psn, a)
+    ; StrCon _ -> (psn, a)
     ; Proof raw -> findProof ienv (predApply sub raw) psn
     }
   ; V _ -> (psn, a)
