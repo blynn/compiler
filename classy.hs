@@ -348,7 +348,7 @@ unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s 
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
   ; TV s -> case lstLookup s tab of
-    { Nothing -> let { va = TV (s ++ '_':showInt n "") } in ((va, n + 1), (s, va):tab)
+    { Nothing -> let { va = TV (showInt n "") } in ((va, n + 1), (s, va):tab)
     ; Just v -> ((v, n), tab)
     }
   ; TAp x y ->
@@ -370,7 +370,7 @@ instantiate qt n = case qt of { Qual ps t ->
 
 --infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
 infer' typed loc ast csn = fpair csn \cs n ->
-  let { va = TV ('_':showInt n "") } in case ast of
+  let { va = TV (showInt n "") } in case ast of
   { R s -> ((TC "Int", ast), csn)
   ; V s -> fmaybe (lstLookup s loc)
     (fmaybe (lstLookup s typed) undefined

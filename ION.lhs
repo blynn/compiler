@@ -115,12 +115,37 @@ it with `IK`.
 == The numbers game ==
 
 For primitve functions, we use a trick described in depth by Naylor and
-Runciman, "The Reduceron reconfigured and re-evaluated": we reduce `#nf` to
-`f(#n)`. For example, the term `(I#2)(K(#3)S)(+))` reduces to `(+)(#3)(#2)`.
+Runciman, "The Reduceron reconfigured and re-evaluated": we introduce a
+combinator called `#` and reduce, say, `# 42 f` to `f(# 42)` for any `f`.
+For example, the term `(I#2)(K(#3)S)(+))` reduces to `(+)(#3)(#2)`.
 
-Observe first two arguments of `(+)` are normalized integers, so our code for
-reducing `(+)(#m)(#n)` simply pulls out the words `m` and `n` from certain
-locations in memory and returns `#s` where `s == m + n` modulo 2^32.
+In this fashion, the first two arguments of `(+)` are always primitive
+integers, so our code for reducing `(+)(#m)(#n)` simply pulls out the words `m`
+and `n` from certain locations in memory and returns `#s` where `s == m + n`
+modulo 2^32.
+
+This scheme resembles the approach described by Peyton Jones and Launchbury,
+"Unboxed values as first class citizens in a non-strict function language".
+For example, they define integer subtraction as follows:
+
+------------------------------------------------------------------------
+(-) p q = case p of
+  Int p# -> case q of
+    Int q# -> case (p# -# q#) of
+      t# -> Int t#
+------------------------------------------------------------------------
+
+After Scott-encoding, we have:
+
+------------------------------------------------------------------------
+(-) p q = p (\p# -> q(\q# -> (p# -# q#) \t# -> Int t#))
+------------------------------------------------------------------------
+
+In other words, using their notation, `42 f` reduces to `f(42#)`. However, our
+subtraction operator also boxes the result, while they have a separate boxing
+step, which is better for optimization. We may wish to follow suit and split
+off boxing, though it likely means introducing supercombinators to reap the
+benefits.
 
 We support the operations `+ - / * % = L`. The first 5 have the same meaning
 they do in C, while the last 2 are equivalent to C's `(==)` and `(<=)`.

@@ -8,7 +8,7 @@ static const u root_size;
 
 enum { FORWARD = 27, REDUCING = 9 };
 
-enum { TOP = 1<<22 };
+enum { TOP = 1<<21 };
 u *mem, *altmem, *sp, *spTop, hp;
 
 static inline u isAddr(u n) { return n>=128; }
@@ -121,19 +121,6 @@ static void run() {
       case '%': lazy(2, '#', num(1) % num(2)); break;
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
-      case 'a': {
-        u mnt = arg(1);
-        u m = mnt>>16;
-        u n = (mnt>>8)&255;
-        u t = mnt&255;
-        sp += 2;
-        u f = arg(m);
-        for (; n; n--) f = app(f, mem[*sp++ + 1]);
-        sp += t;
-        mem[*sp] = 'I';
-        mem[*sp + 1] = f;
-        break;
-      }
       case 'n':  // newIORef
         lazy(3, app(arg(3), app('?', arg(1))), arg(2));
         break;
