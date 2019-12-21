@@ -433,9 +433,9 @@ enc mem t = case t of
     fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
   };
 
-asm ds = foldl (\tabmem def -> fpair def \s t -> fpair tabmem \tab mem ->
-  fpair (enc mem $ nolam tab t) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) ds;
+asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
+  fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
+  (Tip, (128, [])) qas;
 
 -- Type checking.
 
@@ -737,5 +737,5 @@ last xs = flst xs undefined last';
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> case infer prog of
   { Left err -> err
-  ; Right qas -> foldr (\n s -> showInt n $ ',':s) rest $ prepAsm (fst $ last qas) $ asm $ map (second snd) qas
+  ; Right qas -> foldr (\n s -> showInt n $ ',':s) rest $ prepAsm (fst $ last qas) $ asm qas
   }

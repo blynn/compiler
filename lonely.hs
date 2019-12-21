@@ -478,9 +478,9 @@ enc mem t = case t of
     fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
   };
 
-asm ds = foldl (\tabmem def -> fpair def \s t -> fpair tabmem \tab mem ->
-  fpair (enc mem $ nolam tab t) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) ds;
+asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
+  fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
+  (Tip, (128, [])) qas;
 
 -- Type checking.
 
@@ -884,7 +884,7 @@ zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f 
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
-  ; Right qas -> fpair (asm $ map (second snd) qas) \tab mem ->
+  ; Right qas -> fpair (asm qas) \tab mem ->
     (concatMap ffiDeclare ffis ++) .
     ("static void foreign(u n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
@@ -896,7 +896,7 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
     ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
+    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
       concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
   };
 

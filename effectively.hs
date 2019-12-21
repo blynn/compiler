@@ -82,7 +82,7 @@ lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a) ;
 size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
-node k x l r = Bin (1 + size l + size r) k x l r;
+node k x l r = Bin (succ $ size l + size r) k x l r;
 singleton k x = Bin 1 k x Tip Tip;
 singleL k x l r = case r of
   { Tip -> undefined
@@ -111,17 +111,17 @@ balance k x l r = case size l + size r <= 1 of
   ; False -> case 5 * size l + 3 <= 2 * size r of
     { True -> case r of
       { Tip -> node
-      ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 3 * size rr of
-        { True -> singleL
-        ; False -> doubleL
+      ; Bin sz _ _ rl rr -> case 3 * size rr <= 2 * size rl of
+        { True -> doubleL
+        ; False -> singleL
         }
       }
     ; False -> case 5 * size r + 3 <= 2 * size l of
       { True -> case l of
         { Tip -> node
-        ; Bin sz _ _ ll lr -> case 2 * size lr + 1 <= 3 * size ll of
-          { True -> singleR
-          ; False -> doubleR
+        ; Bin sz _ _ ll lr -> case 3 * size ll <= 2 * size lr of
+          { True -> doubleR
+          ; False -> singleR
           }
         }
       ; False -> node
@@ -446,9 +446,9 @@ enc mem t = case t of
     fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
   };
 
-asm ds = foldl (\tabmem def -> fpair def \s t -> fpair tabmem \tab mem ->
-  fpair (enc mem $ nolam tab t) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) ds;
+asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
+  fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
+  (Tip, (128, [])) qas;
 
 -- Type checking.
 
@@ -844,7 +844,7 @@ zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f 
 compile s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
   { Left err -> err
-  ; Right qas -> fpair (asm $ map (second snd) qas) \tab mem ->
+  ; Right qas -> fpair (asm qas) \tab mem ->
     (concatMap ffiDeclare ffis ++) .
     ("static void foreign(u n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
@@ -856,6 +856,6 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
     ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
+    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
       concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
   };

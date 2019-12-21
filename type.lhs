@@ -228,3 +228,43 @@ include::classy.hs[]
 ++++++++++
 </div>
 ++++++++++
+
+== Barely ==
+
+Our compilers are becoming noticeably slower. The main culprit is the type
+unification algorithm we copied from the paper. It is elegant and simple, but
+also grossly inefficient. The pain is exacerbated by long string constants,
+which expand to a chain of cons calls before type checking.
+
+Fortunately, we can easily defer expansion so it takes place after type
+checking. This alleviates enough of the suffering that we'll leave improving
+unification for another time.
+
+This change is a good opportunity to tidy up. In particular, we eliminate the
+murky handling of the `R` data constructor: before type checking, it
+represented integer constants, while after type checking, its field was to be
+passed verbatim to the next phase. Now, data types clear up the picture.
+
+We immediately take advantage of the neater code and add a few rewrite rules
+to cut down the number of combinators.
+
+To make this incarnation of our compiler more substantial, we knuckle down and
+implement a `Map` based on Adams trees. Again, we mostly copy code from a paper.
+The running time improves slightly after replacing the association list used
+in the last compilation step with `Map`.
+
+We also move the assembler from C to Haskell, that is, our compiler now outputs
+bare machine code rather than ION assembly.
+
+++++++++++
+<p><a onclick='hideshow("barely");'>&#9654; Toggle Source</a></p>
+<div id='barely' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::barely.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++

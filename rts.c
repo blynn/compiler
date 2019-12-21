@@ -136,7 +136,8 @@ static void run() {
   }
 }
 
-static void reduce(u n) {
+void rts_reduce(u) __attribute__((visibility("default")));
+void rts_reduce(u n) {
   *(sp = spTop) = app(app(n, '?'), '.');
   run();
 }
@@ -149,4 +150,15 @@ void rts_init() {
   spTop = mem + TOP - 1;
 }
 
-#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){reduce(root[n]);}
+static u pro_offset;
+
+void rts_pro_init() __attribute__((visibility("default")));
+void rts_pro_init() { pro_offset = hp - 128; }
+
+void rts_pro(u) __attribute__((visibility("default")));
+void rts_pro(u n) { mem[hp++] = n < 128 ? n : n + pro_offset; }
+
+void rts_pro_end(u) __attribute__((visibility("default")));
+void rts_pro_end(u n) { rts_reduce(n < 128 ? n : n + pro_offset); }
+
+#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
