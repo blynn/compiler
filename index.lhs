@@ -17,3 +17,6 @@ failed.
 
 Or maybe I'm still bitter about that exam. In any case, here is a dilettante's
 guide to writing compilers while thumbing your nose at the establishment.
+
+See https://github.com/blynn/compiler[https://github.com/blynn/compiler] for
+the source code.
