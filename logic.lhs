@@ -155,19 +155,14 @@ easily digestible pieces.
 
 The design of our code is similar to
 http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf[the basic
-parser combinators described by Swierstra]. A parser combinator is a function
-taking a string and returning the list of all possible ways it can parse the
-beginning of the input string. Included with each solution is the unparsed
-remainder of the string.
+parser combinators described by Swierstra], or the `readS a` type from the base
+library: a function taking a string and returning the list of possible ways to
+parse the beginning of the input string along with the unparsed remainder.
 
-There are a few primitive parser combinators that, for instance, parse a single
-character satisfying a given condition. Then there are functions that stitch
-together parser combinators from existing parser combinators.
-
-We define "predicate combinators" similarly. An `Env` consists of the
-substitutions required so far and a stream of integers representing unused
-variables. A `Pred` takes an `Env` and returns a list of all `Env` values that
-satisfy the predicate.
+We define a "predicate combinator" `Pred` to be a function taking an `Env`
+consisting of the substitutions required so far and a stream of integers
+representing unused variables and returning all `Env` values that satisfy the
+predicate.
 
 \begin{code}
 type Env = (Subst, [Int])

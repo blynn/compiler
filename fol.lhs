@@ -20,20 +20,40 @@ We demonstrate by building classic theorem provers for first-order logic, by
 taking a whirlwind tour through chapters 2 and 3 of John Harrison, 'Handbook of
 Practical Logic and Automated Reasoning'.
 
+++++++++++
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
+<p><a onclick='hideshow("imports");'>&#9654; Toggle extensions and imports</a></p>
+<div id='imports' style='display:none'>
+++++++++++
+
 \begin{code}
 {-# LANGUAGE BlockArguments, LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+import Data.Either (rights)
 import Data.Foldable (asum)
 import qualified Data.Map.Strict as M
 import Control.Monad.State
-import Data.List (delete, union, partition, sort, find, maximumBy, intercalate)
+import Data.List (delete, union, partition, sort, find, maximumBy, intercalate, unfoldr)
 import Data.Ord (comparing)
 import qualified Data.Set as S
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import Debug.Trace
 \end{code}
+
+++++++++++
+</div>
+++++++++++
 
 == Recursion Schemes ==
 
@@ -99,12 +119,17 @@ unmap h (FO t) = FO (h t)
 Variables start with lowercase letters, while constants, functions, and
 predicates start with uppercase letters.
 
+++++++++++
+<p><a onclick='hideshow("parse");'>&#9654; Toggle parser and pretty-printer</a></p>
+<div id='parse' style='display:none'>
+++++++++++
+
 \begin{code}
 firstorderformula :: Parsec () String FO
 firstorderformula = iff where
   iff = foldr1 (:<=>) <$> sepBy1 impl (want "<=>")
   impl = foldr1 (:==>) <$> sepBy1 disj (want "==>")
-  disj = foldl1 (:\/) <$> sepBy1 conj (want "\\/" <|> want "|" <|> want "+")
+  disj = foldl1 (:\/) <$> sepBy1 conj (want "\\/" <|> want "|")
   conj = foldl1 (:/\) <$> sepBy1 nope (want "/\\" <|> want "&")
   nope = do
     fs <- many (const Not <$> (want "~" <|> want "!"))
@@ -159,6 +184,10 @@ instance Show FO where
       where charQ Forall = '\8704'
             charQ Exists = '\8707'
 \end{code}
+
+++++++++++
+</div>
+++++++++++
 
 == Free variables ==
 
@@ -222,6 +251,7 @@ simplify = ffix \h fo -> case unmap h fo of
   p :==> Bot -> Not p
   p :<=> Top -> p
   Top :<=> p -> p
+  Bot :<=> Bot -> Top
   p :<=> Bot -> Not p
   Bot :<=> p -> Not p
   Qua _ x p | x `notElem` fv p -> p
@@ -282,16 +312,14 @@ subst f = ffix \h -> \case
 Skolemization transforms an NNF formula to an 'equisatisfiable' formula with no
 existential quantifiers. "Equisatisfiable" means satisfiability is preserved,
 that is the output is satisifable if and only if the input is.
+Skolemization is "lossy" because validity might not be preserved.
 
-Skolemization is "lossy" because the output formula may not be logically
-equivalent; validity might not be preserved.
+We may need to mint new function names along the way. We call `functions` to
+find all functions present in a given formula to avoid name clashes. It also
+returns the arity of each function because we'll need this later to enumerate
+ground terms.
 
-We may need to mint new function names along the way. The function `functions`
-finds all functions present in a given formula, so we can avoid name clashes.
-It also records the arity of each function because we'll need this later to
-enumerate ground terms.
-
-It is possible to Skolemize a non-NNF formula, but if negations are allowed
+It is possible to Skolemize a non-NNF formula, but if negations can go
 anywhere, we may as well remove existential quantifiers by converting them to
 universal quantifiers via duality and preserve logical equivalence.
 
@@ -440,9 +468,9 @@ few test cases.
 
 It can be shown a quantifier-free formula is satisfiable if and only if it is
 satisfiable under a 'Herbrand interpretation'.
-Loosely speaking, this means we treat terms like the abstract syntax trees that
-represent them; if a theorem holds under some intepretation, then it also holds
-for syntax trees.
+Loosely speaking, we treat terms like the abstract syntax trees that represent
+them; if a theorem holds under some intepretation, then it also holds for
+syntax trees.
 
 Why? Intuitively, given a formula and an interpretation where it holds, we can
 define a syntax tree based on the constants and functions of the formula, and
@@ -450,20 +478,15 @@ rig predicates on these trees to behave enough like their counterparts in the
 interpretation.
 
 For example, the formula $\forall x . x + 0 = x$ holds under many familiar
-interpretations. It also holds for syntax trees:
+interpretations. Here's a Herbrand interpretation:
 
 ------------------------------------------------------------------------
 data Term = Plus Term Term | Zero
-------------------------------------------------------------------------
-
-with the predicate:
-
-------------------------------------------------------------------------
 eq :: (Term, Term) -> Bool
 eq _ = True
 ------------------------------------------------------------------------
 
-Another example: the following holds under interpretations such as
+For our next example we take a formula that holds under interpretations such as
 integer arithmetic:
 
 \[
@@ -480,19 +503,25 @@ odd = \case
   Succ x -> not $ odd x
 ------------------------------------------------------------------------
 
-The above result suggests the following strategy to prove any first-order
-formula `f`. As a preprocessing step, we prepend explicit universal quantifiers
-for each free variable.
+This important result suggests a strategy to prove any first-order formula `f`.
+As a preprocessing step, we prepend explicit universal quantifiers for each
+free variable.
 
-  1. Negate $f$, because validity and satisfiability are dual. That is,
+\begin{code}
+generalize fo = foldr (Qua Forall) fo $ fv fo
+\end{code}
+
+Then:
+
+  1. Negate $f$, because validity and satisfiability are dual:
   the formula $f$ is valid if and only if $\neg f$ is unsatisfiable.
-  2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$.
-  3. Initialize $h$ to $\top$.  Let $m$ be the number of variables in $t$.
-  4. Pick $m$ elements from the Herbrand universe of $t$.
-  5. Replace $h$ with the conjunction of $h$ and the result of substituting
-  the variables of $t$ with the ground terms we chose in step 4.
-  6. If $h$ is unsatisfiable, then $t$ is unsatisfiable under any
-  interpretation, hence $f$ is valid. Otherwise, go to step 4.
+  2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$,
+  Let $m$ be the number of variables in $t$. Initialize $h$ to $\top$.
+  3. Choose $m$ elements from the Herbrand universe of $t$.
+  4. Replace $h$ with the conjunction of $h$ and the result of substituting
+  the variables of $t$ with the ground terms we chose.
+  5. If $h$ is unsatisfiable, then $t$ is unsatisfiable under any
+  interpretation, hence $f$ is valid. Otherwise, go to step 3.
 
 We have moved from first-order logic to propositional logic; the formula $h$
 only contains ground terms which act as propositional variables when
@@ -501,28 +530,21 @@ https://en.wikipedia.org/wiki/Boolean_satisfiability_problem[the classic SAT
 problem].
 
 If the given formula is valid, then this algorithm eventually finds a proof
-provided the method used to pick ground terms in step 4 eventually selects any
-given possbiility. This is the case for our `groundTuples` function.
-
-We've already done the work for the first two steps, and can easily throw in a
-preprocessing step to add universal quantifiers for each free variable:
-
-\begin{code}
-skno :: FO -> FO
-skno = skolemize . nono . generalize where
-  generalize fo = foldr (Qua Forall) fo $ fv fo
-\end{code}
+provided the method we use to pick ground terms eventually selects any given
+possbiility. This is the case for our `groundTuples` function.
 
 == Gilmore ==
 
 It remains to write an algorithm to solve SAT.
-One of the earliest approaches (Gilmore 1960) used 'disjunctive normal form'
-(DNF): a formula is in this form if it is the disjunction of conjunctions of
-literals, such as:
+One of the earliest approaches (Gilmore 1960) transforms a given formula to
+'disjunctive normal form' (DNF):
 
 \[
-(\neg a\wedge b\wedge c) \vee (d \wedge \neg e) \vee (f)
+\bigvee_i \bigwedge_j x_{ij}
 \]
+
+where the $x_{ij}$ are literals. For example: 
+$(\neg a\wedge b\wedge c) \vee (d \wedge \neg e) \vee (f)$.
 
 We represent a DNF formula as a set of sets of literals.
 Given an NNF formula, the function `pureDNF` builds an equivalent DNF formula:
@@ -570,6 +592,9 @@ We reverse the output of `groundTuples` because it happens to work better on a
 few test cases.
 
 \begin{code}
+skno :: FO -> FO
+skno = skolemize . nono . generalize
+
 herbrand conjSub refute uni fo = herbLoop (uni Top) [] herbiverse where
   qff = deQuantify . skno $ fo
   fvs = fv qff
@@ -593,20 +618,16 @@ gilmore = herbrand conjDNF S.null simpDNF where
 
 == Davis-Putnam ==
 
-DPLL is a better algorithm. It uses the 'conjunctive normal form' (CNF) which
+DPLL is a better algorithm. It uses the 'conjunctive normal form' (CNF), which
 is the dual of DNF:
 
 \begin{code}
 pureCNF = S.map (S.map nono) . pureDNF . nnf . nono
 \end{code}
 
-This method of constructing a CNF formula is potentially costly, but we get
-away with this because we only pay this cost once in step 2 to convert a
+This method of constructing a CNF formula is potentially expensive, but we get
+away with this because we only pay the cost once in step 2 to convert a
 relatively short theorem. Step 5 just piles on more conjunctions.
-
-An alternative is to use a 'definitional CNF'; in general, this may fail to
-preserve logical equivalence, but it preserves satisfiability which is all we
-care about, and we eventually Skolemize anyway.
 
 As with DNF, we simplify:
 
@@ -653,6 +674,63 @@ davisPutnam = herbrand conjCNF (not . dpll) simpCNF where
   conjCNF cjs0 sub cjs = S.union (S.map (S.map sub) cjs0) cjs
 \end{code}
 
+== Definitional CNF ==
+
+We can efficiently translate any formula to an equisatisfiable CNF formula with
+a definitional approach. Logical equivalence may not be preserved, but only
+satisfiability matters, and in any case we may lose it anyway when we
+Skolemize.
+
+We need a variant of NNF that preserves if-and-only-if operators:
+
+\begin{code}
+nenf :: FO -> FO
+nenf = nenf' . simplify where
+  nenf' = ffix \h -> unmap h . \case
+    p :==> q -> Not p :\/ q
+    Not (Not p) -> p
+    Not (p :/\ q) -> Not p :\/ Not q
+    Not (p :\/ q) -> Not p :/\ Not q
+    Not (p :==> q) -> p :/\ Not q
+    Not (p :<=> q) -> p :<=> Not q
+    Not (Qua Forall x p) -> Qua Exists x (Not p)
+    Not (Qua Exists x p) -> Qua Forall x (Not p)
+    t -> t
+\end{code}
+
+We recursively mint 0-ary predicates to act like definitions for every node
+with two children:
+
+\begin{code}
+sat' :: FO -> State (M.Map FO FO, Int) FO
+sat' = \case
+  p :/\ q  -> def =<< (:/\)  <$> sat' p <*> sat' q
+  p :\/ q  -> def =<< (:\/)  <$> sat' p <*> sat' q
+  p :<=> q -> def =<< (:<=>) <$> sat' p <*> sat' q
+  p        -> pure p
+  where
+  def :: FO -> State (M.Map FO FO, Int) FO
+  def t = do 
+    (ds, n) <- get
+    case M.lookup t ds of
+      Nothing -> do
+        let v = Atom ("*" <> show n) []
+        put (M.insert t v ds, n + 1)
+        pure v
+      Just v -> pure v
+
+satCNF fo = S.unions $ simpCNF p
+  : map (simpCNF . uncurry (:<=>)) (M.assocs ds)
+  where (p, (ds, _)) = runState (sat' $ nenf fo) (mempty, 0)
+\end{code}
+
+We define a second DPLL prover using this definitional CNF algorithm:
+
+\begin{code}
+davisPutnam2 = herbrand conjCNF (not . dpll) satCNF where
+  conjCNF cjs0 sub cjs = S.union (S.map (S.map sub) cjs0) cjs
+\end{code}
+
 == Unification ==
 
 To refute $P(F(x), G(A)) \wedge \neg P(F(B), y)$, the above algorithms would
@@ -694,11 +772,12 @@ As well as terms, unification in first-order logic must also handle literals,
 that is, predicates and their negations.
 
 \begin{code}
-unifyLiterals env = \case
-  (Atom p1 a1, Atom p2 a2) -> unify env [(Fun p1 a1, Fun p2 a2)]
-  (Not p, Not q) -> unifyLiterals env (p, q)
-  (Bot, Bot) -> Right env
-  _ -> Left "Can’t unify literals"
+literally nope f = \case
+  (Atom p1 a1, Atom p2 a2) -> f [(Fun p1 a1, Fun p2 a2)]
+  (Not p, Not q) -> literally nope f (p, q)
+  _ -> nope
+
+unifyLiterals = literally (Left "Can't unify literals") . unify
 \end{code}
 
 == Tableaux ==
@@ -726,6 +805,12 @@ Iterative deepening comes to our rescue. We bound the number of variables a
 path can create to avoid getting lost in the weeds. If the search fails,
 we bump up the bound and try again.
 
+(We mean "branching" in a yak-shaving sense, that is, while trying to refute A,
+we find we must also refute B so we add this task to our to-do list. At a
+higher level, there is another sense of branching where we realize we made the
+wrong decision so we have to undo it and try again; we call this
+'backtracking'.)
+
 \begin{code}
 deepen f n = trace ("Searching with depth limit " <> show n)
   either (const $ deepen f (n + 1)) id $ f n
@@ -741,10 +826,9 @@ tab' n fos lits cont (env,k)
         y = Var $ '_':show k
         p' = subst (`lookup` [(x, y)]) p
         in tab' (n - 1) (p':rest <> [h]) lits cont (env,k+1)
-      fo -> case asum $ (\l -> cont =<< flip (,) k <$>
-          unifyLiterals env (fo,nono l)) <$> lits of
-        Left _ -> tab' n rest (fo:lits) cont (env,k)
-        Right x -> Right x
+      fo -> asum ((\l -> cont =<< flip (,) k <$>
+          unifyLiterals env (fo,nono l)) <$> lits)
+        <|> tab' n rest (fo:lits) cont (env,k)
 
 tabRefute fos = deepen (\n -> tab' n fos [] Right (mempty, 0)) 0
 
@@ -757,44 +841,223 @@ Some problems can be split up into the disjunction of independent subproblems,
 which can be solved individually.
 
 \begin{code}
-dnfTableau = map (tabRefute . S.toList) . S.toList . simpDNF . skno
+splitTableau = map (tabRefute . S.toList) . S.toList . simpDNF . skno
 \end{code}
+
+== Connection Tableaux ==
+
+Consider a generalized Prolog, which allows disjunctions on the left of a Horn clause:
+
+------------------------------------------------------------------------
+bar(A) | baz(A) :- foo(A)
+------------------------------------------------------------------------
+
+If the goal is `bar(X)`, then one solution is to find proofs of `foo(X)` and
+`~baz(X)`. For the latter, for each rule that contains `baz` on the right, such as:
+
+------------------------------------------------------------------------
+qux(A) :- baz(A), quux(A)
+------------------------------------------------------------------------
+
+we succeed if we prove `~qux(X)` and `quux(X)`.
+
+Thus we can follow a strategy similar to Prolog. Given a positive goal, look
+for a rule where it appears on the left, and the goals on the right along with
+the negation of the other goals on the left become new subgoals. Given a
+negative goal, it's the same except we look for a rule where it appears on the
+right.
+
+It turns out if we abort searches whenever the negation of a subgoal unifies
+with another subgoal, then we have a decent automatic prover. For CNF clauses
+can be viewed as rules in the above form (negative literals become the
+disjunction on the left, while positive literals become the conjunction on the
+right).
+
+Any unsatisfiable CNF formula must contain a clause made exclusively from
+negative literals, and we pick one of them to start the proof.
+
+\begin{code}
+selections bs = unfoldr (\(as, bs) -> case bs of
+  [] -> Nothing
+  b:bt -> Just ((b, as <> bt), (b:as, bt))) ([], bs)
+
+instantiate :: [FO] -> Int -> ([FO], Int)
+instantiate fos k = (subst (`M.lookup` (M.fromList $ zip vs names)) <$> fos, k + length vs)
+  where
+  vs = foldr union [] $ fv <$> fos
+  names = Var . ('_':) . show <$> [k..]
+
+conn' n cls lits cont (env, k)
+  | n < 0 = Left "too deep"
+  | otherwise = case lits of
+    [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
+    lit:litt -> asum (contra lit <$> litt)
+      <|> asum [branch ps =<< flip (,) k' <$> unifyLiterals env (lit, nono p)
+      | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
+  where
+  branch ps = foldr (\l f -> conn' (n - length ps) cls (l:lits) f) cont ps
+  contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
+
+prologgy fos = deepen (\n -> conn' n cls [] Right (mempty, 0)) 0 where
+  cls = S.toList <$> S.toList (simpCNF $ deQuantify $ skno fos)
+\end{code}
+
+We refine our algorithm by aborting whenever the current subgoal is equal to an
+older subgoal under the substitutions found so far. As with `splitTableau`, we
+split the problem into smaller independent subproblems when possible.
+
+\begin{code}
+equalUnder :: M.Map String Term -> [(Term, Term)] -> Bool
+equalUnder env = \case
+  [] -> True
+  h:rest -> case h of
+    (Fun f fargs, Fun g gargs)
+      | f == g, length fargs == length gargs -> equalUnder env $ zip fargs gargs <> rest
+      | otherwise -> False
+    (Var x, t)
+      | Just v <- M.lookup x env -> equalUnder env $ (v, t):rest
+      | otherwise -> either (const False) id $ istriv env x t
+    (t, Var x) -> equalUnder env $ (Var x, t):rest
+
+cut' n cls lits cont (env, k)
+  | n < 0 = Left "too deep"
+  | otherwise = case lits of
+    [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
+    lit:litt
+      | any (curry (literally False $ equalUnder env) lit) litt -> Left "repetition"
+      | otherwise -> asum (contra lit <$> litt)
+        <|> asum [branch ps =<< flip (,) k' <$> unifyLiterals env (lit, nono p)
+        | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
+  where
+  branch ps = foldr (\l f -> cut' (n - length ps) cls (l:lits) f) cont ps
+  contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
+
+meson fos = map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+  where
+  messy fo = deepen (\n -> cut' n (toCNF fo) [] Right (mempty, 0)) 0
+  toCNF = map S.toList . S.toList . simpCNF . deQuantify
+  listConj = foldr1 (:/\)
+\end{code}
+
+Due to a misunderstanding, our code applies the depth limit differently to the
+original. Recall in our `tableau` function, the two branches of a disjunction
+receive the same quota for new variables. I had thought the same was true for
+the branches of `meson`.
+
+I later realized the quota is meant to be shared among all subgoals. I wrote a
+version which I believe is more faithful to the original, but I found it
+performed horribly.
+
+++++++++++
+<p><a onclick='hideshow("limited");'>&#9654; Toggle original version</a></p>
+<div id='limited' style='display:none'>
+++++++++++
+\begin{code}
+lim' cls lits cont (budget, (env, k))
+  | budget < 0 = Left "too deep"
+  | otherwise = case lits of
+    [] -> asum [branch ls cont (budget, (env, k)) | ls <- cls, all (not . isPositive) ls]
+    lit:litt
+      | any (curry (literally False $ equalUnder env) lit) litt -> Left "repetition"
+      | otherwise -> asum (contra lit <$> litt)
+        <|> asum [branch ps cont =<< (,) budget . flip (,) k' <$> unifyLiterals env (lit, nono p)
+        | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
+  where
+  contra p q = cont =<< (,) budget . flip (,) k <$> unifyLiterals env (nono p, q)
+  branch ps cont (n, ek) = branch' ps m cont (n - m, ek) where m = length ps
+  branch' ps m cont (n, ek)
+    | n < 0 = Left "too deep"
+    | m <= 1 = foldr (\l f -> lim' cls (l:lits) f) cont ps (n, ek)
+    | otherwise = expand cont ek ps1 n1 ps2 n2 (-1) <|> expand cont ek ps2 n1 ps1 n2 n1
+    where
+    n1 = n `div` 2
+    n2 = n - n1
+    (ps1, ps2) = splitAt (m `div` 2) ps
+  expand cont ek goals1 n1 goals2 n2 n3 =
+    branch goals1 (\(r1, ek1) ->
+    branch goals2 (\(r2, ek2) ->
+    if n2 + r1 <= n3 + r2 then Left "pair"
+    else cont (r2, ek2))
+    (n2+r1, ek1))
+    (n1, ek)
+
+limited fos = map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+  where
+  messy fo = deepen (\n -> lim' (toCNF fo) [] Right (n, (mempty, 0))) 0
+  toCNF = map S.toList . S.toList . simpCNF . deQuantify
+  listConj = foldr1 (:/\)
+\end{code}
+++++++++++
+</div>
+++++++++++
 
 == Problems ==
 
-Harrison tests out his programs on problems listed in Pelletier,
-'Seventy-Five Problems for Testing Automatic Theorem Provers',
-and also problems due to Los, and Davis and Putnam.
+We define test problems described by Harrison, many of which are from
+Pelletier, 'Seventy-Five Problems for Testing Automatic Theorem Provers'.
 
+++++++++++
+<p><a onclick='hideshow("problems");'>&#9654; Toggle problems</a></p>
+<div id='problems' style='display:none'>
+++++++++++
 \begin{code}
 p18 = mustFO "exists x. forall y. P(x) ==> P(y)"
 p19 = mustFO "exists x. forall y z. (P(y) ==> Q(z)) ==> (P(x) ==> Q(x))"
 p20 = mustFO "(forall x y. exists z. forall w. P(x) & Q(y) ==> R(z) & U(w)) ==> (exists x y. P(x) & Q(y)) ==> (exists z. R(z))"
 p21 = mustFO "(exists x. P ==> F(x)) & (exists x. F(x) ==> P) ==> (exists x. P <=> F(x))"
 p22 = mustFO "(forall x. P <=> F(x)) ==> (P <=> forall x. F(x))"
-p24 = mustFO "~(exists x. U(x) & Q(x)) & (forall x. P(x) ==> Q(x) + R(x)) & ~(exists x. P(x) ==> (exists x. Q(x))) & (forall x. Q(x) & R(x) ==> U(x)) ==> (exists x. P(x) & R(x))"
+p24 = mustFO "~(exists x. U(x) & Q(x)) & (forall x. P(x) ==> Q(x) | R(x)) & ~(exists x. P(x) ==> (exists x. Q(x))) & (forall x. Q(x) & R(x) ==> U(x)) ==> (exists x. P(x) & R(x))"
 p26 = mustFO "((exists x. P(x)) <=> exists x. Q(x)) & (forall x y. P(x) & Q(y) ==> (R(x) <=> S(y))) ==> ((forall x. P(x) ==> R(x)) <=> forall x. Q(x) ==> S(x))"
 p34 = mustFO "((exists x. forall y. P(x) <=> P(y)) <=> ((exists x. Q(x)) <=> (forall y. Q(y)))) <=> ((exists x. forall y. Q(x) <=> Q(y)) <=> ((exists x. P(x)) <=> (forall y. P(y))))"
 p35 = mustFO "exists x y . (P(x, y) ==> forall x y. P(x, y))"
-p38 = mustFO "(forall x. P(a) & (P(x) ==> (exists y. P(y) & R(x,y))) ==> (exists z w. P(z) & R(x,w) & R(w,z))) <=> (forall x. (~P(a) + P(x) + (exists z w. P(z) & R(x,w) & R(w,z))) & (~P(a) + ~(exists y. P(y) & R(x,y)) + (exists z w. P(z) & R(x,w) & R(w,z))))"
+p38 = mustFO "(forall x. P(a) & (P(x) ==> (exists y. P(y) & R(x,y))) ==> (exists z w. P(z) & R(x,w) & R(w,z))) <=> (forall x. (~P(a) | P(x) | (exists z w. P(z) & R(x,w) & R(w,z))) & (~P(a) | ~(exists y. P(y) & R(x,y)) | (exists z w. P(z) & R(x,w) & R(w,z))))"
 p39 = mustFO "~exists x. forall y. F(y, x) <=> ~F(y, y)"
 p42 = mustFO "~exists y. forall x. (F(x,y) <=> ~exists z.F(x,z) & F(z,x))"
 p45 = mustFO "(forall x. P(x) & (forall y. G(y) & H(x,y) ==> J(x,y)) ==> (forall y. G(y) & H(x,y) ==> R(y))) & ~(exists y. L(y) & R(y)) & (exists x. P(x) & (forall y. H(x,y) ==> L(y)) & (forall y. G(y) & H(x,y) ==> J(x,y))) ==> (exists x. P(x) & ~(exists y. G(y) & H(x,y)))"
+steamroller = mustFO "((forall x. P1(x) ==> P0(x)) & (exists x. P1(x))) & ((forall x. P2(x) ==> P0(x)) & (exists x. P2(x))) & ((forall x. P3(x) ==> P0(x)) & (exists x. P3(x))) & ((forall x. P4(x) ==> P0(x)) & (exists x. P4(x))) & ((forall x. P5(x) ==> P0(x)) & (exists x. P5(x))) & ((exists x. Q1(x)) & (forall x. Q1(x) ==> Q0(x))) & (forall x. P0(x) ==> (forall y. Q0(y) ==> R(x,y)) | ((forall y. P0(y) & S0(y,x) & (exists z. Q0(z) & R(y,z)) ==> R(x,y)))) & (forall x y. P3(y) & (P5(x) | P4(x)) ==> S0(x,y)) & (forall x y. P3(x) & P2(y) ==> S0(x,y)) & (forall x y. P2(x) & P1(y) ==> S0(x,y)) & (forall x y. P1(x) & (P2(y) | Q1(y)) ==> ~(R(x,y))) & (forall x y. P3(x) & P4(y) ==> R(x,y)) & (forall x y. P3(x) & P5(y) ==> ~(R(x,y))) & (forall x. (P4(x) | P5(x)) ==> exists y. Q0(y) & R(x,y)) ==> exists x y. P0(x) & P0(y) & exists z. Q1(z) & R(y,z) & R(x,y)"
 
-los = mustFO "(forall x y z. P(x,y) & P(y,z) ==> P(x,z)) & (forall x y z. Q(x,y) & Q(y,z) ==> Q(x,z)) & (forall x y. Q(x,y) ==> Q(y,x)) & (forall x y. P(x,y) + Q(x,y)) ==> (forall x y. P(x,y)) + (forall x y. Q(x,y))"
-dpex = mustFO "exists x. exists y. forall z. (F(x,y) ==> (F(y,z) & F(z,z))) & ((F(x,y) & G(x,y)) ==> (G(x,z) & G(z,z)))"
+los = mustFO "(forall x y z. P(x,y) & P(y,z) ==> P(x,z)) & (forall x y z. Q(x,y) & Q(y,z) ==> Q(x,z)) & (forall x y. Q(x,y) ==> Q(y,x)) & (forall x y. P(x,y) | Q(x,y)) ==> (forall x y. P(x,y)) | (forall x y. Q(x,y))"
+dpEx = mustFO "exists x. exists y. forall z. (F(x,y) ==> (F(y,z) & F(z,z))) & ((F(x,y) & G(x,y)) ==> (G(x,z) & G(z,z)))"
+
+gilmore1 = mustFO "exists x. forall y z. ((F(y) ==> G(y)) <=> F(x)) & ((F(y) ==> H(y)) <=> G(x)) & (((F(y) ==> G(y)) ==> H(y)) <=> H(x)) ==> F(z) & G(z) & H(z)"
 \end{code}
 
-Our implementation above seems to be better at solving some of the problems.
+++++++++++
+</div>
+++++++++++
+
+Our functions perform far better than those in the book.
 For example, `gilmore p20` finishes almost immediately, and `gilmore p45` is
-reasonably fast.
+reasonably fast, as is `davisPutnam los`.
 
-I'm chalking up the discrepancies to:
+The difference was so great that I downloaded
+https://www.cl.cam.ac.uk/~jrh13/atp/index.html[Harrison's source code] to do a
+sanity check. To my relief, when I reversed the output of `groundtuples`, I
+found `p45` finished almost instantly, while `p20` only took a little while to
+prove. Additionally, leaving the ground tuples unreversed on our version above
+makes `gilmore p20` impractical.
 
-  * Newer hardware: my laptop is younger than the book.
-  * Different ordering of ground terms: our program may be fortuitously picking
-  suitable members of the Herbrand universe early on.
-  * Better data structures: instead of using lists to represent sets, we use
-  `Data.Set`.
-  * Lazy evaluation: this can help or hinder efficiency, and maybe it's
-  fortuitously the former.
+So it seems reversing the lexicographic order of the enumerated ground tuples
+gives us a smoother journey through the Herbrand universe for certain examples.
+
+Our code still seems faster, though this may be because we use `Data.Set` instead
+of lists to represent sets for CNF and DNF. It could also be that Haskell's lazy
+evaluation is fortuitously favouring us.
+
+Also unreasonably effective is `davisPutnam2`. The vaunted `p38` and even the
+dreaded `steamroller` ("216 ground instances tried; 497 items in list") lie
+within its reach. Thankfully, it struggles with `p34` so our experiments with
+unification are worth doing.
+
+Perhaps definitional CNF not only produces fewer clauses, but also fewer
+literals per clause, so DPLL's rules fire more frequently.
+
+Definitional CNF seems to hurt connection tableaux. Maybe the size of our test
+cases are such that `satCNF` winds up producing larger output than `simpCNF`.
+Or maybe our implementation is too inefficient: our unification algorithm is
+naive and slow, as is our search for unifiable literals.
+
+Our connection tableaux functions `prologgy` and `meson` are suspiciously
+amazing. Running `prologgy steamroller` succeeds at depth 21, and `meson
+gilmore1` at depth 13. It's hard to believe I stumbled upon a remarkable
+improvement by misunderstanding the depth limit, so it's likely a bug.
