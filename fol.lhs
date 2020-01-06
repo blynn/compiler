@@ -39,15 +39,15 @@ function hideshow(s) {
 {-# LANGUAGE BlockArguments, LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+import Control.Monad.State
+import Control.Monad.Writer
 import Data.Foldable (asum)
 import qualified Data.Map.Strict as M
-import Control.Monad.State
 import Data.List (delete, union, partition, find, maximumBy, intercalate, unfoldr)
 import Data.Ord (comparing)
 import qualified Data.Set as S
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
-import Debug.Trace
 \end{code}
 
 ++++++++++
@@ -593,22 +593,28 @@ few test cases.
 skno :: FO -> FO
 skno = skolemize . nono . generalize
 
-herbrand conjSub refute uni fo = herbLoop (uni Top) [] herbiverse where
+type Loggy = Writer ([String] -> [String])
+
+effect wr = do
+  let (a, w) = runWriter wr
+  mapM_ putStrLn $ ($ []) w
+  pure a
+
+herbrand conjSub refute uni fo = effect $ herbLoop (uni Top) [] herbiverse where
   qff = deQuantify . skno $ fo
   fvs = fv qff
   herbiverse = herbTuples (length fvs) qff
   t = uni qff
+  herbLoop :: S.Set (S.Set FO) -> [[Term]] -> [[Term]] -> Loggy [[Term]]
   herbLoop h tried = \case
     [] -> error "invalid formula"
-    (tup:tups)
-      | trace (concat
+    (tup:tups) -> do
+      tell (concat
         [ show $ length tried, " ground instances tried; "
         , show $ length h," items in list"
-        ])
-        refute h' -> tup:tried
-      | otherwise  -> herbLoop h' (tup:tried) tups
-      where
-      h' = conjSub t (subst (`M.lookup` (M.fromList $ zip fvs tup))) h
+        ]:)
+      let h' = conjSub t (subst (`M.lookup` (M.fromList $ zip fvs tup))) h
+      if refute h' then pure $ tup:tried else herbLoop h' (tup:tried) tups
 
 gilmore = herbrand conjDNF S.null simpDNF where
   conjDNF djs0 sub djs = S.filter nontrivial (distrib (S.map (S.map sub) djs0) djs)
@@ -792,10 +798,10 @@ is unsatisifiable.
 
 When we encounter a universally quantified subformula we create a new variable
 then move the subformula to the back of the list in case we need it again,
-which creates tension. On the one hand, we want variables so we can unify
-them with the complement of other literals to refute branches. On the other
-hand, if we're having trouble finding a refutation, it may be best to move on
-and hope for a literal that is easier to contradict.
+which creates tension. On the one hand, we want variables so we can unify them
+with the complement of other literals to refute branches. On the other hand, if
+refutation is elusive, it may be best to move on and hope for a literal that is
+easier to contradict.
 
 Iterative deepening comes to our rescue. We bound the number of variables a
 path can create to avoid getting lost in the weeds. If the search fails,
@@ -808,8 +814,10 @@ wrong decision so we have to undo it and try again; we call this
 'backtracking'.)
 
 \begin{code}
-deepen f n = trace ("Searching with depth limit " <> show n)
-  either (const $ deepen f (n + 1)) id $ f n
+deepen :: (Show t, Num t) => (t -> Either b c) -> t -> Loggy c
+deepen f n = do
+  tell (("Searching with depth limit " <> show n):)
+  either (const $ deepen f (n + 1)) pure $ f n
 
 tabRefute fos = deepen (\n -> go n fos [] Right (mempty, 0)) 0 where
   go n fos lits cont (env,k)
@@ -827,8 +835,8 @@ tabRefute fos = deepen (\n -> go n fos [] Right (mempty, 0)) 0 where
             unifyLiterals env (fo,nono l)) <$> lits)
           <|> go n rest (fo:lits) cont (env,k)
 
-tableau fo = case skno fo of
-  Bot -> (mempty, 0)
+tableau fo = effect $ case skno fo of
+  Bot -> pure (mempty, 0)
   sfo -> tabRefute [sfo]
 \end{code}
 
@@ -872,7 +880,7 @@ conn n cls lits cont (env, k)
   branch ps = foldr (\l f -> conn (n - length ps) cls (l:lits) f) cont ps
   contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
 
-prologgy fo = deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
+prologgy fo = effect $ deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
   cls = S.toList <$> S.toList (simpCNF $ deQuantify $ skno fo)
 \end{code}
 
@@ -890,7 +898,9 @@ tsubst' f t = case t of
   Var x -> maybe t (tsubst' f) $ f x
   Fun s as -> Fun s $ tsubst' f <$> as
 
-sortDemo = tsubst' (`M.lookup` fst (prologgyUnsat sortEx)) $ Var "x8"
+sortDemo = do
+  (m, _) <- effect $ prologgyUnsat sortEx
+  pure $ tsubst' (`M.lookup` m) $ Var "x8"
 \end{code}
 
 We refine `prologgy` by aborting whenever the current subgoal is equal to an
@@ -924,7 +934,7 @@ cut' n cls lits cont (env, k)
   branch ps = foldr (\l f -> cut' (n - length ps) cls (l:lits) f) cont ps
   contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
 
-meson fos = map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+meson fos = mapM effect $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
   where
   messy fo = deepen (\n -> cut' n (toCNF fo) [] Right (mempty, 0)) 0
   toCNF = map S.toList . S.toList . simpCNF . deQuantify
@@ -973,7 +983,7 @@ faith' cls lits cont (budget, (env, k))
     (n2+r1, ek1))
     (n1, ek)
 
-faithful fos = map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+faithful fos = mapM effect $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
   where
   messy fo = deepen (\n -> faith' (toCNF fo) [] Right (n, (mempty, 0))) 0
   toCNF = map S.toList . S.toList . simpCNF . deQuantify
@@ -1044,7 +1054,7 @@ Also unreasonably effective is `davisPutnam2`. Definitional CNF suits DPLL
 by producing fewer clauses and fewer literals per clause, so rules fire more
 frequently. The vaunted `p38` and even the dreaded `steamroller` ("216 ground
 instances tried; 497 items in list") lie within its reach. Thankfully, it
-struggles with `p34` so our dalliances with unification are still fruitful.
+struggles with `p34` so unification is still worth the trouble.
 
 Definitional CNF hurts our connection tableaux solvers. It introduces new
 literals, each of which is only used a few times. Our code fails to take
