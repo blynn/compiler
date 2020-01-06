@@ -41,6 +41,7 @@ function hideshow(s) {
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.Char (isAlphaNum)
 import Data.Foldable (asum)
 import qualified Data.Map.Strict as M
 import Data.List (delete, union, partition, find, maximumBy, intercalate, unfoldr)
@@ -118,7 +119,8 @@ package] contains similar definitions.
 == Parsing and pretty-printing ==
 
 Variables start with lowercase letters, while constants, functions, and
-predicates start with uppercase letters.
+predicates start with uppercase letters. We parse `(<=)` as infix binary
+predicate.
 
 ++++++++++
 <p><a onclick='hideshow("parse");'>&#9654; Toggle parser and pretty-printer</a></p>
@@ -142,21 +144,28 @@ firstorderformula = iff where
     <|> qua
     <|> atom
   qua = do
-    f <- Qua <$> (keyword "forall" *> pure Forall
-             <|>  keyword "exists" *> pure Exists)
+    f <- Qua <$> (want "forall" *> pure Forall
+             <|>  want "exists" *> pure Exists)
     vs <- some var
     fo <- want "." *> firstorderformula
     pure $ foldr f fo vs
-  atom = Atom <$> con <*> option [] (between (want "(") (want ")") $ sepBy term $ want ",")
-  term = Var <$> var
-    <|> Fun <$> con <*>
-        option [] (between (want "(") (want ")") $ sepBy term $ want ",")
+  atom = (bin =<< Var <$> var) <|> do
+    (f, xs) <- call
+    option (Atom f xs) $ bin (Fun f xs)
+  call = (,) <$> con <*> option [] (between (want "(") (want ")") $ sepBy term $ want ",")
+  bin x = do
+    want "<="
+    y <- term
+    pure $ Atom "<=" [x, y]
+  term = Var <$> var <|> uncurry Fun <$> call
   var = (:) <$> lowerChar <*> (many alphaNumChar <* space)
   con = (:) <$> upperChar <*> (many alphaNumChar <* space)
   want :: String -> Parsec () String ()
-  want s = string s *> space
-  keyword :: String -> Parsec () String ()
-  keyword s = try $ string s *> notFollowedBy alphaNumChar *> space
+  want s = try $ do
+    s' <- (some (oneOf "<=>\\/&|~!")
+      <|> some alphaNumChar
+      <|> ((:[]) <$> oneOf "(),.")) <* space
+    if s == s' then pure () else fail $ "want " <> s
 
 mustFO :: String -> FO
 mustFO = either (error . show) id . parse firstorderformula ""
@@ -173,7 +182,9 @@ instance Show Term where
 
 instance Show FO where
   showsPrec d = \case
-    Atom s ts -> (s <>) . showParen (not $ null ts) ((<>) $ intercalate ", " $ show <$> ts)
+    Atom s ts
+      | not (isAlphaNum $ head s), [p, q] <- ts -> showsPrec d p . ("<=" <>) . showsPrec d q
+      | otherwise -> (s <>) . showParen (not $ null ts) ((<>) $ intercalate ", " $ show <$> ts)
     Top -> ('\8868':)
     Bot -> ('\8869':)
     Not p -> ('\172':) . showsPrec 6 p
@@ -888,7 +899,7 @@ We translate a well-known Prolog sorting program and query to CNF to illustrate
 the correspondence.
 
 \begin{code}
-sortEx = mustFO "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !LE(x2, y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & LE(Z, x6) & (LE(S(x7), S(y7)) | !LE(x7,y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
+sortEx = mustFO "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & Z <= x6 & (S(x7) <= S(y7) | !(x7 <= y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
 
 prologgyUnsat fo = deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
   cls = S.toList <$> S.toList (simpCNF fo)
@@ -1023,7 +1034,7 @@ steamroller = mustFO "((forall x. P1(x) ==> P0(x)) & (exists x. P1(x))) & ((fora
 
 los = mustFO "(forall x y z. P(x,y) & P(y,z) ==> P(x,z)) & (forall x y z. Q(x,y) & Q(y,z) ==> Q(x,z)) & (forall x y. Q(x,y) ==> Q(y,x)) & (forall x y. P(x,y) | Q(x,y)) ==> (forall x y. P(x,y)) | (forall x y. Q(x,y))"
 dpEx = mustFO "exists x. exists y. forall z. (F(x,y) ==> (F(y,z) & F(z,z))) & ((F(x,y) & G(x,y)) ==> (G(x,z) & G(z,z)))"
-
+ewd1062 = mustFO "(forall x. x <= x) /\\ (forall x y z. x <= y /\\ y <= z ==> x <= z) /\\ (forall x y. F(x) <= y <=> x <= G(y)) ==> (forall x y. x <= y ==> F(x) <= F(y)) /\\ (forall x y. x <= y ==> G(x) <= G(y))"
 gilmore1 = mustFO "exists x. forall y z. ((F(y) ==> G(y)) <=> F(x)) & ((F(y) ==> H(y)) <=> G(x)) & (((F(y) ==> G(y)) ==> H(y)) <=> H(x)) ==> F(z) & G(z) & H(z)"
 \end{code}
 
