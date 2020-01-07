@@ -2,6 +2,16 @@
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script type='module' src='fol.mjs'></script>
+<script>
+function hideshow(s) {
+  var x = document.getElementById(s);
+  if (x.style.display === "none") {
+    x.style.display = "block";
+  } else {
+    x.style.display = "none";
+  }
+}
+</script>
 Formula:
 <div>
 <textarea id='inp' cols='80' rows='4'>exists x. forall y. P(x) ==> P(y)</textarea></div>
@@ -9,9 +19,22 @@ Formula:
 <div><textarea id='out' cols='80' rows='8' readonly></textarea></div>
 <p>Log:</p>
 <div><textarea id='log' cols='80' rows='4' readonly></textarea></div>
+<p>
+Negate, then:
+<button id='skolemize'>skolemize</button>
+<button id='qff'>QFF</button>
+<button id='dnf'>DNF</button>
+<button id='cnf'>CNF</button>
+<button id='defcnf'>Definitional CNF</button>
+</p>
+<p>
+Prove:
 <button id='gilmore'>Gilmore</button>
 <button id='dpll'>DPLL</button>
+<button id='tableau'>Tableau</button>
+<button id='faithful'>MESON by the book</button>
 <button id='meson'>MESON</button>
+</p>
 <p>
 <span><button onclick='hideshow("presets");'>Presets</button>
 <style>#presets {
@@ -25,8 +48,13 @@ background-color:grey;
 </style>
 <div id='presets' style='display:none;'></div>
 </span>
-<button id='sort'>sort demo</button>
 </p>
+<p><a onclick='hideshow("sortdemo");'>&#9654; Sort demo</a></p>
+<div id='sortdemo' style='display:none'>
+<textarea id ='sortcode' rows='5' cols='80'></textarea>
+<br>
+<button id='sort'>Run!</button>
+</div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 Boilerplate abounds in programs that manipulate syntax trees. Consider a
@@ -50,22 +78,12 @@ taking a whirlwind tour through chapters 2 and 3 of John Harrison, 'Handbook of
 Practical Logic and Automated Reasoning'.
 
 ++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
 <p><a onclick='hideshow("imports");'>&#9654; Toggle extensions and imports</a></p>
 <div id='imports' style='display:none'>
 ++++++++++
 
 \begin{code}
-{-# LANGUAGE BlockArguments, LambdaCase #-}
+{-# LANGUAGE BlockArguments, LambdaCase, TupleSections #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE CPP #-}
@@ -104,8 +122,9 @@ These are like propositional logic formulas, except:
 
   * An atomic proposition is a 'predicate': a string constant accompanied by a
   list of terms.
-  * Subformulas may be 'quantified' by a 'universal' or 'existential'
-  quantifier. A quantifier 'binds' a variable.
+  * Subformulas may be 'quantified' by a 'universal' (`Forall`) or 'existential'
+  (`Exists`) quantifier. A quantifier 'binds' a variable in the same manner
+  as a lambda.
 
 \begin{code}
 data Quantifier = Forall | Exists deriving (Eq, Ord)
@@ -135,7 +154,7 @@ pattern p :<=> q = FO (FIff p q)
 pattern Qua q x p = FO (FQua q x p)
 \end{code}
 
-Next, functions to make recursion easier.
+Next, functions to aid recursion.
 I chose the name `unmap` because its type seems to be the inverse of `fmap`.
 
 \begin{code}
@@ -147,13 +166,14 @@ unmap :: (Formula FO -> Formula FO) -> FO -> FO
 unmap h (FO t) = FO (h t)
 \end{code}
 
-https://hackage.haskell.org/package/data-fix/docs/Data-Fix.html[The `Data.Fix`
-package] contains similar definitions.
+See also
+https://hackage.haskell.org/package/data-fix/docs/Data-Fix.html[the `Data.Fix`
+package].
 
 == Parsing and pretty-printing ==
 
 Variables start with lowercase letters, while constants, functions, and
-predicates start with uppercase letters. We parse `(<=)` as infix binary
+predicates start with uppercase letters. We treat `(<=)` as an infix binary
 predicate.
 
 ++++++++++
@@ -186,7 +206,8 @@ firstorderformula = space *> iff where
   atom = (bin =<< Var <$> var) <|> do
     (f, xs) <- call
     option (Atom f xs) $ bin (Fun f xs)
-  call = (,) <$> con <*> option [] (between (want "(") (want ")") $ sepBy term $ want ",")
+  call = (,) <$> con <*> option [] (between (want "(") (want ")")
+    $ sepBy term $ want ",")
   bin x = do
     want "<="
     y <- term
@@ -396,7 +417,7 @@ skolemize t = evalState (skolem' $ nnf $ simplify t) (fst <$> functions t) where
 == Prenex normal form ==
 
 We can pull all the quantifiers of an NNF formula to the front by generating
-new variable names. The result is a formula in 'prenex normal form' (PNF).
+new variable names. This is known as 'prenex normal form' (PNF).
 
 \begin{code}
 variant :: String -> [String] -> String
@@ -424,9 +445,9 @@ pnf = prenex . nnf . simplify
 
 == Quantifier-free formulas ==
 
-A 'quantifier-free' formula is a formula where every variable is free. Each
-variable is implicitly universally quantified, that is, for each variable `x`,
-we behave as if `forall x.` has been prepended to the forumla.
+A 'quantifier-free' formula is one where every variable is free. Each variable
+is implicitly universally quantified, that is, for each variable `x`, we behave
+as if `forall x.` has been prepended to the forumla.
 
 We can remove all quantifiers from a skolemized NNF formula by pulling all the
 universal quantifiers to the front and then dropping them.
@@ -482,7 +503,7 @@ no constants appear, then we invent one to avoid an empty universe.
 For example, the Herbrand universe of:
 
 \[
-(P(y) \implies Q(F(z))) \implies (P(G(x)) \implies Q(x))
+(P(y) \implies Q(F(z))) \wedge (P(G(x)) \vee Q(x))
 \]
 
 is:
@@ -491,8 +512,9 @@ is:
 C, F(C), G(C), F(F(C)), F(G(C)), G(F(C)), G(G(C)), ...
 ------------------------------------------------------------------------
 
-We've added the constant `C` because there were no others. Since `P` and `Q`
-are predicates and not functions, they are not part of the Herbrand universe.
+We add the constant `C` because there were no constants to begin with. Since
+`P` and `Q` are predicates and not functions, they are not part of the Herbrand
+universe.
 
 \begin{code}
 herbTuples :: Int -> FO -> [[Term]]
@@ -513,7 +535,7 @@ few test cases.
 It can be shown a quantifier-free formula is satisfiable if and only if it is
 satisfiable under a 'Herbrand interpretation'.
 Loosely speaking, we treat terms like the abstract syntax trees that represent
-them; if a theorem holds under some intepretation, then it also holds for
+them; if a theorem holds under some interpretation, then it also holds for
 syntax trees.
 
 Why? Intuitively, given a formula and an interpretation where it holds, we can
@@ -559,7 +581,7 @@ Then:
 
   1. Negate $f$ because validity and satisfiability are dual:
   the formula $f$ is valid if and only if $\neg f$ is unsatisfiable.
-  2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$,
+  2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$.
   Let $m$ be the number of variables in $t$. Initialize $h$ to $\top$.
   3. Choose $m$ elements from the Herbrand universe of $t$.
   4. Replace $h$ with the conjunction of $h$ and the result of substituting
@@ -569,7 +591,7 @@ Then:
 
 We have moved from first-order logic to propositional logic; the formula $h$
 only contains ground terms which act as propositional variables when
-determining satisfiability. In other words, we're left with the complement of
+determining satisfiability. In other words, we have
 https://en.wikipedia.org/wiki/Boolean_satisfiability_problem[the classic SAT
 problem].
 
@@ -841,34 +863,25 @@ unifyLiterals = literally (Left "Can't unify literals") . unify
 
 == Tableaux ==
 
-After Skolemizing, our formula consists of literals, conjunctions,
-disjunctions, and universal quantifiers. We can recurse on the structure of the
-formula, gathering literals that must all play nice together, and branching if
-necessary.
+After Skolemizing, we recurse on the structure of the formula, gathering
+literals that must all play nice together, and branching when necessary.
+If one literal in our collection unifies with the negation of another, then the
+current branch is refuted. The theorem is proved once all branches are refuted.
 
-These literals may contain variables. Each time we add a new literal to our
-collection, we see if it unifies with the complement of any other literal,
-which refutes the current branch. The theorem is proved once all branches are
-refuted. We can view this as a lazy version of a CNF-based algorithm: there's
-no need to complete the conversion if we can already show what we have so far
-is unsatisifiable.
+When we encounter a universal quantifier, we instantiate a new variable then
+move the subformula to the back of the list in case we need it again. This
+creates tension. On the one hand, we want new variables so we can find
+unifications to refute branches. On the other hand, it may be better to move on
+and look for a literal that is easier to contradict.
 
-When we encounter a universally quantified subformula we create a new variable
-then move the subformula to the back of the list in case we need it again,
-which creates tension. On the one hand, we want variables so we can unify them
-with the complement of other literals to refute branches. On the other hand, if
-refutation is elusive, it may be best to move on and hope for a literal that is
-easier to contradict.
-
-Iterative deepening comes to our rescue. We bound the number of variables a
-path can create to avoid getting lost in the weeds. If the search fails,
-we bump up the bound and try again.
+Iterative deepening comes to our rescue. We bound the number of variables we
+may instantiate to avoid getting lost in the weeds. If the search fails, we
+bump up the bound and try again.
 
 (We mean "branching" in a yak-shaving sense, that is, while trying to refute A,
-we find we must also refute B so we add this task to our to-do list. At a
-higher level, there is another sense of branching where we realize we made the
-wrong decision so we have to undo it and try again; we call this
-'backtracking'.)
+we find we must also refute B, so we add B to our to-do list. At a higher
+level, there is another sense of branching where we realize we made the wrong
+decision so we have to undo it and try again; we call this 'backtracking'.)
 
 \begin{code}
 deepen :: (Show t, Num t) => (t -> Either b c) -> t -> Loggy c
@@ -888,9 +901,9 @@ tabRefute fos = deepen (\n -> go n fos [] Right (mempty, 0)) 0 where
           y = Var $ '_':show k
           p' = subst (`lookup` [(x, y)]) p
           in go (n - 1) (p':rest <> [h]) lits cont (env,k+1)
-        fo -> asum ((\l -> cont =<< flip (,) k <$>
-            unifyLiterals env (fo,nono l)) <$> lits)
-          <|> go n rest (fo:lits) cont (env,k)
+        lit -> asum ((\l -> cont =<< (, k) <$>
+            unifyLiterals env (lit, nono l)) <$> lits)
+          <|> go n rest (lit:lits) cont (env,k)
 
 tableau fo = runThen output $ case skno fo of
   Bot -> pure (mempty, 0)
@@ -898,7 +911,7 @@ tableau fo = runThen output $ case skno fo of
 \end{code}
 
 Some problems can be split up into the disjunction of independent subproblems,
-which can be solved individually.
+which we can solve individually:
 
 \begin{code}
 splitTableau = map (tabRefute . S.toList) . S.toList . simpDNF . skno
@@ -906,8 +919,18 @@ splitTableau = map (tabRefute . S.toList) . S.toList . simpDNF . skno
 
 == Connection Tableaux ==
 
-We can tweak Prolog's search strategy to work on any CNF formula. We mostly
-imitate Prolog-esque unification and backtracking, but we also:
+We can view tableaux as a lazy CNF-based algorithm. We convert to CNF as we go,
+stopping immediately after showing unsatisifiability. In particular, our search
+is driven by the order in which clauses appear in the input formula.
+
+Perhaps it is wiser to select clauses less arbitrarily. How about requiring the
+next clause we examine to be somehow connected to the current clause? For
+example, maybe we should insist a certain literal in the current clause unifies
+with the negation of a literal in the next.
+
+With this in mind, we arrive at Prolog-esque unification and backtracking, but
+with a couple of tweaks so that it works on any CNF formula rather than merely
+on a bunch of Horn clauses:
 
   1. Employ iterative deepening instead of a depth-first search.
   2. Look for conflicting subgoals.
@@ -930,19 +953,19 @@ conn n cls lits cont (env, k)
   | n < 0 = Left "too deep"
   | otherwise = case lits of
     [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
-    lit:litt -> asum (contra lit <$> litt)
-      <|> asum [branch ps =<< flip (,) k' <$> unifyLiterals env (lit, nono p)
+    lit:litt -> let nlit = nono lit in asum (contra nlit <$> litt)
+      <|> asum [branch ps =<< (, k') <$> unifyLiterals env (nlit, p)
       | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
   where
   branch ps = foldr (\l f -> conn (n - length ps) cls (l:lits) f) cont ps
-  contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
+  contra p q = cont =<< (, k) <$> unifyLiterals env (p, q)
 
 prologgy fo = runThen output $ deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
   cls = S.toList <$> S.toList (simpCNF $ deQuantify $ skno fo)
 \end{code}
 
-We translate a well-known Prolog sorting program and query to CNF to illustrate
-the correspondence.
+We translate a Prolog sorting program and query to CNF to illustrate the
+correspondence.
 
 \begin{code}
 sortExample = "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & Z <= x6 & (S(x7) <= S(y7) | !(x7 <= y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
@@ -977,22 +1000,22 @@ equalUnder env = \case
       | otherwise -> either (const False) id $ istriv env x t
     (t, Var x) -> equalUnder env $ (Var x, t):rest
 
-cut' n cls lits cont (env, k)
+noRep n cls lits cont (env, k)
   | n < 0 = Left "too deep"
   | otherwise = case lits of
     [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
     lit:litt
       | any (curry (literally False $ equalUnder env) lit) litt -> Left "repetition"
-      | otherwise -> asum (contra lit <$> litt)
-        <|> asum [branch ps =<< flip (,) k' <$> unifyLiterals env (lit, nono p)
+      | otherwise -> let nlit = nono lit in asum (contra nlit <$> litt)
+        <|> asum [branch ps =<< (, k') <$> unifyLiterals env (nlit, p)
         | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
   where
-  branch ps = foldr (\l f -> cut' (n - length ps) cls (l:lits) f) cont ps
-  contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
+  branch ps = foldr (\l f -> noRep (n - length ps) cls (l:lits) f) cont ps
+  contra p q = cont =<< (, k) <$> unifyLiterals env (p, q)
 
 meson fos = mapM_ (runThen output) $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
   where
-  messy fo = deepen (\n -> cut' n (toCNF fo) [] Right (mempty, 0)) 0
+  messy fo = deepen (\n -> noRep n (toCNF fo) [] Right (mempty, 0)) 0
   toCNF = map S.toList . S.toList . simpCNF . deQuantify
   listConj = foldr1 (:/\)
 \end{code}
@@ -1003,8 +1026,8 @@ receive the same quota for new variables. I had thought the same was true for
 the branches of `meson`, and that is what appears above.
 
 I later learned the quota is meant to be shared among all subgoals. I wrote a
-version more faithful to the original `meson`, but I was surprised to find it
-unbearably slow.
+version more faithful to the original `meson` (our demo calls it "MESON by the
+book"). It turns out to be slow.
 
 ++++++++++
 <p><a onclick='hideshow("limited");'>&#9654; Toggle faithful rendition</a></p>
@@ -1017,23 +1040,24 @@ faith' cls lits cont (budget, (env, k))
     [] -> asum [branch ls cont (budget, (env, k)) | ls <- cls, all (not . isPositive) ls]
     lit:litt
       | any (curry (literally False $ equalUnder env) lit) litt -> Left "repetition"
-      | otherwise -> asum (contra lit <$> litt)
-        <|> asum [branch ps cont =<< (,) budget . flip (,) k' <$> unifyLiterals env (lit, nono p)
+      | otherwise -> let nlit = nono lit in asum (contra nlit <$> litt)
+        <|> asum [branch ps cont =<< (,) budget . (, k') <$> unifyLiterals env (nlit, p)
         | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
   where
-  contra p q = cont =<< (,) budget . flip (,) k <$> unifyLiterals env (nono p, q)
-  branch ps cont (n, ek) = branch' ps m cont (n - m, ek) where m = length ps
-  branch' ps m cont (n, ek)
+  contra p q = cont =<< (,) budget . (, k) <$> unifyLiterals env (p, q)
+  branch ps cont (n, ek) = branch' ps cont (n - length ps, ek)
+  branch' ps cont (n, ek)
     | n < 0 = Left "too deep"
     | m <= 1 = foldr (\l f -> faith' cls (l:lits) f) cont ps (n, ek)
     | otherwise = expand cont ek ps1 n1 ps2 n2 (-1) <|> expand cont ek ps2 n1 ps1 n2 n1
     where
+    m = length ps
     n1 = n `div` 2
     n2 = n - n1
     (ps1, ps2) = splitAt (m `div` 2) ps
   expand cont ek goals1 n1 goals2 n2 n3 =
-    branch goals1 (\(r1, ek1) ->
-    branch goals2 (\(r2, ek2) ->
+    branch' goals1 (\(r1, ek1) ->
+    branch' goals2 (\(r2, ek2) ->
     if n2 + r1 <= n3 + r2 then Left "pair"
     else cont (r2, ek2))
     (n2+r1, ek1))
@@ -1049,13 +1073,17 @@ faithful fos = mapM_ (runThen output) $ map (messy . listConj) $ S.toList <$> S.
 </div>
 ++++++++++
 
-Eventually I realized that a subtlety in our version of `meson` fortuitously
-boosts its performance. Can you see it? See below for the answer.
+== Results ==
 
-== Problems ==
+Our `gilmore` and `davisPutnam` functions perform better than the book
+suggests they should. In particular, `gilmore p20` finishes quickly.
 
-We define test problems that appear in Harrison's code, many of which are from
-Pelletier, 'Seventy-Five Problems for Testing Automatic Theorem Provers'.
+I downloaded https://www.cl.cam.ac.uk/~jrh13/atp/index.html[Harrison's source
+code] for a sanity check, and found the original `gilmore` implementation
+easily solves `p20`. It seems the book is mistaken; perhaps the code was buggy
+at the time.
+
+The original source also contains several test cases:
 
 ++++++++++
 <p><a onclick='hideshow("problems");'>&#9654; Toggle problems</a></p>
@@ -1069,6 +1097,7 @@ p21 = mustFO "(exists x. P ==> F(x)) & (exists x. F(x) ==> P) ==> (exists x. P <
 p22 = mustFO "(forall x. P <=> F(x)) ==> (P <=> forall x. F(x))"
 p24 = mustFO "~(exists x. U(x) & Q(x)) & (forall x. P(x) ==> Q(x) | R(x)) & ~(exists x. P(x) ==> (exists x. Q(x))) & (forall x. Q(x) & R(x) ==> U(x)) ==> (exists x. P(x) & R(x))"
 p26 = mustFO "((exists x. P(x)) <=> exists x. Q(x)) & (forall x y. P(x) & Q(y) ==> (R(x) <=> S(y))) ==> ((forall x. P(x) ==> R(x)) <=> forall x. Q(x) ==> S(x))"
+p29 = mustFO "(exists x. P(x)) & (exists x. G(x)) ==> ((forall x. P(x) ==> H(x)) & (forall x. G(x) ==> J(x)) <=> (forall x y. P(x) & G(y) ==> H(x) & J(y)))"
 p34 = mustFO "((exists x. forall y. P(x) <=> P(y)) <=> ((exists x. Q(x)) <=> (forall y. Q(y)))) <=> ((exists x. forall y. Q(x) <=> Q(y)) <=> ((exists x. P(x)) <=> (forall y. P(y))))"
 p35 = mustFO "exists x y . (P(x, y) ==> forall x y. P(x, y))"
 p38 = mustFO "(forall x. P(a) & (P(x) ==> (exists y. P(y) & R(x,y))) ==> (exists z w. P(z) & R(x,w) & R(w,z))) <=> (forall x. (~P(a) | P(x) | (exists z w. P(z) & R(x,w) & R(w,z))) & (~P(a) | ~(exists y. P(y) & R(x,y)) | (exists z w. P(z) & R(x,w) & R(w,z))))"
@@ -1080,67 +1109,106 @@ steamroller = mustFO "((forall x. P1(x) ==> P0(x)) & (exists x. P1(x))) & ((fora
 los = mustFO "(forall x y z. P(x,y) & P(y,z) ==> P(x,z)) & (forall x y z. Q(x,y) & Q(y,z) ==> Q(x,z)) & (forall x y. Q(x,y) ==> Q(y,x)) & (forall x y. P(x,y) | Q(x,y)) ==> (forall x y. P(x,y)) | (forall x y. Q(x,y))"
 dpEx = mustFO "exists x. exists y. forall z. (F(x,y) ==> (F(y,z) & F(z,z))) & ((F(x,y) & G(x,y)) ==> (G(x,z) & G(z,z)))"
 ewd1062 = mustFO "(forall x. x <= x) & (forall x y z. x <= y & y <= z ==> x <= z) & (forall x y. F(x) <= y <=> x <= G(y)) ==> (forall x y. x <= y ==> F(x) <= F(y)) & (forall x y. x <= y ==> G(x) <= G(y))"
-gilmore1 = mustFO "exists x. forall y z. ((F(y) ==> G(y)) <=> F(x)) & ((F(y) ==> H(y)) <=> G(x)) & (((F(y) ==> G(y)) ==> H(y)) <=> H(x)) ==> F(z) & G(z) & H(z)"
+gilmore_1 = mustFO "exists x. forall y z. ((F(y) ==> G(y)) <=> F(x)) & ((F(y) ==> H(y)) <=> G(x)) & (((F(y) ==> G(y)) ==> H(y)) <=> H(x)) ==> F(z) & G(z) & H(z)"
+gilmore_9 = mustFO "forall x. exists y. forall z.  ((forall u. exists v. F(y,u,v) & G(y,u) & ~H(y,x)) ==> (forall u. exists v. F(x,u,v) & G(z,u) & ~H(x,z)) ==> (forall u. exists v. F(x,u,v) & G(y,u) & ~H(x,y))) & ((forall u. exists v. F(x,u,v) & G(y,u) & ~H(x,y)) ==> ~(forall u. exists v. F(x,u,v) & G(z,u) & ~H(x,z)) ==> (forall u. exists v. F(y,u,v) & G(y,u) & ~H(y,x)) & (forall u. exists v. F(z,u,v) & G(y,u) & ~H(z,y)))"
 \end{code}
 
 ++++++++++
 </div>
 ++++++++++
 
-Our `gilmore` and `davisPutnam` functions perform far better than the book
-versions. For example, `gilmore p20` finishes almost immediately, and `gilmore
-p45` is reasonably fast, as is `davisPutnam los`.
+Our code sometimes takes a better path through the Herbrand universe. For
+example, our `davisPutnam` goes through 111 ground instances to solve `p29`
+while the book version goes through 180.
 
-The main difference between the implementations is the reversed ground tuples.
-That such an innocuous change could cause such a pronounced improvement
-strained my credulity, so I downloaded
-https://www.cl.cam.ac.uk/~jrh13/atp/index.html[Harrison's source code] for a
-sanity check. To my relief, when I reversed the output of
-`groundtuples` in the original code, I found `p45` finished almost instantly,
-while `p20` only took a little while to prove.
+Curiously, if we leave the output of our `groundtuples` unreversed, then
+`gilmore p20` seems intractable.
 
-So yes, reversing the lexicographic order of the enumerated ground tuples
-indeed gives us a smoother journey through the Herbrand universe, at least for
-the problems we tried.
+Our `davisPutnam2` function is unreasonably effective.
+Definitional CNF suits DPLL by producing fewer clauses and fewer literals per
+clause, so rules fire more frequently.
+The vaunted `p38` and even the dreaded `steamroller` ("216 ground instances
+tried; 497 items in list") lie within its reach. The latter may be too
+exhausting for a browser and should be confirmed with GHC.
+Assuming https://nixos.org/nix/download.html[Nix is installed]:
 
-Additionally, it helps that we use `Data.Set` instead of lists to represent
-sets for CNF and DNF.
+------------------------------------------------------------------------
+$ nix-shell -p "haskell.packages.ghc881.ghcWithPackages (pkgs: [pkgs.megaparsec])"
+$ wget https://crypto.stanford.edu/~blynn/compiler/fol.lhs
+$ ghci fol.lhs
+------------------------------------------------------------------------
 
-Also unreasonably effective is `davisPutnam2`. Definitional CNF suits DPLL
-by producing fewer clauses and fewer literals per clause, so rules fire more
-frequently. The vaunted `p38` and even the dreaded `steamroller` ("216 ground
-instances tried; 497 items in list") lie within its reach. Thankfully, it
-struggles with `p34` so unification is still worth the trouble.
+then type `davisPutnam2 steamroller` at the prompt.
 
 Definitional CNF hurts our connection tableaux solvers. It introduces new
-literals, each of which is only used a few times. Our code fails to take
-advantage of this to quickly look up potentially unifiable literals.
+literals which only appear a few times each. Our code fails to take advantage
+of this to quickly find unifiable literals.
 
 Our connection tableaux functions `prologgy` and `meson` are mysteriously
 miraculous. Running `prologgy steamroller` succeeds at depth 21, and `meson
 gilmore1` at depth 13, though our usage of the depth limit differs from that in
 the book.
 
-They are so much faster than the originals that I was almost certain there was
-a bug, It was then I discovered I had misinterpreted the depth limit, but it is
-unclear how this was the culprit.
+They are so fast that I was certain there was a bug. After extensive tracing,
+I've concluded laziness is the root cause. Although our `meson` appears to be a
+reasonably direct translation of the OCaml version, Haskell's lazy evaluation
+means we memoize expensive computations, and distributing the size bound among
+subgoals erases these gains.
 
-Only after extensive tracing did I discover the truth. Although our code
-appears to be a reasonably direct translation of the OCaml version, Haskell's
-lazy evaluation means it travels a different path during the search.
+The first time the `cont` continuation is reached, certain reductions remain on
+the heap so the next time we reach it, we can avoid repeating expensive
+computations. It is true that each `cont` invocation gets its own `(env,k)`,
+but we can accomplish a lot without looking at them, such as determining that
+two literals cannot unify because the outermost function names differ.
 
-Effectively, before creating new branches, our version of `meson` filters out
-all literals that conflict with the existing members of `lits`. This
-short-circuiting seems to cheaply add substitutions to `env` as early as
-possible.
+We can push further and memoize more. Here's an obvious way to filter out
+candidates could never unify:
+
+\begin{code}
+couldMatchTerms = \case
+  [] -> True
+  h:rest -> case h of
+    (Fun f fargs, Fun g gargs)
+      | f == g, length fargs == length gargs -> couldMatchTerms $ zip fargs gargs <> rest
+      | otherwise -> False
+    _ -> True
+couldMatch x y = case (x, y) of
+  (Atom p1 a1, Atom p2 a2) -> couldMatchTerms [(Fun p1 a1, Fun p2 a2)]
+  (Not p, Not q) -> couldMatch p q
+  _ -> False
+
+noRep' n cls lits cont (env, k)
+  | n < 0 = Left "too deep"
+  | otherwise = case lits of
+    [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
+    lit:litt
+      | any (curry (literally False $ equalUnder env) lit) $ filter (couldMatch lit) litt -> Left "repetition"
+      | otherwise -> let nlit = nono lit in asum (contra nlit <$> filter (couldMatch nlit) litt)
+        <|> asum [branch ps =<< (, k') <$> unifyLiterals env (nlit, p)
+        | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl', couldMatch nlit p]
+  where
+  branch ps = foldr (\l f -> noRep' (n - length ps) cls (l:lits) f) cont ps
+  contra p q = cont =<< (, k) <$> unifyLiterals env (p, q)
+
+meson' fos = mapM_ (runThen output) $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+  where
+  messy fo = deepen (\n -> noRep' n (toCNF fo) [] Right (mempty, 0)) 0
+  toCNF = map S.toList . S.toList . simpCNF . deQuantify
+  listConj = foldr1 (:/\)
+\end{code}
+
+This is about 5% faster, despite wastefully traversing the same literals once
+for `couldMatch` and another time for `unifyLiterals`. It would be better if
+`unifyLiterals` could use what `couldMatch` has already learned.
+
+Perhaps better still would be to divide the substitutions into those that are
+known when the continuation is created, and those that are not.
+Then `couldMatch` can take the first set into account while still being
+memoizable.
 
 == Front-end ==
 
 We compile to wasm with https://github.com/tweag/asterius[Asterius].
-
-To force the browser to render log updates, we use zero-duration timeouts. The
-change in control flow means that the web version of `meson` interleaves the
-refutations of independent subformulas.
 
 ++++++++++
 <p><a onclick='hideshow("ui");'>&#9654; Toggle front-end</a></p>
@@ -1205,6 +1273,8 @@ main = do
   inp <- getElem "inp"
   out <- getElem "out"
   log <- getElem "log"
+  x <- getElem "sortcode"
+  setProp x "value" sortExample
   let
     addPreset (k, v) = do
       a <- createElem "div"
@@ -1227,17 +1297,21 @@ main = do
             appendLog $ show e
           Right fo -> solver fo *> pure ()
   mapM_ addPreset $ map parsePresets . filter (not . null) . lines $ tx
+  addSolver "skolemize" $ output . skno
+  addSolver "qff" $ output . deQuantify . skno
+  addSolver "dnf" $ output . simpDNF . deQuantify . skno
+  addSolver "cnf" $ output . simpCNF . deQuantify . skno
+  addSolver "defcnf" $ output . satCNF . deQuantify . skno
   addSolver "gilmore" gilmore
   addSolver "dpll" davisPutnam2
+  addSolver "tableau" tableau
+  addSolver "faithful" faithful
   addSolver "meson" meson
   sortButton <- getElem "sort"
   addEventListener sortButton "click" $ const $ do
-    setProp inp "value"
-      $ "[already negated]\n"
-      <> sortExample
+    setProp inp "value" ""
     setProp out "value" ""
     setProp log "value" ""
-    s <- getProp inp "value"
     sortDemo
 #endif
 \end{code}
@@ -1245,3 +1319,7 @@ main = do
 ++++++++++
 </div>
 ++++++++++
+
+To force the browser to render log updates, we use zero-duration timeouts. The
+change in control flow means that the web version of `meson` interleaves the
+refutations of independent subformulas.
