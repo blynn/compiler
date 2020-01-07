@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+cd fol-asterius
+#ahc-cabal new-update
+ahc-cabal new-install . --symlink-bindir . --overwrite-policy=always -j1
+cd ..
+ahc-dist --browser --input-exe fol-asterius/fol

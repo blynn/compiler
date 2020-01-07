@@ -1,5 +1,34 @@
 = First-order logic =
 
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script type='module' src='fol.mjs'></script>
+Formula:
+<div>
+<textarea id='inp' cols='80' rows='4'>exists x. forall y. P(x) ==> P(y)</textarea></div>
+<p>Output:</p>
+<div><textarea id='out' cols='80' rows='8' readonly></textarea></div>
+<p>Log:</p>
+<div><textarea id='log' cols='80' rows='4' readonly></textarea></div>
+<button id='gilmore'>Gilmore</button>
+<button id='dpll'>DPLL</button>
+<button id='meson'>MESON</button>
+<p>
+<span><button onclick='hideshow("presets");'>Presets</button>
+<style>#presets {
+position:absolute;
+background-color:white;
+border:1px solid grey;
+padding:2px;
+}#presets div:hover{
+background-color:grey;
+}
+</style>
+<div id='presets' style='display:none;'></div>
+</span>
+<button id='sort'>sort demo</button>
+</p>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 Boilerplate abounds in programs that manipulate syntax trees. Consider a
 function transforming a particular kind of leaf node. With a typical tree data
 type, we must add recursive calls for every recursive data constructor. If we
@@ -39,6 +68,11 @@ function hideshow(s) {
 {-# LANGUAGE BlockArguments, LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE CPP #-}
+#ifdef ASTERIUS
+import Asterius.Types
+import Data.Coerce
+#endif
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Char (isAlphaNum)
@@ -129,7 +163,7 @@ predicate.
 
 \begin{code}
 firstorderformula :: Parsec () String FO
-firstorderformula = iff where
+firstorderformula = space *> iff where
   iff = foldr1 (:<=>) <$> sepBy1 impl (want "<=>")
   impl = foldr1 (:==>) <$> sepBy1 disj (want "==>")
   disj = foldl1 (:\/) <$> sepBy1 conj (want "\\/" <|> want "|")
@@ -606,12 +640,24 @@ skno = skolemize . nono . generalize
 
 type Loggy = Writer ([String] -> [String])
 
-effect wr = do
+output :: Show a => a -> IO ()
+#ifdef ASTERIUS
+output s = do
+  out <- getElem "out"
+  appendValue out $ show s <> "\n"
+runThen cont wr = do
   let (a, w) = runWriter wr
-  mapM_ putStrLn $ ($ []) w
-  pure a
+  cb <- makeHaskellCallback $ stream cont (a, w [])
+  js_setTimeout cb 0
+#else
+output = print
+runThen cont wr = do
+  let (a, w) = runWriter wr
+  mapM_ putStrLn $ w []
+  cont a
+#endif
 
-herbrand conjSub refute uni fo = effect $ herbLoop (uni Top) [] herbiverse where
+herbrand conjSub refute uni fo = runThen output $ herbLoop (uni Top) [] herbiverse where
   qff = deQuantify . skno $ fo
   fvs = fv qff
   herbiverse = herbTuples (length fvs) qff
@@ -846,7 +892,7 @@ tabRefute fos = deepen (\n -> go n fos [] Right (mempty, 0)) 0 where
             unifyLiterals env (fo,nono l)) <$> lits)
           <|> go n rest (fo:lits) cont (env,k)
 
-tableau fo = effect $ case skno fo of
+tableau fo = runThen output $ case skno fo of
   Bot -> pure (mempty, 0)
   sfo -> tabRefute [sfo]
 \end{code}
@@ -891,7 +937,7 @@ conn n cls lits cont (env, k)
   branch ps = foldr (\l f -> conn (n - length ps) cls (l:lits) f) cont ps
   contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
 
-prologgy fo = effect $ deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
+prologgy fo = runThen output $ deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
   cls = S.toList <$> S.toList (simpCNF $ deQuantify $ skno fo)
 \end{code}
 
@@ -899,7 +945,7 @@ We translate a well-known Prolog sorting program and query to CNF to illustrate
 the correspondence.
 
 \begin{code}
-sortEx = mustFO "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & Z <= x6 & (S(x7) <= S(y7) | !(x7 <= y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
+sortExample = "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & Z <= x6 & (S(x7) <= S(y7) | !(x7 <= y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
 
 prologgyUnsat fo = deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
   cls = S.toList <$> S.toList (simpCNF fo)
@@ -909,9 +955,8 @@ tsubst' f t = case t of
   Var x -> maybe t (tsubst' f) $ f x
   Fun s as -> Fun s $ tsubst' f <$> as
 
-sortDemo = do
-  (m, _) <- effect $ prologgyUnsat sortEx
-  pure $ tsubst' (`M.lookup` m) $ Var "x8"
+sortDemo = runThen prSub $ prologgyUnsat $ mustFO sortExample where
+  prSub (m, _) = output $ tsubst' (`M.lookup` m) $ Var "x8"
 \end{code}
 
 We refine `prologgy` by aborting whenever the current subgoal is equal to an
@@ -945,7 +990,7 @@ cut' n cls lits cont (env, k)
   branch ps = foldr (\l f -> cut' (n - length ps) cls (l:lits) f) cont ps
   contra p q = cont =<< flip (,) k <$> unifyLiterals env (nono p, q)
 
-meson fos = mapM effect $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+meson fos = mapM_ (runThen output) $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
   where
   messy fo = deepen (\n -> cut' n (toCNF fo) [] Right (mempty, 0)) 0
   toCNF = map S.toList . S.toList . simpCNF . deQuantify
@@ -994,7 +1039,7 @@ faith' cls lits cont (budget, (env, k))
     (n2+r1, ek1))
     (n1, ek)
 
-faithful fos = mapM effect $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
+faithful fos = mapM_ (runThen output) $ map (messy . listConj) $ S.toList <$> S.toList (simpDNF $ skno fos)
   where
   messy fo = deepen (\n -> faith' (toCNF fo) [] Right (n, (mempty, 0))) 0
   toCNF = map S.toList . S.toList . simpCNF . deQuantify
@@ -1034,7 +1079,7 @@ steamroller = mustFO "((forall x. P1(x) ==> P0(x)) & (exists x. P1(x))) & ((fora
 
 los = mustFO "(forall x y z. P(x,y) & P(y,z) ==> P(x,z)) & (forall x y z. Q(x,y) & Q(y,z) ==> Q(x,z)) & (forall x y. Q(x,y) ==> Q(y,x)) & (forall x y. P(x,y) | Q(x,y)) ==> (forall x y. P(x,y)) | (forall x y. Q(x,y))"
 dpEx = mustFO "exists x. exists y. forall z. (F(x,y) ==> (F(y,z) & F(z,z))) & ((F(x,y) & G(x,y)) ==> (G(x,z) & G(z,z)))"
-ewd1062 = mustFO "(forall x. x <= x) /\\ (forall x y z. x <= y /\\ y <= z ==> x <= z) /\\ (forall x y. F(x) <= y <=> x <= G(y)) ==> (forall x y. x <= y ==> F(x) <= F(y)) /\\ (forall x y. x <= y ==> G(x) <= G(y))"
+ewd1062 = mustFO "(forall x. x <= x) & (forall x y z. x <= y & y <= z ==> x <= z) & (forall x y. F(x) <= y <=> x <= G(y)) ==> (forall x y. x <= y ==> F(x) <= F(y)) & (forall x y. x <= y ==> G(x) <= G(y))"
 gilmore1 = mustFO "exists x. forall y z. ((F(y) ==> G(y)) <=> F(x)) & ((F(y) ==> H(y)) <=> G(x)) & (((F(y) ==> G(y)) ==> H(y)) <=> H(x)) ==> F(z) & G(z) & H(z)"
 \end{code}
 
@@ -1088,3 +1133,115 @@ Effectively, before creating new branches, our version of `meson` filters out
 all literals that conflict with the existing members of `lits`. This
 short-circuiting seems to cheaply add substitutions to `env` as early as
 possible.
+
+== Front-end ==
+
+We compile to wasm with https://github.com/tweag/asterius[Asterius].
+
+To force the browser to render log updates, we use zero-duration timeouts. The
+change in control flow means that the web version of `meson` interleaves the
+refutations of independent subformulas.
+
+++++++++++
+<p><a onclick='hideshow("ui");'>&#9654; Toggle front-end</a></p>
+<div id='ui' style='display:none'>
+++++++++++
+\begin{code}
+parsePresets line = (k, v) where
+  (k, rhs) = break (== ' ') line
+  v = init $ tail $ dropWhile (/= '"') rhs
+
+#ifdef ASTERIUS
+appendLog s = do
+  x <- getElem "log"
+  appendValue x $ s <> "\n"
+  scrollToBottom x
+
+stream cont (a, xs) = case xs of
+  [] -> cont a
+  (x:xt) -> do
+    appendLog x
+    cb <- makeHaskellCallback $ stream cont (a, xt)
+    js_setTimeout cb 0
+
+setProp :: JSVal -> String -> String -> IO ()
+setProp e k v = js_setProperty e (toJSString k) (toJSString v)
+getProp :: JSVal -> String -> IO String
+getProp e k = fromJSString <$> js_getProperty e (toJSString k)
+getElem :: String -> IO JSVal
+getElem k = js_getElementById (toJSString k)
+addEventListener :: JSVal -> String -> (JSObject -> IO ()) -> IO ()
+addEventListener target event handler = do
+  callback <- makeHaskellCallback1 $ coerce handler
+  js_addEventListener target (toJSString event) callback
+createElem :: String -> IO JSVal
+createElem = js_createElement . toJSString
+appendValue :: JSVal -> String -> IO ()
+appendValue e s = js_appendValue e $ toJSString s
+
+foreign import javascript "document.getElementById(${1})"
+  js_getElementById :: JSString -> IO JSVal
+foreign import javascript "${1}[${2}] = ${3}"
+  js_setProperty :: JSVal -> JSString -> JSString -> IO ()
+foreign import javascript "${1}[${2}]"
+  js_getProperty :: JSVal -> JSString -> IO JSString
+foreign import javascript "${1}.addEventListener(${2},${3})"
+  js_addEventListener :: JSVal -> JSString -> JSFunction -> IO ()
+foreign import javascript "document.createElement(${1})"
+  js_createElement :: JSString -> IO JSVal
+foreign import javascript "${1}.appendChild(${2})"
+  appendChild :: JSVal -> JSVal -> IO ()
+foreign import javascript "${1}.value += ${2}"
+  js_appendValue :: JSVal -> JSString -> IO ()
+foreign import javascript "setTimeout(${1},${2})"
+  js_setTimeout :: JSFunction -> Int -> IO ()
+foreign import javascript "${1}.scrollTop = ${1}.scrollHeight"
+  scrollToBottom :: JSVal -> IO ()
+
+main :: IO ()
+main = do
+  tx <- flip getProp "innerText" =<< getElem "problems"
+  pr <- getElem "presets"
+  inp <- getElem "inp"
+  out <- getElem "out"
+  log <- getElem "log"
+  let
+    addPreset (k, v) = do
+      a <- createElem "div"
+      setProp a "innerHTML" k
+      addEventListener a "click" $ const $ do
+        setProp out "value" ""
+        setProp log "value" ""
+        setProp inp "value" v
+        setProp pr "style" "display:none;"
+      appendChild pr a
+    addSolver buttonId solver = do
+      b <- getElem buttonId
+      addEventListener b "click" $ const $ do
+        setProp out "value" ""
+        setProp log "value" ""
+        s <- getProp inp "value"
+        case parse firstorderformula "" s of
+          Left e -> do
+            appendLog "parse error"
+            appendLog $ show e
+          Right fo -> solver fo *> pure ()
+  mapM_ addPreset $ map parsePresets . filter (not . null) . lines $ tx
+  addSolver "gilmore" gilmore
+  addSolver "dpll" davisPutnam2
+  addSolver "meson" meson
+  sortButton <- getElem "sort"
+  addEventListener sortButton "click" $ const $ do
+    setProp inp "value"
+      $ "[already negated]\n"
+      <> sortExample
+    setProp out "value" ""
+    setProp log "value" ""
+    s <- getProp inp "value"
+    sortDemo
+#endif
+\end{code}
+
+++++++++++
+</div>
+++++++++++
