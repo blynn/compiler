@@ -396,7 +396,10 @@ d ((p * 100 + q - 212)^2)
 evaluates to (after simplification):
 
 \[
-200 * p * (p * 100 + q - 212) * dp + 2 * p * (p * 100 + q - 212) * dq
+\begin{align}
+& & 200 * p * (p * 100 + q - 212) * dp \\
+&+& 2 * p * (p * 100 + q - 212) * dq
+\end{align}
 \]
 
 confirming our claims about the coefficients of `dp` and `dq`.
@@ -514,7 +517,8 @@ the right:
 
 \[
 \begin{align}
-3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) &=& 3 \times 4 \times (5 dp + 10 dq + 20 dr) \\
+& & 3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) \\
+&=& 3 \times 4 \times (5 dp + 10 dq + 20 dr) \\
 &=& 3 \times (20 dp + 40 dq + 80 dr) \\
 &=& 60 dp + 120 dq + 240 dr
 \end{align}
@@ -525,7 +529,8 @@ efficient:
 
 \[
 \begin{align}
-3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) &=& 12 \times 5 \times (dp + 2 dq + 4 dr) \\
+& & 3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) \\
+&=& 12 \times 5 \times (dp + 2 dq + 4 dr) \\
 &=& 60 \times (dp + 2 dq + 4 dr) \\
 &=& 60 dp + 120 dq + 240 dr
 \end{align}

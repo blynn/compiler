@@ -14,11 +14,11 @@ function hideshow(s) {
 </script>
 Formula:
 <div>
-<textarea id='inp' cols='80' rows='4'>exists x. forall y. P(x) ==> P(y)</textarea></div>
+<textarea id='inp' rows='4' style='box-sizing:border-box;width:100%;'>exists x. forall y. P(x) ==> P(y)</textarea></div>
 <p>Output:</p>
-<div><textarea id='out' cols='80' rows='8' readonly></textarea></div>
+<div><textarea id='out' rows='8' readonly style='box-sizing:border-box;width:100%;'></textarea></div>
 <p>Log:</p>
-<div><textarea id='log' cols='80' rows='4' readonly></textarea></div>
+<div><textarea id='log' rows='4' readonly style='box-sizing:border-box;width:100%;'></textarea></div>
 <p>
 Negate, then:
 <button id='skolemize'>skolemize</button>
@@ -33,7 +33,7 @@ Prove:
 <button id='dpll'>DPLL</button>
 <button id='tableau'>Tableau</button>
 <button id='faithful'>MESON by the book</button>
-<button id='meson'>MESON</button>
+<button id='meson'>Lazy MESON</button>
 </p>
 <p>
 <span><button onclick='hideshow("presets");'>Presets</button>
@@ -51,7 +51,7 @@ background-color:grey;
 </p>
 <p><a onclick='hideshow("sortdemo");'>&#9654; Sort demo</a></p>
 <div id='sortdemo' style='display:none'>
-<textarea id ='sortcode' rows='5' cols='80'></textarea>
+<textarea id ='sortcode' rows='5' style='box-sizing:border-box;width:100%;'></textarea>
 <br>
 <button id='sort'>Run!</button>
 </div>
@@ -584,8 +584,8 @@ Then:
   2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$.
   Let $m$ be the number of variables in $t$. Initialize $h$ to $\top$.
   3. Choose $m$ elements from the Herbrand universe of $t$.
-  4. Replace $h$ with the conjunction of $h$ and the result of substituting
-  the variables of $t$ with the ground terms we chose.
+  4. Let $t'$ be the result of substituting the variables of $t$ with
+  these $m$ elements. Compute $h \leftarrow h \wedge t'$.
   5. If $h$ is unsatisfiable, then $t$ is unsatisfiable under any
   interpretation, hence $f$ is valid. Otherwise, go to step 3.
 
@@ -701,8 +701,8 @@ gilmore = herbrand conjDNF S.null simpDNF where
 
 == Davis-Putnam ==
 
-DPLL is a better algorithm using the 'conjunctive normal form' (CNF), which is
-the dual of DNF:
+The DPLL algorithm uses the 'conjunctive normal form' (CNF), which is the dual
+of DNF:
 
 \begin{code}
 pureCNF = S.map (S.map nono) . pureDNF . nnf . nono
@@ -949,40 +949,52 @@ instantiate fos k = (subst (`M.lookup` (M.fromList $ zip vs names)) <$> fos, k +
   vs = foldr union [] $ fv <$> fos
   names = Var . ('_':) . show <$> [k..]
 
-conn n cls lits cont (env, k)
-  | n < 0 = Left "too deep"
-  | otherwise = case lits of
-    [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
-    lit:litt -> let nlit = nono lit in asum (contra nlit <$> litt)
-      <|> asum [branch ps =<< (, k') <$> unifyLiterals env (nlit, p)
-      | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
-  where
-  branch ps = foldr (\l f -> conn (n - length ps) cls (l:lits) f) cont ps
-  contra p q = cont =<< (, k) <$> unifyLiterals env (p, q)
+conTab clauses = deepen (\n -> go n clauses [] Right (mempty, 0)) 0 where
+  go n cls lits cont (env, k)
+    | n < 0 = Left "too deep"
+    | otherwise = case lits of
+      [] -> asum [branch ls (env, k) | ls <- cls, all (not . isPositive) ls]
+      lit:litt -> let nlit = nono lit in asum (contra nlit <$> litt)
+        <|> asum [branch ps =<< (, k') <$> unifyLiterals env (nlit, p)
+        | cl <- cls, let (cl', k') = instantiate cl k, (p, ps) <- selections cl']
+    where
+    branch ps = foldr (\l f -> go (n - length ps) cls (l:lits) f) cont ps
+    contra p q = cont =<< (, k) <$> unifyLiterals env (p, q)
 
-prologgy fo = runThen output $ deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
-  cls = S.toList <$> S.toList (simpCNF $ deQuantify $ skno fo)
+mesonBasic fo = runThen output $ conTab
+  $ S.toList <$> S.toList (simpCNF $ deQuantify $ skno fo)
 \end{code}
 
 We translate a Prolog sorting program and query to CNF to illustrate the
 correspondence.
 
 \begin{code}
-sortExample = "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0)) & Sorted(Nil) & Sorted(C(x1, Nil)) & (Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2))) & Perm(Nil,Nil) & (Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3)) & Delete(x4,C(x4,y4),y4) & (Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5)) & Z <= x6 & (S(x7) <= S(y7) | !(x7 <= y7)) & !Sort(C(S(S(S(S(Z)))),C(S(Z),C(Z,C(S(S(Z)),C(S(Z),Nil))))),x8)"
+sortExample = intercalate " & "
+  [ "(Sort(x0,y0) | !Perm(x0,y0) | !Sorted(y0))"
+  , "Sorted(Nil)"
+  , "Sorted(C(x1, Nil))"
+  , "(Sorted(C(x2, C(y2, z2))) | !(x2 <= y2) | !Sorted(C(y2,z2)))"
+  , "Perm(Nil,Nil)"
+  , "(Perm(C(x3, y3), C(u3, v3)) | !Delete(u3,C(x3,y3),z3) | !Perm(z3,v3))"
+  , "Delete(x4,C(x4,y4),y4)"
+  , "(Delete(x5,C(y5,z5),C(y5,w5)) | !Delete(x5,z5,w5))"
+  , "Z <= x6"
+  , "(S(x7) <= S(y7) | !(x7 <= y7))"
+  , "!Sort(C(S(S(S(S(Z)))), C(S(Z), C(Z,C(S(S(Z)), C(S(Z), Nil))))), x8)"
+  ]
 
-prologgyUnsat fo = deepen (\n -> conn n cls [] Right (mempty, 0)) 0 where
-  cls = S.toList <$> S.toList (simpCNF fo)
+prologgy fo = conTab $ S.toList <$> S.toList (simpCNF fo)
 
 tsubst' :: (String -> Maybe Term) -> Term -> Term
 tsubst' f t = case t of
   Var x -> maybe t (tsubst' f) $ f x
   Fun s as -> Fun s $ tsubst' f <$> as
 
-sortDemo = runThen prSub $ prologgyUnsat $ mustFO sortExample where
+sortDemo = runThen prSub $ prologgy $ mustFO sortExample where
   prSub (m, _) = output $ tsubst' (`M.lookup` m) $ Var "x8"
 \end{code}
 
-We refine `prologgy` by aborting whenever the current subgoal is equal to an
+We refine `mesonBasic` by aborting whenever the current subgoal is equal to an
 older subgoal under the substitutions found so far. In addition, as with
 `splitTableau`, we split the problem into smaller independent subproblems when
 possible.
@@ -1117,9 +1129,9 @@ gilmore_9 = mustFO "forall x. exists y. forall z.  ((forall u. exists v. F(y,u,v
 </div>
 ++++++++++
 
-Our code sometimes takes a better path through the Herbrand universe. For
-example, our `davisPutnam` goes through 111 ground instances to solve `p29`
-while the book version goes through 180.
+Our code sometimes takes a better path through the Herbrand universe than the
+original. For example, our `davisPutnam` goes through 111 ground instances to
+solve `p29` while the book version goes through 180.
 
 Curiously, if we leave the output of our `groundtuples` unreversed, then
 `gilmore p20` seems intractable.
@@ -1144,8 +1156,8 @@ Definitional CNF hurts our connection tableaux solvers. It introduces new
 literals which only appear a few times each. Our code fails to take advantage
 of this to quickly find unifiable literals.
 
-Our connection tableaux functions `prologgy` and `meson` are mysteriously
-miraculous. Running `prologgy steamroller` succeeds at depth 21, and `meson
+Our connection tableaux functions `mesonBasic` and `meson` are mysteriously
+miraculous. Running `mesonBasic steamroller` succeeds at depth 21, and `meson
 gilmore1` at depth 13, though our usage of the depth limit differs from that in
 the book.
 

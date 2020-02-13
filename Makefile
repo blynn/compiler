@@ -29,7 +29,7 @@ douady.html:douady.txt menu.html;cobble mathbook menu $<
 
 site: $(SITE)
 
-sync: site ; rsync -R -r $(SITE) blynn@crypto.stanford.edu:www/compiler/
+sync: site ; rsync -R -r $(SITE) crypto.stanford.edu:www/compiler/
 
 clean: ; -rm $(SITE)
 

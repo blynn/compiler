@@ -443,8 +443,8 @@ the rules!
 
 Then we demand that the left-hand side of each rule is strictly greater than
 the right-hand side. This ensures each rewrite shrinks the term according to
-our well-founded partial order, which means we must eventually reach a term for
-which no rewrite rules apply.
+our well-founded partial order, so we eventually reach a term for which no
+rewrite rules apply.
 
 We introduce the 'lexicographic path order' (LPO) on our terms.
 See references for the motivation, and why it works.
@@ -491,34 +491,33 @@ weigh precs (f, m) (g, n)
 
 Our group axioms all have left-hand sides greater than their right-hand sides
 by lexicographic path order, no matter what ordering we pick for the identity,
-group operation, and inverse. We confirm this fact when the ordering based on
-ASCII:
+group operation, and inverse. We confirm this in the case of ASCII ordering:
 
 \begin{code}
 prop_groupAxiomsValid =
   and $ (\(Rule l r) -> lpoGT (weigh []) l r) <$> groupAxioms
 \end{code}
 
-We can now define when we dislike a term. Let `t` be a term, `rules` be a
-rewriting system and let `x = fixRewrite rules t`. Suppose a different rewrite
-strategy results in rewriting `t` as a term `y` to which no further rewrites
-are possible.
+Let `t` be a term, `rules` be a rewriting system and let `x = fixRewrite rules
+t`. Next, apply the rewrite rules in an arbitrary order on `t` to obtain `y`, a
+term on which no further rewrites are possible.
 
-If for every `t`, and for every rewrite startegy we find `y` equals `x`, then
-the rewriting system is 'confluent', and there is nothing to dislike.
-After enough rewrites, every term reaches its unique 'normal form'.
+If we always have `y` equals `x`, then the rewriting system is 'confluent'.
+After enough steps, every term reaches its unique 'normal form', no matter
+which order we apply the rewrites.
 
-On the other hand, if we find cases where `x` and `y` differ, we dislike the
-greater of the two (with respect to LPO), so we introduce a rewrite rule from
-the larger to the smaller to prevent it from appearing again. If `x` and `y`
-are incomparable, then we're stuck, unless we happen to stumble upon more
-rewrite rules that can change at least one of them.
+On the other hand, if we find cases where `x` and `y` differ, then we introduce
+a rewrite rule from the larger to the smaller to fix it.
+If `x` and `y` are incomparable, then we're stuck, unless we later happen to
+stumble upon more rewrite rules that can change at least one of them.
 
 == Knuth-Bendix completion ==
 
-To find all the terms getting in the way of confluence, it turns out
-we need only apply the rewrite rules to the rewrite rules. There's no
-need to guess a term and try various rewrite strategies on it.
+To find all the obstacles getting in the way of confluence, it can be shown
+that, loosely speaking, we need only apply the rewrite rules to themselves.
+More precisely, for each rewrite rule, we find matches of its left-hand side
+among all sub-expressions of the rewrite rules. There's no need to guess a term
+and try various rewrite strategies on it.
 
 We walk through an example. Take our first and third group axioms, and
 rename the variables to avoid confusion:
@@ -570,8 +569,8 @@ criticalPairs a b
 \end{code}
 
 Continuing our example, we have `1 * z1 = z1` by another axiom, while no rules
-apply to `I x3 * (x3 * z1)`. Since `z1` has the smaller LPO, we add the rewrite
-rule:
+apply to `I x3 * (x3 * z1)`. At this point, neither term can be rewritten
+further, and since `z1` has the smaller LPO, we add the rewrite rule:
 
 ------------------------------------------------------------------------
 I x3 * (x3 * z1) = z1

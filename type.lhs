@@ -248,10 +248,15 @@ passed verbatim to the next phase. Now, data types clear up the picture.
 We immediately take advantage of the neater code and add a few rewrite rules
 to cut down the number of combinators.
 
-To make this incarnation of our compiler more substantial, we knuckle down and
-implement a `Map` based on Adams trees. Again, we mostly copy code from a paper.
-The running time improves slightly after replacing the association list used
-in the last compilation step with `Map`.
+To make this incarnation of our compiler more substantial, we knuckle down
+and implement a `Map` based on
+https://pdfs.semanticscholar.org/0284/0ad5ab57dd13e388800094e52a3069df23cd.pdf[Adams
+trees]. Again, we mostly copy code from a paper. The running time improves
+slightly after replacing the association list used in the last compilation
+step with `Map`.
+
+We choose the BB-2.5 variant, based on the benchmarks in the paper, though
+it is troubling that `Data.Map` chose BB-3 trees.
 
 We also move the assembler from C to Haskell, that is, our compiler now outputs
 bare machine code rather than ION assembly.

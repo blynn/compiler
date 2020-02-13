@@ -397,7 +397,7 @@ rules:
 
 \[
 \frac
-  {A\rightarrow B, B\rightarrow C,\Gamma\Rightarrow G}
+  {A\rightarrow C, B\rightarrow C,\Gamma\Rightarrow G}
   {(A\vee B)\rightarrow C,\Gamma\Rightarrow G}
 \]
 
@@ -486,8 +486,10 @@ We've saved the the non-invertible implication rule for last. It relies on the
 theorem:
 
 \[
-((A \rightarrow B) \rightarrow C) \rightarrow (A \rightarrow B)
+\begin{align}
+((A \rightarrow B) \rightarrow C) \rightarrow (A \rightarrow B) \\
 \iff (B \rightarrow C) \rightarrow (A \rightarrow B)
+\end{align}
 \]
 
 I had trouble finding the program corresponding to this rule, so I first coded

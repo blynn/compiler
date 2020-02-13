@@ -339,3 +339,5 @@ http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Chlipala wrote
 'A Certified Type-Preserving Compiler from Lambda Calculus to Assembly
 Language'], which we take as a license to be informal when we please.
 We can always fall back to this paper to see how it's really done!
+
+See also http://wadler.blogspot.com/2016/06/papers-we-love-john-reynolds_10.html[Papers We Love].
