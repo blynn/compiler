@@ -244,10 +244,6 @@ rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
-globalDef p = Def Nothing (second (A (V "#global")) p);
-eqn r = keyword "global" *> (globalDef <$> (def r))
-  <|> Def <$> (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) <*> def r;
-
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 
@@ -318,6 +314,8 @@ instDecl r = keyword "instance" *>
 ffiDecl = keyword "ffi" *>
   (FFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
+eqn r = Def <$> (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) <*> def r;
+
 tops precTab = sepBy
   (   adt
   <|> classDecl
@@ -348,7 +346,6 @@ prims = let
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro 'n'))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro 'r'))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'w'))
-    , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro '?'))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";

@@ -380,9 +380,6 @@ def r =
   opDef <$> varId <*> varSym <*> varId <*> (spch '=' *> r)
   <|> liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
-globalDef p = addDef $ second (A (V "#global")) p;
-eqn r = keyword "global" *> (globalDef <$> (def r)) <|> addDef <$> def r;
-
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
@@ -453,7 +450,7 @@ tops precTab = sepBy
   <|> classDecl
   <|> instDecl (expr precTab 0)
   <|> ffiDecl
-  <|> eqn (expr precTab 0)
+  <|> addDef <$> def (expr precTab 0)
   <|> keyword "export" *> (addExport <$> rawStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
@@ -480,7 +477,6 @@ prims = let
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro 'n'))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro 'r'))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'w'))
-    , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro '?'))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
