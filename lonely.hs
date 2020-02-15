@@ -54,6 +54,7 @@ instance Ord a => Ord [a] where {
     }
 };
 data Maybe a = Nothing | Just a;
+data Either a b = Left a | Right b;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
@@ -85,7 +86,7 @@ instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBin
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };
 instance Functor IO where { fmap f x = ioPure f <*> x };
 putStr = mapM_ $ putChar . ord;
-error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess;
+error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess;
 undefined = error "undefined";
 foldr1 c l = maybe undefined id (flst l undefined (\h t -> foldr (\x m -> Just (case m of { Nothing -> x ; Just y -> c x y })) Nothing l));
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
@@ -182,10 +183,91 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 -- Parsing.
 
 data Type = TC String | TV String | TAp Type Type;
+arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
 data Ast = E Extra | V String | A Ast Ast | L String Ast;
+ro = E . Basic . ord;
 data Parser a = Parser (String -> Maybe (a, String));
+
+data Constr = Constr String [Type];
+data Pred = Pred String Type;
+data Qual = Qual [Pred] Type;
+noQual = Qual [];
+
+data Neat = Neat
+  -- | Instance environment.
+  [(String, [Qual])]
+  -- | Either top-level or instance definitions.
+  [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
+  -- | Typed ASTs, ready for compilation, including ADTs and methods,
+  -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
+  [(String, (Qual, Ast))]
+  -- | FFI declarations.
+  [(String, Type)]
+  -- | Exports.
+  [(String, String)]
+  ;
+
 parse p inp = case p of { Parser f -> f inp };
+
+fneat neat f = case neat of { Neat a b c d e -> f a b c d e };
+
+conOf con = case con of { Constr s _ -> s };
+mkCase t cs = (concatMap (('|':) . conOf) cs,
+  ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
+  , ro 'I'));
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
+index n s ss = case ss of
+  { [] -> undefined
+  ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
+  };
+length = foldr (\_ n -> n + 1) 0;
+scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
+-- scottConstr t cs c = case c of { Constr s ts -> (s,
+--   ( noQual $ foldr arr t ts
+--   , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
+--   };
+scottConstr t cs c = case c of { Constr s ts -> (s,
+  ( noQual $ foldr arr t ts
+  , scottEncode (map conOf cs) s $ mkStrs ts)) };
+mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
+
+select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
+
+addInstance s q is = fpair (select (\kv -> s == fst kv) is []) \m xs -> case m of
+  { Nothing -> (s, [q]):xs
+  ; Just sqs -> second (q:) sqs:xs
+  };
+
+mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
+
+ifz n = ife (0 == n);
+showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
+showInt n s = ifz n ('0':) (showInt' n) s;
+
+mkFFIHelper n t acc = case t of
+  { TC s -> acc
+  ; TV s -> undefined
+  ; TAp g y -> case g of
+    { TC s -> ife (s == "IO") acc undefined
+    ; TV s -> undefined
+    ; TAp f x -> case f of
+      { TC s -> ife (s == "->") (L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc) undefined
+      ; TV s -> undefined
+      ; TAp _ _ -> undefined
+      }
+    }
+  };
+
+addAdt t cs acc = fneat acc \ienv fs typed ffis exs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis exs;
+addClass classId v ms acc = fneat acc \ienv fs typed ffis exs -> Neat ienv fs (
+    map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
+    ++ typed) ffis exs;
+addInst cl q ds acc = fneat acc \ienv fs typed ffis exs -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed ffis exs;
+addFFI foreignname ourname t acc = fneat acc \ienv fs typed ffis exs -> Neat ienv fs (
+    (ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) ((foreignname, t):ffis) exs;
+addDef f acc = fneat acc \ienv fs typed ffis exs -> Neat ienv (Left f : fs) typed ffis exs;
+addExport e f acc = fneat acc \ienv fs typed ffis exs -> Neat ienv fs typed ffis ((e, f):exs);
 
 instance Applicative Parser where
 { pure x = Parser \inp -> Just (x, inp)
@@ -279,7 +361,6 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-ro = E . Basic . ord;
 rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
@@ -299,9 +380,8 @@ def r =
   opDef <$> varId <*> varSym <*> varId <*> (spch '=' *> r)
   <|> liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
-globalDef p = Def Nothing (second (A (V "#global")) p);
-eqn r = keyword "global" *> (globalDef <$> (def r))
-  <|> Def <$> (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) <*> def r;
+globalDef p = addDef $ second (A (V "#global")) p;
+eqn r = keyword "global" *> (globalDef <$> (def r)) <|> addDef <$> def r;
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
@@ -336,14 +416,6 @@ opFold precTab e xs = case xs of
   };
 expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
-data Constr = Constr String [Type];
-data Pred = Pred String Type;
-data Qual = Qual [Pred] Type;
-
-data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type;
-
-arr a b = TAp (TAp (TC "->") a) b;
-
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (want varSym "->"));
 typeConst = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
@@ -357,26 +429,24 @@ simpleType c vs = foldl TAp (TC c) (map TV vs);
 constr = (\x c y -> Constr c [x, y]) <$> aType <*> conSym <*> aType
   <|> Constr <$> conId <*> many aType;
 
-adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many varId) <*> sepBy constr (spch '|');
+adt = addAdt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many varId) <*> sepBy constr (spch '|');
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-noQual = Qual [];
-
 genDecl = (,) <$> var <*> (char ':' *> spch ':' *> _type aType);
-classDecl = keyword "class" *> (Class <$> conId <*> (TV <$> varId) <*> (keyword "where" *> braceSep genDecl));
+classDecl = keyword "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (keyword "where" *> braceSep genDecl));
 
 inst = _type aType;
 instDecl r = keyword "instance" *>
-  ((\ps cl ty defs -> Inst cl (Qual ps ty) defs) <$>
+  ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
   (((itemize .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 ffiDecl = keyword "ffi" *>
-  (FFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
+  (addFFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
 tops precTab = sepBy
   (   adt
@@ -384,14 +454,15 @@ tops precTab = sepBy
   <|> instDecl (expr precTab 0)
   <|> ffiDecl
   <|> eqn (expr precTab 0)
+  <|> keyword "export" *> (addExport <$> rawStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
 -- Primitives.
 
 program = parse $ (
-  [ Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
-  , Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
+  [ addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
+  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
 
 prims = let
   { ii = arr (TC "Int") (TC "Int")
@@ -413,10 +484,6 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
-
-ifz n = ife (0 == n);
-showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
-showInt n s = ifz n ('0':) (showInt' n) s;
 
 -- Conversion to De Bruijn indices.
 
@@ -597,7 +664,7 @@ infer' typed loc ast csn = fpair csn \cs n ->
     ; Proof _ -> undefined
     }
   ; V s -> fmaybe (lookup s loc)
-    (fmaybe (lookup s typed) undefined $ insta . fst)
+    (fmaybe (lookup s typed) (error $ "bad symbol: " ++ s) $ insta . fst)
     ((, csn) . (, ast))
   ; A x y ->
     fpair (infer' typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
@@ -680,7 +747,7 @@ findInst r qn p insts = case insts of
 
 findProof is pred psn = fpair psn \ps n -> case lookup pred ps of
   { Nothing -> case pred of { Pred s t -> case lookup s is of
-    { Nothing -> undefined  -- No instances!
+    { Nothing -> error "no instances"
     ; Just insts -> findInst (findProof is) psn pred insts
     }}
   ; Just s -> (psn, V s)
@@ -704,18 +771,16 @@ prove ienv ta sub = fpair ta \t a ->
   fpair (prove' ienv sub ([], 0) a) \psn x -> fpair psn \ps _ ->
   (Qual (map fst ps) (apply sub t), foldr L x (map snd ps));
 
-data Either a b = Left a | Right b;
-
 dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv typed qi def = fpair def \s expr ->
   fpair (infer' typed [] expr (Just [], 0)) \ta msn ->
   case lookup s typed of
-    { Nothing -> undefined -- No such method.
+    { Nothing -> error $ "no such method: " ++ s
     -- e.g. qac = Eq a => a -> a -> Bool, some AST (product of single method)
     ; Just qac -> fpair msn \ms n -> case ms of
-      { Nothing -> undefined  -- Type check fails.
+      { Nothing -> error "method: type mismatch"
       ; Just sub -> fpair (instantiate (fst qac) n) \q1 n1 -> case q1 of { Qual psc tc -> case psc of
         { [] -> undefined  -- Unreachable.
         ; (:) headPred shouldBeNull -> case qi of { Qual psi ti ->
@@ -727,7 +792,7 @@ inferMethod ienv typed qi def = fpair def \s expr ->
             fpair (instantiate (Qual psi $ apply subc tc) n1) \q2 n2 ->
             case q2 of { Qual ps2 t2 -> fpair ta \tx ax ->
               case match (apply sub tx) t2 of
-                { Nothing -> undefined  -- Class/instance type conflict.
+                { Nothing -> error "class/instance type conflict"
                 ; Just subx -> snd $ prove' ienv (subx @@ sub) (dictVars ps2 0) ax
               }}}}}}}}};
 
@@ -740,89 +805,18 @@ inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
 
 reverse = foldl (flip (:)) [];
 inferDefs ienv defs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
-  { Left def -> fpair def \s expr -> fpair (infer' typed [] (maybeFix s expr) (Just [], 0)) \ta msn ->
-  fpair msn \ms _ -> case maybeMap (prove ienv ta) ms of
+  { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
+    fpair (infer' typed [] (maybeFix s expr) (Just [], 0)) \ta msn ->
+      fpair msn \ms _ -> case maybeMap (prove ienv ta) ms of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> inferDefs ienv rest ((s, qa):typed)
     }
   ; Right inst -> inferDefs ienv rest (inferInst ienv typed inst:typed)
   };
 
-conOf con = case con of { Constr s _ -> s };
-mkCase t cs = (concatMap (('|':) . conOf) cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
-  , ro 'I'));
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
-index n s ss = case ss of
-  { [] -> undefined
-  ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
-  };
-length = foldr (\_ n -> n + 1) 0;
-scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
--- scottConstr t cs c = case c of { Constr s ts -> (s,
---   ( noQual $ foldr arr t ts
---   , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
---   };
-scottConstr t cs c = case c of { Constr s ts -> (s,
-  ( noQual $ foldr arr t ts
-  , scottEncode (map conOf cs) s $ mkStrs ts)) };
-mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
-
-data Neat = Neat
-  -- | Instance environment.
-  [(String, [Qual])]
-  -- | Either top-level or instance definitions.
-  [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
-  -- | Typed ASTs, ready for compilation, including ADTs and methods,
-  -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  [(String, (Qual, Ast))]
-  -- | FFI declarations.
-  [(String, Type)]
-  -- | Exports.
-  [(String, String)]
-  ;
-
-fneat neat f = case neat of { Neat a b c d e -> f a b c d e };
-
-select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
-
-addInstance s q is = fpair (select (\kv -> s == fst kv) is []) \m xs -> case m of
-  { Nothing -> (s, [q]):xs
-  ; Just sqs -> second (q:) sqs:xs
-  };
-
-mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
-
-mkFFIHelper n t acc = case t of
-  { TC s -> acc
-  ; TV s -> undefined
-  ; TAp g y -> case g of
-    { TC s -> ife (s == "IO") acc undefined
-    ; TV s -> undefined
-    ; TAp f x -> case f of
-      { TC s -> ife (s == "->") (L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc) undefined
-      ; TV s -> undefined
-      ; TAp _ _ -> undefined
-      }
-    }
-  };
-
-untangle = foldr (\top acc -> fneat acc \ienv fs typed ffis exs -> case top of
-  { Adt t cs -> Neat ienv fs (mkAdtDefs t cs ++ typed) ffis exs
-  ; Def e f -> Neat ienv (Left f : fs) typed ffis $ case e of
-    { Nothing -> id
-    ; Just name -> ((name, fst f):)
-    }
-    exs
-  ; Class classId v ms -> Neat ienv fs (
-    map (\st -> fpair st \s t -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms
-    ++ typed) ffis exs
-  ; Inst cl q ds -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed ffis exs
-  ; FFI foreignname ourname t -> Neat ienv fs (
-    (ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) ((foreignname, t):ffis) exs
-  }) (Neat [] [] prims [] []);
-
 showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
+
+untangle = foldr ($) $ Neat [] [] prims [] [];
 
 dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed ffis exs -> case inferDefs ienv fs typed of
@@ -856,7 +850,7 @@ argList t = case t of
 cTypeName t = case t of
   { TC s -> ife (s == "()") "void" $
     ife (s == "Int") "int" $
-    ife (s == "Char") "char" undefined
+    ife (s == "Char") "char" $ error $ "bad type constant: " ++ s
   ; TV _ -> undefined
   ; TAp _ _ -> undefined
   };
