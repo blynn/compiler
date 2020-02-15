@@ -15,10 +15,10 @@ undefined = undefined;
 id x = x;
 flip f x y = f y x;
 (&) x f = f x;
-data Bool = True | False ;
+data Bool = True | False;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
-data Ordering = LT | GT | EQ ;
+data Ordering = LT | GT | EQ;
 compare x y = case x <= y of
   { True -> case y <= x of
     { True -> EQ
@@ -39,7 +39,7 @@ instance Ord a => Ord [a] where {
       }
     }
 };
-data Maybe a = Nothing | Just a ;
+data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
@@ -80,7 +80,7 @@ lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 -- Map.
 
-data Map k a = Tip | Bin Int k a (Map k a) (Map k a) ;
+data Map k a = Tip | Bin Int k a (Map k a) (Map k a);
 size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
 node k x l r = Bin (succ $ size l + size r) k x l r;
 singleton k x = Bin 1 k x Tip Tip;
@@ -255,7 +255,7 @@ atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch 
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
-data Assoc = NAssoc | LAssoc | RAssoc ;
+data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
   { NAssoc -> case y of { NAssoc -> True  ; LAssoc -> False ; RAssoc -> False }
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
@@ -280,11 +280,11 @@ opFold precTab e xs = case xs of
   };
 expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
-data Constr = Constr String [Type] ;
-data Pred = Pred String Type ;
-data Qual = Qual [Pred] Type ;
+data Constr = Constr String [Type];
+data Pred = Pred String Type;
+data Qual = Qual [Pred] Type;
 
-data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
+data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type;
 
 arr a b = TAp (TAp (TC "->") a) b;
 
@@ -349,6 +349,8 @@ prims = let
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro 'r'))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'w'))
     , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro '?'))
+    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
+    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
@@ -641,7 +643,7 @@ prove ienv ta sub = fpair ta \t a ->
   fpair (prove' ienv sub ([], 0) a) \psn x -> fpair psn \ps _ ->
   (Qual (map fst ps) (apply sub t), foldr L x (map snd ps));
 
-data Either a b = Left a | Right b ;
+data Either a b = Left a | Right b;
 
 dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
 

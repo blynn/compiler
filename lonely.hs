@@ -22,17 +22,17 @@ class Monad m where
 { return :: a -> m a
 ; (>>=) :: m a -> (a -> m b) -> m b
 };
+(>>) f g = f >>= \_ -> g;
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
-undefined = undefined;
 ($) f x = f x;
 id x = x;
 flip f x y = f y x;
 (&) x f = f x;
-data Bool = True | False ;
+data Bool = True | False;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
-data Ordering = LT | GT | EQ ;
+data Ordering = LT | GT | EQ;
 compare x y = case x <= y of
   { True -> case y <= x of
     { True -> EQ
@@ -53,7 +53,7 @@ instance Ord a => Ord [a] where {
       }
     }
 };
-data Maybe a = Nothing | Just a ;
+data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
@@ -79,6 +79,14 @@ instance Eq a => Eq [a] where { (==) xs ys = case xs of
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
 
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
+mapM_ f = foldr ((>>) . f) (pure ());
+
+instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
+instance Monad IO where { return = ioPure ; (>>=) = ioBind };
+instance Functor IO where { fmap f x = ioPure f <*> x };
+putStr = mapM_ $ putChar . ord;
+error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess;
+undefined = error "undefined";
 foldr1 c l = maybe undefined id (flst l undefined (\h t -> foldr (\x m -> Just (case m of { Nothing -> x ; Just y -> c x y })) Nothing l));
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
@@ -94,7 +102,7 @@ lookup s = foldr (\h t -> fpair h (\k v -> ife (s == k) (Just v) t)) Nothing;
 
 -- Map.
 
-data Map k a = Tip | Bin Int k a (Map k a) (Map k a) ;
+data Map k a = Tip | Bin Int k a (Map k a) (Map k a);
 size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
 node k x l r = Bin (1 + size l + size r) k x l r;
 singleton k x = Bin 1 k x Tip Tip;
@@ -173,7 +181,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 
 -- Parsing.
 
-data Type = TC String | TV String | TAp Type Type ;
+data Type = TC String | TV String | TAp Type Type;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
 data Ast = E Extra | V String | A Ast Ast | L String Ast;
 data Parser a = Parser (String -> Maybe (a, String));
@@ -286,7 +294,10 @@ maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
 rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
-def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
+opDef x f y rhs = (f, L x $ L y rhs);
+def r =
+  opDef <$> varId <*> varSym <*> varId <*> (spch '=' *> r)
+  <|> liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
 globalDef p = Def Nothing (second (A (V "#global")) p);
 eqn r = keyword "global" *> (globalDef <$> (def r))
@@ -300,7 +311,7 @@ atom r = ifthenelse r <|> letin r <|> sqLst r <|> section r <|> cas r <|> lam r 
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
-data Assoc = NAssoc | LAssoc | RAssoc ;
+data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
   { NAssoc -> case y of { NAssoc -> True  ; LAssoc -> False ; RAssoc -> False }
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
@@ -325,11 +336,11 @@ opFold precTab e xs = case xs of
   };
 expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (many (liftA2 (\a b -> (a,b)) (opWithPrec precTab n) (r (succ n))))) (aexp (r 0));
 
-data Constr = Constr String [Type] ;
-data Pred = Pred String Type ;
-data Qual = Qual [Pred] Type ;
+data Constr = Constr String [Type];
+data Pred = Pred String Type;
+data Qual = Qual [Pred] Type;
 
-data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type ;
+data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String Type [(String, Type)] | Inst String Qual [(String, Ast)] | FFI String String Type;
 
 arr a b = TAp (TAp (TC "->") a) b;
 
@@ -399,6 +410,8 @@ prims = let
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro 'r'))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro 'w'))
     , ("#global", (arr (TV "a") (TAp (TC "IORef") (TV "a")), ro '?'))
+    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
+    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
@@ -691,7 +704,7 @@ prove ienv ta sub = fpair ta \t a ->
   fpair (prove' ienv sub ([], 0) a) \psn x -> fpair psn \ps _ ->
   (Qual (map fst ps) (apply sub t), foldr L x (map snd ps));
 
-data Either a b = Left a | Right b ;
+data Either a b = Left a | Right b;
 
 dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
 
@@ -888,12 +901,6 @@ ffiDefine n ffis = case ffis of
       (lazyn . ((ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt)
   };
 
-instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
-instance Monad IO where { return = ioPure ; (>>=) = ioBind };
-instance Functor IO where { fmap f x = ioPure f <*> x };
-
-(>>) f g = f >>= \_ -> g;
-mapM_ f = foldr ((>>) . f) (pure ());
 getContents = getChar >>= \n -> ife (n <= 255) ((chr n:) <$> getContents) (pure []);
 
 upFrom n = n : upFrom (n + 1);
@@ -918,4 +925,4 @@ compile s = fmaybe (program s) "parse error" \progRest ->
       concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
   };
 
-main = getContents >>= mapM_ (putChar . ord) . compile;
+main = getContents >>= putStr . compile;

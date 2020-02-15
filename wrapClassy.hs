@@ -6,6 +6,8 @@ import Prelude (Char, Int, String, succ, Show, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
 import qualified Data.Map as Map
+import System.IO.Unsafe (unsafePerformIO)
+import System.Exit (exitSuccess)
 import Debug.Trace
 (*) = (Prelude.*) :: Int -> Int -> Int
 (+) = (Prelude.+) :: Int -> Int -> Int
