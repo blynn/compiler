@@ -62,8 +62,8 @@ second f p = fpair p \x y -> (x, f y);
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
-(||) f g = ife f True (ife g True False);
-(&&) f g = ife f (ife g True False) False;
+(||) f g = ife f True g;
+(&&) f g = ife f g False;
 flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
 instance Eq a => Eq [a] where { (==) xs ys = case xs of
   { [] -> case ys of
@@ -232,14 +232,18 @@ paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
 digit = sat \x -> (x <= '9') && ('0' <= x);
+symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
 conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
-keyword s = spc (want varLex s);
-varId = spc (wantWith (\s -> not $ s == "of" || s == "where") varLex);
-opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
-op = spc opLex <|> between (spch '`') (spch '`') varId;
-var = varId <|> paren (spc opLex);
-
+keyword s = spc $ want varLex s;
+varId = spc $ wantWith (\s -> not $ elem s ["of", "where", "if", "then", "else"]) varLex;
+opTail = many $ char ':' <|> symbo;
+conSym = spc $ liftA2 (:) (char ':') opTail;
+varSym = spc $ liftA2 (:) symbo opTail;
+con = conId <|> paren conSym;
+var = varId <|> paren varSym;
+op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
+conop = conSym <|> between (spch '`') (spch '`') conId;
 anyOne = fmap itemize (spc (sat (\c -> True)));
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
@@ -249,7 +253,15 @@ litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
 litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
-alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
+
+gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
+
+pat = (,) <$> gcon <*> many varId <|> (\x c y -> (c, [x, y])) <$> varId <*> conop <*> varId;
+
+lamAlt conArgs expr = fpair conArgs \con args -> (con, foldr L expr args);
+
+alt r = lamAlt <$> pat <*> (want varSym "->" *> r);
+
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
@@ -282,8 +294,9 @@ eqn r = keyword "global" *> (globalDef <$> (def r))
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
-
-atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
+ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
+  (keyword "if" *> r) <*> (keyword "then" *> r) <*> (keyword "else" *> r);
+atom r = ifthenelse r <|> letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
@@ -321,7 +334,7 @@ data Top = Adt Type [Constr] | Def (Maybe String) (String, Ast) | Class String T
 arr a b = TAp (TAp (TC "->") a) b;
 
 bType r = foldl1 TAp <$> some r;
-_type r = foldr1 arr <$> sepBy (bType r) (spc (want opLex "->"));
+_type r = foldr1 arr <$> sepBy (bType r) (spc (want varSym "->"));
 typeConst = (\s -> ife (s == "String") (TAp (TC "[]") (TC "Int")) (TC s)) <$> conId;
 aType = spch '(' *> (spch ')' *> pure (TC "()") <|> ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <* spch ')') <|>
   typeConst <|> (TV <$> varId) <|>
@@ -329,7 +342,11 @@ aType = spch '(' *> (spch ')' *> pure (TC "()") <|> ((&) <$> _type aType <*> ((s
 
 simpleType c vs = foldl TAp (TC c) (map TV vs);
 
-adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many varId) <*> (sepBy (Constr <$> conId <*> many aType) (spch '|'));
+-- Can we reduce backtracking here?
+constr = (\x c y -> Constr c [x, y]) <$> aType <*> conSym <*> aType
+  <|> Constr <$> conId <*> many aType;
+
+adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many varId) <*> sepBy constr (spch '|');
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;
@@ -344,7 +361,7 @@ classDecl = keyword "class" *> (Class <$> conId <*> (TV <$> varId) <*> (keyword 
 inst = _type aType;
 instDecl r = keyword "instance" *>
   ((\ps cl ty defs -> Inst cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* want op "=>")) <|> pure [])
+  (((itemize .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 ffiDecl = keyword "ffi" *>
@@ -371,6 +388,7 @@ prims = let
   ; bin s = A (A (ro 'B') (ro 'T')) (A (ro 'T') (ro s)) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
     , ("()", (TC "()", ro 'K'))
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))

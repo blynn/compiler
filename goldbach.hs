@@ -8,7 +8,7 @@ maybe n j m = case m of { Nothing -> n; Just x -> j x };
 
 data Bool = True | False;
 ife a b c = case a of { True -> b ; False -> c };
-(&&) f g = ife f (ife g True False) False;
+(&&) f g = ife f g False;
 
 foldr c n l = case l of { [] -> n; (:) h t -> c h $ foldr c n t };
 any f xs = foldr (\x t -> ife (f x) True t) False xs;

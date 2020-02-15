@@ -21,8 +21,8 @@ second f p = fpair p \x y -> (x, f y);
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
-(||) f g = ife f True (ife g True False);
-(&&) f g = ife f (ife g True False) False;
+(||) f g = ife f True g;
+(&&) f g = ife f g False;
 flst xs n c = case xs of { [] -> n; (:) h t -> c h t };
 lstEq xs ys = case xs of
   { [] -> flst ys True (\h t -> False)
