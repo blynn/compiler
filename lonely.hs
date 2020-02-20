@@ -368,7 +368,7 @@ isFree v expr = case expr of
   { E _ -> False
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
-  ; L w t -> not (v == w || not (isFree v t))
+  ; L w t -> not (v == w) && isFree v t
   };
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
@@ -614,9 +614,8 @@ mgu unify t u = case t of
     }
   };
 
-maybeMap f = maybe Nothing (Just . f);
-
-unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s b));
+instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
+unify a b = maybe Nothing \s -> (@@ s) <$> (mgu unify (apply s a) (apply s b));
 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
@@ -803,7 +802,7 @@ reverse = foldl (flip (:)) [];
 inferDefs ienv defs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
   { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
     fpair (infer' typed [] (maybeFix s expr) (Just [], 0)) \ta msn ->
-      fpair msn \ms _ -> case maybeMap (prove ienv ta) ms of
+      fpair msn \ms _ -> case prove ienv ta <$> ms of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> inferDefs ienv rest ((s, qa):typed)
     }

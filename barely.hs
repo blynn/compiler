@@ -235,7 +235,7 @@ isFree v expr = case expr of
   { E _ -> False
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
-  ; L w t -> not (v == w || not (isFree v t))
+  ; L w t -> not (v == w) && isFree v t
   };
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
