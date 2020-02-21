@@ -428,14 +428,14 @@ enc mem t = case t of
     ife (q == ord 'I') (
       ife (p == ord 'C') (ord 'T', mem) $
       ife (p == ord 'B') (ord 'I', mem) $
-      fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+      fpair mem'' \hp bs -> (hp, (hp + 2, bs . (p:) . (q:)))
     ) $
-    fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+    fpair mem'' \hp bs -> (hp, (hp + 2, bs . (p:) . (q:)))
   };
 
 asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
   fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) qas;
+  (Tip, (128, id)) qas;
 
 -- Type checking.
 
@@ -729,7 +729,7 @@ dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   };
 
 prepAsm entry tabmem = fpair tabmem \tab mem ->
-  maybe undefined id (mlookup entry tab) : reverse (snd mem);
+  maybe undefined id (mlookup entry tab) : snd mem [];
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';

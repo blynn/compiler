@@ -1,4 +1,4 @@
-{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE BlockArguments, LambdaCase #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}

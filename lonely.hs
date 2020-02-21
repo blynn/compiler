@@ -560,21 +560,30 @@ nolam m x = case babs $ debruijn m [] x of
   ; Weak e -> undefined
   };
 
-enc mem t = case t of
+isLeaf t c = case t of { Lf n -> n == ord c ; Nd _ _ -> False };
+
+optim t = case t of
+  { Lf n -> t
+  ; Nd x y -> let { p = optim x; q = optim y } in
+    ife (isLeaf p 'I') q $
+    ife (isLeaf q 'I') (
+      ife (isLeaf p 'C') (Lf $ ord 'T') $
+      ife (isLeaf p 'B') (Lf $ ord 'I') $
+      Nd p q
+    ) $ Nd p q
+  };
+
+enc mem t = case optim t of
   { Lf n -> (n, mem)
-  ; Nd x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
-    ife (p == ord 'I') (q, mem'') $
-    ife (q == ord 'I') (
-      ife (p == ord 'C') (ord 'T', mem) $
-      ife (p == ord 'B') (ord 'I', mem) $
-      fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
-    ) $
-    fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+  ; Nd x y -> fpair mem \hp bs -> let
+    { pm qm = enc (hp + 2, bs . (fst (pm qm):) . (fst qm:)) x
+    ; qm = enc (snd $ pm qm) y
+    } in (hp, snd qm)
   };
 
 asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
   fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) qas;
+  (Tip, (128, id)) qas;
 
 -- Type checking.
 
@@ -904,7 +913,7 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
     ("static const u prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse $ snd mem) .
+    foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
     ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
     ("static u root[]={" ++) .
     foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .

@@ -244,8 +244,7 @@ mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
 adtLookups cs = zipWith (\c n -> case c of { Constr s _ -> (s, \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\c' -> case c' of { Constr s' ts' ->
-    ife (s == s') x $ foldr L (A (V "unsafePerformIO") (V "exitSuccess")) $ map (const "_") ts'
-    }) cs) }) cs $ upFrom 0;
+    ife (s == s') x $ foldr L (V "#") $ map (const "_") ts' }) cs) }) cs $ upFrom 0;
 
 select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
 
@@ -394,7 +393,7 @@ isFree v expr = case expr of
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w) && isFree v t
-  ; Pa vs t -> not (any (isFree v) vs) && isFree v t 
+  ; Pa vs t -> not (any (isFree v) vs) && isFree v t
   };
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
@@ -588,21 +587,30 @@ nolam m x = case babs $ debruijn m [] x of
   ; Weak e -> undefined
   };
 
-enc mem t = case t of
+isLeaf t c = case t of { Lf n -> n == ord c ; Nd _ _ -> False };
+
+optim t = case t of
+  { Lf n -> t
+  ; Nd x y -> let { p = optim x ; q = optim y } in
+    ife (isLeaf p 'I') q $
+    ife (isLeaf q 'I') (
+      ife (isLeaf p 'C') (Lf $ ord 'T') $
+      ife (isLeaf p 'B') (Lf $ ord 'I') $
+      Nd p q
+    ) $ Nd p q
+  };
+
+enc mem t = case optim t of
   { Lf n -> (n, mem)
-  ; Nd x y -> fpair (enc mem x) \p mem' -> fpair (enc mem' y) \q mem'' ->
-    ife (p == ord 'I') (q, mem'') $
-    ife (q == ord 'I') (
-      ife (p == ord 'C') (ord 'T', mem) $
-      ife (p == ord 'B') (ord 'I', mem) $
-      fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
-    ) $
-    fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+  ; Nd x y -> fpair mem \hp bs -> let
+    { pm qm = enc (hp + 2, bs . (fst (pm qm):) . (fst qm:)) x
+    ; qm = enc (snd $ pm qm) y
+    } in (hp, snd qm)
   };
 
 asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
   fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) qas;
+  (Tip, (128, id)) qas;
 
 -- Type checking.
 
@@ -680,7 +688,7 @@ varName s = case head s of
 
 data Pat = PatPred Ast | PatVar String | PatCon String [Ast];
 
-plist t acc = case t of
+ast2pat t acc = case t of
   { E x -> case x of
     { Basic _ -> undefined
     ; Const c -> PatPred $ A (V "==") t
@@ -691,23 +699,43 @@ plist t acc = case t of
     { Nothing -> PatCon s acc
     ; Just s -> PatVar s
     }
-  ; A x y -> plist x (y:acc)
+  ; A x y -> ast2pat x (y:acc)
   ; L _ _ -> undefined
   ; Pa _ _ -> undefined
   };
 
-unpat dcs as n x = case as of
-  { [] -> x
-  ; a:at -> case plist a [] of
-    { PatPred pre -> let { freshv = showInt n "@" } in
-        L freshv $ unpat dcs at (n + 1) $ A (A (A pre $ V freshv) x) $ A (V "unsafePerformIO") (V "exitSuccess")
-    ; PatVar s -> L s $ unpat dcs at n x
+unpat la dcs n as x = case as of
+  { [] -> (x, n)
+  ; a:at -> case ast2pat a [] of
+    { PatPred pre -> let { freshv = showInt n "#" } in
+      first (la freshv)  $ unpat la dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
+    ; PatVar s -> first (la s) $ unpat la dcs n at x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
-      ; Just f -> let { freshv = showInt n "@" } in
-        L freshv $ unpat dcs at (n + 1) $ f (V freshv) $ unpat dcs args (n + 1) x
+      ; Just f -> let { freshv = showInt n "#" } in fpair (unpat L dcs (n + 1) args x) \y n1 ->
+        first (la freshv) $ unpat la dcs n1 at $ f (V freshv) y
       }
     }
+  };
+
+rewritePats dcs asxs n = case asxs of
+  { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
+  ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y n1 ->
+    first (A (L "#" y)) $ rewritePats dcs asxt n1
+  };
+
+renFree s s' t = case t of
+  { E _ -> t
+  ; V v -> ife (s == v) (V s') t
+  ; A x y -> A (renFree s s' x) (renFree s s' y)
+  ; L v x -> ife (s == v) t $ L v $ renFree s s' x
+  ; Pa vs x -> ife (any (isFree s) vs) t $ Pa vs $ renFree s s' x
+  };
+
+renPat soloSub t = fpair soloSub \v s -> case ast2pat v [] of
+  { PatPred _ -> t
+  ; PatVar x -> renFree x s t
+  ; PatCon _ _ -> t
   };
 
 --type AdtTab = [(String, Ast -> Ast)]
@@ -736,7 +764,12 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
     fpair (infer' dcs typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' dcs typed ((s, va):loc) x (cs, n + 1))
-  ; Pa vs x -> infer' dcs typed loc (unpat dcs vs 0 x) csn
+  ; Pa vs x -> let
+    { ls = zipWith (,) vs $ map (flip showInt "#") $ upFrom n
+    ; x' = foldr renPat x ls
+    ; ren1 = rewritePats dcs [(vs, x')] n
+    }
+    in fpair ren1 \re n1 -> infer' dcs typed loc (flip (foldr L) (map snd ls) re) (cs, n1)
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -881,7 +914,34 @@ inferDefs ienv defs dcs typed = flst defs (Right $ reverse typed) \edef rest -> 
 
 showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
 
-untangle = foldr ($) $ Neat [] [] prims [] [] [];
+coalesce' = \case
+  { [] -> []
+  ; (:) h fs -> case h of
+    { Left f -> flst fs [Left f] \h t -> case h of
+      { Left f' -> fpair f' \s' x' -> fpair f \s x -> ife (s == s')
+        ( let { bad = error "bad multidef" } in case x of
+          { E _ -> bad
+          ; V _ -> bad
+          ; A _ _ -> bad
+          ; L _ _ -> bad
+          ; Pa vs t -> case x' of
+            { E _ -> bad
+            ; V _ -> bad
+            ; A _ _ -> bad
+            ; L _ _ -> bad
+            ; Pa vs' t' -> Left f : fs
+            }
+          }
+        ) $ Left f : fs
+      ; Right _ -> Left f : fs
+      }
+    ; Right _ -> h:coalesce' fs
+    }
+  };
+
+coalesce ne = fneat ne \a b c d e -> Neat a (coalesce' b) c d e;
+
+untangle = coalesce . foldr ($) (Neat [] [] prims [] [] []);
 
 dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
@@ -971,7 +1031,7 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
     ("static const u prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse $ snd mem) .
+    foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
     ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
     ("static u root[]={" ++) .
     foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .

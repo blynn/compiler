@@ -440,14 +440,14 @@ enc mem t = case t of
     ife (q == ord 'I') (
       ife (p == ord 'C') (ord 'T', mem) $
       ife (p == ord 'B') (ord 'I', mem) $
-      fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+      fpair mem'' \hp bs -> (hp, (hp + 2, bs . (p:) . (q:)))
     ) $
-    fpair mem'' \hp bs -> (hp, (hp + 2, q:p:bs))
+    fpair mem'' \hp bs -> (hp, (hp + 2, bs . (p:) . (q:)))
   };
 
 asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
   fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
-  (Tip, (128, [])) qas;
+  (Tip, (128, id)) qas;
 
 -- Type checking.
 
@@ -849,7 +849,7 @@ compile s = fmaybe (program s) "parse error" \progRest ->
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
     ("static const u prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) $ reverse $ snd mem) .
+    foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
     ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
     ("static u root[]={" ++) .
     foldr (\p f -> fpair p \x y -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
