@@ -1,4 +1,4 @@
--- Standalone compiler.
+-- Patterns.
 infixr 9 .;
 infixl 7 *;
 infixl 6 + , -;
@@ -234,10 +234,6 @@ index n s ss = case ss of
   };
 length = foldr (\_ n -> n + 1) 0;
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
--- scottConstr t cs c = case c of { Constr s ts -> (s,
---   ( noQual $ foldr arr t ts
---   , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
---   };
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
@@ -280,7 +276,7 @@ addClass classId v ms acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv f
 addInst cl q ds acc = fneat acc \ienv fs typed dcs ffis exs -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv fs
   ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
-addDef f acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv (Left f : fs) typed dcs ffis exs;
+addDefs ds acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
 addExport e f acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv fs typed dcs ffis ((e, f):exs);
 
 instance Applicative Parser where
@@ -340,7 +336,7 @@ symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
 conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
 keyword s = spc $ want varLex s;
-varId = spc $ wantWith (\s -> not $ elem s ["of", "where", "if", "then", "else"]) varLex;
+varId = spc $ wantWith (\s -> not $ elem s ["class", "data", "instance", "of", "where", "if", "then", "else"]) varLex;
 opTail = many $ char ':' <|> symbo;
 conSym = spc $ liftA2 (:) (char ':') opTail;
 varSym = spc $ liftA2 (:) symbo opTail;
@@ -426,12 +422,30 @@ rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 opDef x f y rhs = (f, onePat [x, y] rhs);
 
+coalesce ds = flst ds [] \h t -> flst t [h] \h' t' ->
+  fpair h' \s' x' -> fpair h \s x -> ife (s == s')
+    ( let { bad = error "bad multidef" } in case x of
+      { E _ -> bad
+      ; V _ -> bad
+      ; A _ _ -> bad
+      ; L _ _ -> bad
+      ; Pa vsts -> case x' of
+        { E _ -> bad
+        ; V _ -> bad
+        ; A _ _ -> bad
+        ; L _ _ -> bad
+        ; Pa vsts' -> coalesce $ (s, Pa $ vsts ++ vsts'):t'
+        }
+      }
+    ) $ h:coalesce t
+  ;
+
 def r =
   opDef <$> apat <*> varSym <*> apat <*> (spch '=' *> r)
   <|> liftA2 (,) var (liftA2 onePat (many apat) (spch '=' *> r));
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> optiApp name t $ maybeFix name def)) x ls;
-letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
+letin r = addLets <$> between (keyword "let") (keyword "in") (coalesce <$> braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (keyword "if" *> r) <*> (keyword "then" *> r) <*> (keyword "else" *> r);
 atom r = ifthenelse r <|> letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
@@ -490,7 +504,7 @@ inst = _type aType;
 instDecl r = keyword "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
   (((itemize .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
-    <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
+    <*> conId <*> inst <*> (keyword "where" *> (coalesce <$> braceSep (def r))));
 
 ffiDecl = keyword "ffi" *>
   (addFFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
@@ -500,7 +514,7 @@ tops precTab = sepBy
   <|> classDecl
   <|> instDecl (expr precTab 0)
   <|> ffiDecl
-  <|> addDef <$> def (expr precTab 0)
+  <|> addDefs . coalesce <$> sepBy1 (def $ expr precTab 0) (spch ';')
   <|> keyword "export" *> (addExport <$> rawStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
@@ -738,19 +752,19 @@ unpat la dcs n as x = case as of
   ; a:at -> case ast2pat a [] of
     { PatPred pre -> let { freshv = showInt n "#" } in
       first (la freshv) $ unpat la dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
-    ; PatVar s -> first (la s) $ unpat la dcs n at x
+    ; PatVar s -> first (la s) $ unpat la dcs (n + 1) at x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
       ; Just f -> let { freshv = showInt n "#" } in fpair (unpat L dcs (n + 1) args x) \y n1 ->
-        first (la freshv) $ unpat la dcs n1 at $ f (V freshv) y
+        first (la freshv) $ unpat la dcs (n + 1) at $ f (V freshv) y
       }
     }
   };
 
 rewritePats dcs asxs n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
-  ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y n1 ->
-    first (optiApp "#" y) $ rewritePats dcs asxt n1
+  ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y _ ->
+    first (optiApp "#" y) $ rewritePats dcs asxt n
   };
 
 renPat soloSub t = fpair soloSub \v s -> case ast2pat v [] of
@@ -865,7 +879,7 @@ findInst r qn p insts = case insts of
 
 findProof is pred psn = fpair psn \ps n -> case lookup pred ps of
   { Nothing -> case pred of { Pred s t -> case lookup s is of
-    { Nothing -> error "no instances"
+    { Nothing -> error $ "no instances: " ++ s
     ; Just insts -> findInst (findProof is) psn pred insts
     }}
   ; Just s -> (psn, V s)
@@ -936,34 +950,7 @@ inferDefs ienv defs dcs typed = flst defs (Right $ reverse typed) \edef rest -> 
 
 showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
 
-coalesce' = \case
-  { [] -> []
-  ; (:) h t -> case h of
-    { Left f -> flst t [h] \h' t' -> case h' of
-      { Left f' -> fpair f' \s' x' -> fpair f \s x -> ife (s == s')
-        ( let { bad = error "bad multidef" } in case x of
-          { E _ -> bad
-          ; V _ -> bad
-          ; A _ _ -> bad
-          ; L _ _ -> bad
-          ; Pa vsts -> case x' of
-            { E _ -> bad
-            ; V _ -> bad
-            ; A _ _ -> bad
-            ; L _ _ -> bad
-            ; Pa vsts' -> Left (s, Pa $ vsts ++ vsts'):coalesce' t'
-            }
-          }
-        ) $ h:coalesce' t
-      ; Right _ -> h:h':coalesce' t'
-      }
-    ; Right _ -> h:coalesce' t
-    }
-  };
-
-coalesce ne = fneat ne \a b c d e -> Neat a (coalesce' b) c d e;
-
-untangle = coalesce . foldr ($) (Neat [] [] prims [] [] []);
+untangle = foldr ($) (Neat [] [] prims [] [] []);
 
 dumpTypes s = fmaybe (program s) "parse error" \progRest ->
   fpair progRest \prog rest -> fneat (untangle prog) \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
