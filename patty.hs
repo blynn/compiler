@@ -398,6 +398,28 @@ isFree v expr = case expr of
   ; Pa vsts -> any (\vst -> fpair vst \vs t -> not (any (isFree v) vs) && isFree v t) vsts
   };
 
+freeCount v expr = case expr of
+  { E _ -> 0
+  ; V s -> ife (s == v) 1 0
+  ; A x y -> freeCount v x + freeCount v y
+  ; L w t -> ife (v == w) 0 $ freeCount v t
+  ; Pa vsts -> foldr (+) 0 $ map (\vst -> fpair vst \vs t -> ife (any (isFree v) vs) 0 $ freeCount v t) vsts
+  };
+
+overFree s f t = case t of
+  { E _ -> t
+  ; V s' -> ife (s == s') (f t) t
+  ; A x y -> A (overFree s f x) (overFree s f y)
+  ; L s' t' -> ife (s == s') t $ L s' $ overFree s f t'
+  ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFree s) vs) vsx (vs, overFree s f x)) vsxs
+  };
+
+beta s t x = overFree s (const t) x;
+
+optiApp s x = let { n = freeCount s x } in
+  ife (2 <= n) (A $ L s x)
+    $ ife (0 == n) (const x) (flip (beta s) x);
+
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
 rawOne delim = escChar <|> sat (\c -> not (c == delim));
@@ -408,7 +430,7 @@ def r =
   opDef <$> apat <*> varSym <*> apat <*> (spch '=' *> r)
   <|> liftA2 (,) var (liftA2 onePat (many apat) (spch '=' *> r));
 
-addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
+addLets ls x = foldr (\p t -> fpair p (\name def -> optiApp name t $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (keyword "if" *> r) <*> (keyword "then" *> r) <*> (keyword "else" *> r);
@@ -722,25 +744,15 @@ unpat la dcs n as x = case as of
     }
   };
 
-optiApp s x = ife (isFree s x) (A $ L s x) (const x);
-
 rewritePats dcs asxs n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
   ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y n1 ->
     first (optiApp "#" y) $ rewritePats dcs asxt n1
   };
 
-renFree s s' t = case t of
-  { E _ -> t
-  ; V v -> ife (s == v) (V s') t
-  ; A x y -> A (renFree s s' x) (renFree s s' y)
-  ; L v x -> ife (s == v) t $ L v $ renFree s s' x
-  ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFree s) vs) vsx (vs, renFree s s' x)) vsxs
-  };
-
 renPat soloSub t = fpair soloSub \v s -> case ast2pat v [] of
   { PatPred _ -> t
-  ; PatVar x -> renFree x s t
+  ; PatVar x -> beta x (V s) t
   ; PatCon _ _ -> t
   };
 
