@@ -722,10 +722,12 @@ unpat la dcs n as x = case as of
     }
   };
 
+optiApp s x = ife (isFree s x) (A $ L s x) (const x);
+
 rewritePats dcs asxs n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
   ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y n1 ->
-    first (A (L "#" y)) $ rewritePats dcs asxt n1
+    first (optiApp "#" y) $ rewritePats dcs asxt n1
   };
 
 renFree s s' t = case t of
