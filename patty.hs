@@ -635,8 +635,11 @@ enc mem t = case optim t of
   };
 
 asm qas = foldl (\tabmem def -> fpair def \s qt -> fpair tabmem \tab mem ->
-  fpair (enc mem $ nolam tab $ snd qt) \p m' -> (insert s p tab, m'))
-  (Tip, (128, id)) qas;
+  fpair (enc mem $ nolam (insert s (fst mem) tab) $ snd qt) \p m' -> let
+  -- Definitions like "t = t;" must be handled with care.
+  { m'' = fpair m' \hp bs -> ife (p == hp) (hp + 2, bs . (ord 'I':) . (p:)) m'
+  } in (insert s p tab, m''))
+    (Tip, (128, id)) qas;
 
 -- Type checking.
 
@@ -883,9 +886,10 @@ prove' ienv sub psn a = case a of
   };
 
 --prove :: [(String, [Qual])] -> (Type, Ast) -> Subst -> (Qual, Ast)
-prove ienv ta sub = fpair ta \t a ->
+prove ienv s ta sub = fpair ta \t a ->
   fpair (prove' ienv sub ([], 0) a) \psn x -> fpair psn \ps _ ->
-  (Qual (map fst ps) (apply sub t), foldr L x (map snd ps));
+  let { applyDicts expr = foldl A expr $ map (V . snd) ps }
+  in (Qual (map fst ps) (apply sub t), foldr L (overFree s applyDicts x) $ map snd ps);
 
 dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVars pt $ n + 1);
 
@@ -916,14 +920,14 @@ genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
 
 inferInst ienv dcs typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in
-  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv dcs typed q) ds)) (map snd $ fst $ dictVars ps 0))
+  (s, (,) (noQual $ TC "DICT") $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv dcs typed q) ds)) (map snd $ fst $ dictVars ps 0))
   };
 
 reverse = foldl (flip (:)) [];
 inferDefs ienv defs dcs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
   { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
-    fpair (infer' dcs typed [] (maybeFix s expr) (Just [], 0)) \ta msn ->
-      fpair msn \ms _ -> case prove ienv ta <$> ms of
+    fpair (infer' dcs typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
+      fpair msn \ms _ -> case prove ienv s ta <$> (unify (TV "self!") (fst ta) ms) of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> inferDefs ienv rest dcs ((s, qa):typed)
     }
