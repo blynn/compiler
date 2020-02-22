@@ -283,22 +283,22 @@ addDef f acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv (Left f : fs) 
 addExport e f acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv fs typed dcs ffis ((e, f):exs);
 
 instance Applicative Parser where
-  { pure x = Parser \inp -> Just (x, inp)
-  ; (<*>) x y = Parser \inp -> case parse x inp of
+{ pure x = Parser \inp -> Just (x, inp)
+; (<*>) x y = Parser \inp -> case parse x inp of
+  { Nothing -> Nothing
+  ; Just funt -> fpair funt \fun t -> case parse y t of
     { Nothing -> Nothing
-    ; Just funt -> fpair funt \fun t -> case parse y t of
-      { Nothing -> Nothing
-      ; Just argu -> fpair argu \arg u -> Just (fun arg, u)
-      }
+    ; Just argu -> fpair argu \arg u -> Just (fun arg, u)
     }
-  };
+  }
+};
 instance Monad Parser where
-  { return = pure
-  ; (>>=) x f = Parser \inp -> case parse x inp of
-    { Nothing -> Nothing
-    ; Just at -> fpair at \a t -> parse (f a) t
-    }
-  };
+{ return = pure
+; (>>=) x f = Parser \inp -> case parse x inp of
+  { Nothing -> Nothing
+  ; Just at -> fpair at \a t -> parse (f a) t
+  }
+};
 
 sat' f = \h t -> ife (f h) (Just (h, t)) Nothing;
 sat f = Parser \inp -> flst inp Nothing (sat' f);
