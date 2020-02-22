@@ -77,6 +77,7 @@ instance Eq a => Eq [a] where { (==) xs ys = case xs of
     ; (:) y yt -> x == y && xt == yt
     }
   }};
+take n xs = ife (n == 0) [] $ flst xs [] $ \h t -> h:take (n - 1) t;
 
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
 instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
@@ -192,7 +193,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [Ast] Ast;
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Ast], Ast)];
 ro = E . Basic . ord;
 data Parser a = Parser (String -> Maybe (a, String));
 
@@ -372,7 +373,7 @@ apat = apat' pat;
 
 casePat = (,) <$> gcon <*> many apat <|> (\x c y -> (c, [x, y])) <$> apat <*> conop <*> apat;
 
-lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa args expr);
+lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(args, expr)]);
 
 alt r = lamAlt <$> casePat <*> (want varSym "->" *> r);
 
@@ -381,7 +382,8 @@ alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
-lam r = spch '\\' *> (lamCase r <|> liftA2 Pa (some apat) (char '-' *> (spch '>' *> r)));
+onePat vs x = Pa [(vs, x)];
+lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (char '-' *> (spch '>' *> r)));
 
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
@@ -393,18 +395,18 @@ isFree v expr = case expr of
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w) && isFree v t
-  ; Pa vs t -> not (any (isFree v) vs) && isFree v t
+  ; Pa vsts -> any (\vst -> fpair vst \vs t -> not (any (isFree v) vs) && isFree v t) vsts
   };
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
 rawOne delim = escChar <|> sat (\c -> not (c == delim));
 rawStr = between (char '"') (spch '"') (many (rawOne '"'));
-opDef x f y rhs = (f, Pa [x, y] rhs);
+opDef x f y rhs = (f, onePat [x, y] rhs);
 
 def r =
   opDef <$> apat <*> varSym <*> apat <*> (spch '=' *> r)
-  <|> liftA2 (,) var (liftA2 Pa (many apat) (spch '=' *> r));
+  <|> liftA2 (,) var (liftA2 onePat (many apat) (spch '=' *> r));
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
@@ -494,6 +496,8 @@ prims = let
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
+    -- Pattern matching helper:
+    , ("if#", (arr (arr (TV "a") $ TC "Bool") $ arr (TV "a") $ arr (TV "b") $ arr (TV "b") (TV "b"), ro 'I'))
     , ("()", (TC "()", ro 'K'))
     , ("chr", (ii, ro 'I'))
     , ("ord", (ii, ro 'I'))
@@ -522,7 +526,7 @@ debruijn m n e = case e of
     foldr (\h found -> ife (h == v) (Just Ze) (maybe Nothing (Just . Su) found)) Nothing n
   ; A x y -> App (debruijn m n x) (debruijn m n y)
   ; L s t -> La (debruijn m (s:n) t)
-  ; Pa _ _ -> undefined
+  ; Pa _ -> undefined
   };
 
 -- Kiselyov bracket abstraction.
@@ -691,8 +695,8 @@ data Pat = PatPred Ast | PatVar String | PatCon String [Ast];
 ast2pat t acc = case t of
   { E x -> case x of
     { Basic _ -> undefined
-    ; Const c -> PatPred $ A (V "==") t
-    ; StrCon s -> PatPred $ A (V "==") t
+    ; Const c -> PatPred $ A (V "if#") (A (V "==") t)
+    ; StrCon s -> PatPred $ A (V "if#") (A (V "==") t)
     ; Proof _ -> undefined
     }
   ; V s -> case varName s of
@@ -701,14 +705,14 @@ ast2pat t acc = case t of
     }
   ; A x y -> ast2pat x (y:acc)
   ; L _ _ -> undefined
-  ; Pa _ _ -> undefined
+  ; Pa _ -> undefined
   };
 
 unpat la dcs n as x = case as of
   { [] -> (x, n)
   ; a:at -> case ast2pat a [] of
     { PatPred pre -> let { freshv = showInt n "#" } in
-      first (la freshv)  $ unpat la dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
+      first (la freshv) $ unpat la dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
     ; PatVar s -> first (la s) $ unpat la dcs n at x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
@@ -729,7 +733,7 @@ renFree s s' t = case t of
   ; V v -> ife (s == v) (V s') t
   ; A x y -> A (renFree s s' x) (renFree s s' y)
   ; L v x -> ife (s == v) t $ L v $ renFree s s' x
-  ; Pa vs x -> ife (any (isFree s) vs) t $ Pa vs $ renFree s s' x
+  ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFree s) vs) vsx (vs, renFree s s' x)) vsxs
   };
 
 renPat soloSub t = fpair soloSub \v s -> case ast2pat v [] of
@@ -764,12 +768,12 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
     fpair (infer' dcs typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' dcs typed ((s, va):loc) x (cs, n + 1))
-  ; Pa vs x -> let
-    { ls = zipWith (,) vs $ map (flip showInt "#") $ upFrom n
-    ; x' = foldr renPat x ls
-    ; ren1 = rewritePats dcs [(vs, x')] n
+  ; Pa vsxs -> let
+    { ls = map (flip showInt "#") $ take (length $ maybe undefined fst $ head vsxs) $ upFrom n
+    ; renArgs vsx = fpair vsx \vs x -> (vs, foldr renPat x $ zipWith (,) vs ls)
+    ; ren1 = rewritePats dcs (map renArgs vsxs) n
     }
-    in fpair ren1 \re n1 -> infer' dcs typed loc (flip (foldr L) (map snd ls) re) (cs, n1)
+    in fpair ren1 \re n1 -> infer' dcs typed loc (flip (foldr L) ls re) (cs, n1)
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -861,7 +865,7 @@ prove' ienv sub psn a = case a of
   ; A x y -> let { p1 = prove' ienv sub psn x } in fpair p1 \psn1 x1 ->
     second (A x1) (prove' ienv sub psn1 y)
   ; L s t -> second (L s) (prove' ienv sub psn t)
-  ; Pa _ _ -> undefined
+  ; Pa _ -> undefined
   };
 
 --prove :: [(String, [Qual])] -> (Type, Ast) -> Subst -> (Qual, Ast)
@@ -916,26 +920,26 @@ showQual q = case q of { Qual ps t -> concatMap showPred ps ++ showType t };
 
 coalesce' = \case
   { [] -> []
-  ; (:) h fs -> case h of
-    { Left f -> flst fs [Left f] \h t -> case h of
+  ; (:) h t -> case h of
+    { Left f -> flst t [h] \h' t' -> case h' of
       { Left f' -> fpair f' \s' x' -> fpair f \s x -> ife (s == s')
         ( let { bad = error "bad multidef" } in case x of
           { E _ -> bad
           ; V _ -> bad
           ; A _ _ -> bad
           ; L _ _ -> bad
-          ; Pa vs t -> case x' of
+          ; Pa vsts -> case x' of
             { E _ -> bad
             ; V _ -> bad
             ; A _ _ -> bad
             ; L _ _ -> bad
-            ; Pa vs' t' -> Left f : fs
+            ; Pa vsts' -> Left (s, Pa $ vsts ++ vsts'):coalesce' t'
             }
           }
-        ) $ Left f : fs
-      ; Right _ -> Left f : fs
+        ) $ h:coalesce' t
+      ; Right _ -> h:h':coalesce' t'
       }
-    ; Right _ -> h:coalesce' fs
+    ; Right _ -> h:coalesce' t
     }
   };
 
