@@ -108,6 +108,7 @@ all f = foldr (&&) True . map f;
 any f = foldr (||) False . map f;
 upFrom n = n : upFrom (n + 1);
 zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt;
+zip = zipWith (,);
 
 -- Map.
 
@@ -357,7 +358,7 @@ sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
 gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
 
 flipPairize y x = A (A (V ",") x) y;
-apat' r = V <$> var
+apat' r = (&) <$> var <*> (want varSym "@" *> (flip L <$> apat' r) <|> pure V)
   <|> V <$> gcon
   <|> lit
   <|> sqLst r
@@ -729,7 +730,7 @@ varName s = case head s of
   ; Just c -> ife ('_' == c || 'a' <= c && c <= 'z') (Just s) Nothing
   };
 
-data Pat = PatPred Ast | PatVar String | PatCon String [Ast];
+data Pat = PatPred Ast | PatVar String (Maybe Pat) | PatCon String [Ast];
 
 ast2pat t acc = case t of
   { E x -> case x of
@@ -740,37 +741,43 @@ ast2pat t acc = case t of
     }
   ; V s -> case varName s of
     { Nothing -> PatCon s acc
-    ; Just s -> PatVar s
+    ; Just s -> PatVar s Nothing
     }
   ; A x y -> ast2pat x (y:acc)
-  ; L _ _ -> undefined
+  ; L s t -> PatVar s $ Just $ ast2pat t acc
   ; Pa _ -> undefined
   };
 
-unpat la dcs n as x = case as of
+unpat dcs n as x = case as of
   { [] -> (x, n)
-  ; a:at -> case ast2pat a [] of
-    { PatPred pre -> let { freshv = showInt n "#" } in
-      first (la freshv) $ unpat la dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
-    ; PatVar s -> first (la s) $ unpat la dcs (n + 1) at x
+  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case ast2pat a [] of
+    { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
+    ; PatVar s _ -> unpat dcs (n + 1) at $ beta s (V freshv) x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
-      ; Just f -> let { freshv = showInt n "#" } in fpair (unpat L dcs (n + 1) args x) \y n1 ->
-        first (la freshv) $ unpat la dcs (n + 1) at $ f (V freshv) y
+      ; Just f -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ f (V freshv) y
       }
     }
   };
 
-rewritePats dcs asxs n = case asxs of
-  { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
-  ; (:) asx asxt -> fpair asx \as x -> fpair (unpat (const id) dcs n as x) \y _ ->
-    first (optiApp "#" y) $ rewritePats dcs asxt n
+unpatTop dcs n als x = case als of
+  { [] -> (x, n)
+  ; al:alt -> fpair al \a l -> let
+    { go p t = case p of
+      { PatPred pre -> unpatTop dcs n alt $ A (A (A pre $ V l) t) $ V "#"
+      ; PatVar s m -> maybe (unpatTop dcs n alt) go m $ beta s (V l) t
+      ; PatCon con args -> case lookup con dcs of
+        { Nothing -> error "bad data constructor"
+        ; Just f -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ f (V l) y
+        }
+      }
+    } in go (ast2pat a []) x
   };
 
-renPat soloSub t = fpair soloSub \v s -> case ast2pat v [] of
-  { PatPred _ -> t
-  ; PatVar x -> beta x (V s) t
-  ; PatCon _ _ -> t
+rewritePats dcs asxs ls n = case asxs of
+  { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
+  ; (:) asx asxt -> fpair asx \as x -> fpair (unpatTop dcs n (zip as ls) x) \y n1 ->
+    first (optiApp "#" y) $ rewritePats dcs asxt ls n1
   };
 
 --type AdtTab = [(String, Ast -> Ast)]
@@ -801,8 +808,7 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' dcs typed ((s, va):loc) x (cs, n + 1))
   ; Pa vsxs -> let
     { ls = map (flip showInt "#") $ take (length $ maybe undefined fst $ head vsxs) $ upFrom n
-    ; renArgs vsx = fpair vsx \vs x -> (vs, foldr renPat x $ zipWith (,) vs ls)
-    ; ren1 = rewritePats dcs (map renArgs vsxs) n
+    ; ren1 = rewritePats dcs vsxs ls (n + length ls)
     }
     in fpair ren1 \re n1 -> infer' dcs typed loc (flip (foldr L) ls re) (cs, n1)
   };
