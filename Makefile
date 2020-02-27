@@ -16,6 +16,9 @@ vm:vm.c;cc -O2 $^ -o $@
 raw:vm;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c;cc -O2 $^ -o $@
+patty.c:lonely patty.hs rts.c;(cat rts.c && ./lonely < patty.hs) > $@
+patty:patty.c;cc -O2 $^ -o $@
+hilsys.c:patty hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./patty) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c;cc -O2 $^ -o $@
 

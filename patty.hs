@@ -194,7 +194,9 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Ast], Ast)];
+data Pat = PatPred Ast | PatVar String (Maybe Pat) | PatCon String [Pat];
+
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)];
 ro = E . Basic . ord;
 data Parser a = Parser (String -> Maybe (a, String));
 
@@ -370,7 +372,33 @@ apat = apat' pat;
 
 casePat = (,) <$> gcon <*> many apat <|> (\x c y -> (c, [x, y])) <$> apat <*> conop <*> apat;
 
-lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(args, expr)]);
+head xs = case xs of
+  { [] -> Nothing
+  ; h:t -> Just h
+  };
+
+varName s = case head s of
+  { Nothing -> Nothing
+  ; Just c -> ife (elem c ":[(," || 'A' <= c && c <= 'Z') Nothing (Just s)
+  };
+
+ast2pat t acc = case t of
+  { E x -> case x of
+    { Basic _ -> undefined
+    ; Const c -> PatPred $ A (V "if#") (A (V "==") t)
+    ; StrCon s -> PatPred $ A (V "if#") (A (V "==") t)
+    ; Proof _ -> undefined
+    }
+  ; V s -> case varName s of
+    { Nothing -> PatCon s acc
+    ; Just s -> PatVar s Nothing
+    }
+  ; A x y -> ast2pat x (ast2pat y []:acc)
+  ; L s t -> PatVar s $ Just $ ast2pat t acc
+  ; Pa _ -> undefined
+  };
+
+lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(flip ast2pat [] <$> args, expr)]);
 
 alt r = lamAlt <$> casePat <*> (want varSym "->" *> r);
 
@@ -379,7 +407,7 @@ alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
-onePat vs x = Pa [(vs, x)];
+onePat vs x = Pa [(flip ast2pat [] <$> vs, x)];
 lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (char '-' *> (spch '>' *> r)));
 
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
@@ -387,12 +415,18 @@ parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pu
 rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
+isFreePat v = \case
+  { PatPred _ -> False
+  ; PatVar s m -> s == v || maybe False (isFreePat v) m
+  ; PatCon _ args -> any (isFreePat v) args
+  };
+
 isFree v expr = case expr of
   { E _ -> False
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w) && isFree v t
-  ; Pa vsts -> any (\vst -> fpair vst \vs t -> not (any (isFree v) vs) && isFree v t) vsts
+  ; Pa vsts -> any (\vst -> fpair vst \vs t -> not (any (isFreePat v) vs) && isFree v t) vsts
   };
 
 freeCount v expr = case expr of
@@ -400,7 +434,7 @@ freeCount v expr = case expr of
   ; V s -> ife (s == v) 1 0
   ; A x y -> freeCount v x + freeCount v y
   ; L w t -> ife (v == w) 0 $ freeCount v t
-  ; Pa vsts -> foldr (+) 0 $ map (\vst -> fpair vst \vs t -> ife (any (isFree v) vs) 0 $ freeCount v t) vsts
+  ; Pa vsts -> foldr (+) 0 $ map (\vst -> fpair vst \vs t -> ife (any (isFreePat v) vs) 0 $ freeCount v t) vsts
   };
 
 overFree s f t = case t of
@@ -408,7 +442,7 @@ overFree s f t = case t of
   ; V s' -> ife (s == s') (f t) t
   ; A x y -> A (overFree s f x) (overFree s f y)
   ; L s' t' -> ife (s == s') t $ L s' $ overFree s f t'
-  ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFree s) vs) vsx (vs, overFree s f x)) vsxs
+  ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFreePat s) vs) vsx (vs, overFree s f x)) vsxs
   };
 
 beta s t x = overFree s (const t) x;
@@ -720,37 +754,9 @@ instantiate qt n = case qt of { Qual ps t ->
 --type SymTab = [(String, (Qual, Ast))];
 --type Subst = [(String, Type)];
 
-head xs = case xs of
-  { [] -> Nothing
-  ; h:t -> Just h
-  };
-
-varName s = case head s of
-  { Nothing -> Nothing
-  ; Just c -> ife ('_' == c || 'a' <= c && c <= 'z') (Just s) Nothing
-  };
-
-data Pat = PatPred Ast | PatVar String (Maybe Pat) | PatCon String [Ast];
-
-ast2pat t acc = case t of
-  { E x -> case x of
-    { Basic _ -> undefined
-    ; Const c -> PatPred $ A (V "if#") (A (V "==") t)
-    ; StrCon s -> PatPred $ A (V "if#") (A (V "==") t)
-    ; Proof _ -> undefined
-    }
-  ; V s -> case varName s of
-    { Nothing -> PatCon s acc
-    ; Just s -> PatVar s Nothing
-    }
-  ; A x y -> ast2pat x (y:acc)
-  ; L s t -> PatVar s $ Just $ ast2pat t acc
-  ; Pa _ -> undefined
-  };
-
 unpat dcs n as x = case as of
   { [] -> (x, n)
-  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case ast2pat a [] of
+  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
     { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
     ; PatVar s _ -> unpat dcs (n + 1) at $ beta s (V freshv) x
     ; PatCon con args -> case lookup con dcs of
@@ -771,7 +777,7 @@ unpatTop dcs n als x = case als of
         ; Just f -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ f (V l) y
         }
       }
-    } in go (ast2pat a []) x
+    } in go a x
   };
 
 rewritePats dcs asxs ls n = case asxs of
