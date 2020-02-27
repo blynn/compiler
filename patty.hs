@@ -348,57 +348,29 @@ var = varId <|> paren varSym;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
 anyOne = fmap itemize (spc (sat (\c -> True)));
-listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat \c -> not (c == delim);
-litInt = E . Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
-litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
-lit = litStr <|> litChar <|> litInt;
-sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
+litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+litStr = between (char '"') (spch '"') $ StrCon <$> many (litOne '"');
+litChar = Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
+lit = E <$> (litStr <|> litChar <|> litInt);
+sqLst r = between (spch '[') (spch ']') $ sepBy r (spch ',');
 
 gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
 
-flipPairize y x = A (A (V ",") x) y;
-apat' r = (&) <$> var <*> (want varSym "@" *> (flip L <$> apat' r) <|> pure V)
-  <|> V <$> gcon
-  <|> lit
-  <|> sqLst r
-  <|> paren ((&) <$> r <*> ((spch ',' *> (flipPairize <$> r)) <|> pure id))
+apat' r = PatVar <$> var <*> (want varSym "@" *> (Just <$> apat' r) <|> pure Nothing)
+  <|> flip PatCon [] <$> gcon
+  <|> PatPred . A (V "if#") . A (V "==") <$> lit
+  <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" []) <$> sqLst r
+  <|> paren ((&) <$> r <*> ((spch ',' *> ((\y x -> PatCon "," [x, y]) <$> r)) <|> pure id))
   ;
-pat = (\f as -> foldl A (V f) as) <$> gcon <*> many (apat' pat)
-  <|> (&) <$> apat' pat <*> ((\s r l -> A (A (V s) l) r) <$> conop <*> apat' pat <|> pure id);
+pat = PatCon <$> gcon <*> many (apat' pat)
+  <|> (&) <$> apat' pat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat' pat <|> pure id);
 apat = apat' pat;
 
 casePat = (,) <$> gcon <*> many apat <|> (\x c y -> (c, [x, y])) <$> apat <*> conop <*> apat;
 
-head xs = case xs of
-  { [] -> Nothing
-  ; h:t -> Just h
-  };
-
-varName s = case head s of
-  { Nothing -> Nothing
-  ; Just c -> ife (elem c ":[(," || 'A' <= c && c <= 'Z') Nothing (Just s)
-  };
-
-ast2pat t acc = case t of
-  { E x -> case x of
-    { Basic _ -> undefined
-    ; Const c -> PatPred $ A (V "if#") (A (V "==") t)
-    ; StrCon s -> PatPred $ A (V "if#") (A (V "==") t)
-    ; Proof _ -> undefined
-    }
-  ; V s -> case varName s of
-    { Nothing -> PatCon s acc
-    ; Just s -> PatVar s Nothing
-    }
-  ; A x y -> ast2pat x (ast2pat y []:acc)
-  ; L s t -> PatVar s $ Just $ ast2pat t acc
-  ; Pa _ -> undefined
-  };
-
-lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(flip ast2pat [] <$> args, expr)]);
+lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(args, expr)]);
 
 alt r = lamAlt <$> casePat <*> (want varSym "->" *> r);
 
@@ -407,9 +379,10 @@ alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
 cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
-onePat vs x = Pa [(flip ast2pat [] <$> vs, x)];
+onePat vs x = Pa [(vs, x)];
 lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (char '-' *> (spch '>' *> r)));
 
+flipPairize y x = A (A (V ",") x) y;
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
 rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
@@ -483,7 +456,8 @@ addLets ls x = foldr (\p t -> fpair p (\name def -> optiApp name t $ maybeFix na
 letin r = addLets <$> between (keyword "let") (keyword "in") (coalesce <$> braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (keyword "if" *> r) <*> (keyword "then" *> r) <*> (keyword "else" *> r);
-atom r = ifthenelse r <|> letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
+listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
+atom r = ifthenelse r <|> letin r <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
@@ -784,6 +758,11 @@ rewritePats dcs asxs ls n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
   ; (:) asx asxt -> fpair asx \as x -> fpair (unpatTop dcs n (zip as ls) x) \y n1 ->
     first (optiApp "#" y) $ rewritePats dcs asxt ls n1
+  };
+
+head xs = case xs of
+  { [] -> Nothing
+  ; h:t -> Just h
   };
 
 --type AdtTab = [(String, Ast -> Ast)]
