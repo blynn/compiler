@@ -91,7 +91,7 @@ undefined = error "undefined";
 foldr1 c l = maybe undefined id (flst l undefined (\h t -> foldr (\x m -> Just (case m of { Nothing -> x ; Just y -> c x y })) Nothing l));
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
-elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
+elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];

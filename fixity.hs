@@ -157,7 +157,7 @@ fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sep
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 funs precTab = concat <$> sepBy (adt <|> (itemize <$> def (expr precTab 0))) (spch ';');
-program = sp *> (concat <$> many fixity) >>= funs;
+program = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= funs;
 
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 

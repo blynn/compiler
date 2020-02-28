@@ -4,7 +4,7 @@
 -- `String` is hardcoded to mean `[Int]`.
 ------------------------------------------------------------------------
 infixr 9 .;
-infixr 5 : , ++;
+infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
 infixl 3 <|>;
 infixr 0 $;
@@ -202,7 +202,7 @@ addDef = second . (:);
 
 tops precTab = foldr ($) ([], []) <$> sepBy (addAdt <$> adt <|> addDef <$> def (expr precTab 0)) (spch ';');
 
-program' = sp *> (concat <$> many fixity) >>= tops;
+program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 program = first (prims ++)
   . addAdt (Adt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
   . addAdt (Adt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]])
