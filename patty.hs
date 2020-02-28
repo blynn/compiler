@@ -13,6 +13,8 @@ infixr 0 $;
 ffi "putchar" putChar :: Int -> IO Int;
 ffi "getchar" getChar :: IO Int;
 
+data Bool = True | False;
+ife a b c = case a of { True -> b ; False -> c };
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
 { pure :: a -> f a
@@ -30,7 +32,6 @@ id x = x;
 const x y = x;
 flip f x y = f y x;
 (&) x f = f x;
-data Bool = True | False;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
 data Ordering = LT | GT | EQ;
@@ -59,9 +60,9 @@ data Either a b = Left a | Right b;
 fpair p = \f -> case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
+uncurry f p = fpair p \x y -> f x y;
 first f p = fpair p \x y -> (f x, y);
 second f p = fpair p \x y -> (x, f y);
-ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
 (||) f g = ife f True g;
@@ -168,6 +169,14 @@ insert kx x t = case t of
     ; EQ -> Bin sz kx x l r
     }
   };
+insertWith f kx x t = case t of
+  { Tip -> singleton kx x
+  ; Bin sy ky y l r -> case compare kx ky of
+    { LT -> balance ky y (insertWith f kx x l) r
+    ; GT -> balance ky y l (insertWith f kx x r)
+    ; EQ -> Bin sy kx (f x y) l r
+    }
+  };
 mlookup kx t = case t of
   { Tip -> Nothing
   ; Bin _ ky y l r -> case compare kx ky of
@@ -196,7 +205,7 @@ arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
 data Pat = PatPred Ast | PatVar String (Maybe Pat) | PatCon String [Pat];
 
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)];
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)];
 ro = E . Basic . ord;
 data Parser a = Parser (String -> Maybe (a, String));
 
@@ -214,7 +223,7 @@ data Neat = Neat
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   [(String, (Qual, Ast))]
   -- | Data constructor table.
-  [(String, Ast -> Ast -> Ast)]
+  [(String, [Constr])]
   -- | FFI declarations.
   [(String, Type)]
   -- | Exports.
@@ -242,9 +251,7 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-adtLookups cs = zipWith (\c n -> case c of { Constr s _ -> (s, \scrutinee x ->
-  foldl A (A (V $ specialCase cs) scrutinee) $ map (\c' -> case c' of { Constr s' ts' ->
-    ife (s == s') x $ foldr L (V "#") $ map (const "_") ts' }) cs) }) cs $ upFrom 0;
+adtLookups cs = map (\c -> case c of { Constr s _ -> (s, cs) }) cs;
 
 select f xs acc = flst xs (Nothing, acc) \x xt -> ife (f x) (Just x, xt ++ acc) (select f xt (x:acc));
 
@@ -368,17 +375,12 @@ pat = PatCon <$> gcon <*> many (apat' pat)
   <|> (&) <$> apat' pat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat' pat <|> pure id);
 apat = apat' pat;
 
-casePat = (,) <$> gcon <*> many apat <|> (\x c y -> (c, [x, y])) <$> apat <*> conop <*> apat;
-
-lamAlt conArgs expr = fpair conArgs \con args -> (con, Pa [(args, expr)]);
-
-alt r = lamAlt <$> casePat <*> (want varSym "->" *> r);
+alt r = (,) <$> pat <*> (want varSym "->" *> r);
 
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
-cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
-cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
-lamCase r = keyword "case" *> (L "of" . cas' (V "of") <$> alts r);
+cas r = Ca <$> between (keyword "case") (keyword "of") r <*> alts r;
+lamCase r = keyword "case" *> (L "\\case" . Ca (V "\\case") <$> alts r);
 onePat vs x = Pa [(vs, x)];
 lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (char '-' *> (spch '>' *> r)));
 
@@ -400,6 +402,7 @@ isFree v expr = case expr of
   ; A x y -> isFree v x || isFree v y
   ; L w t -> not (v == w) && isFree v t
   ; Pa vsts -> any (\vst -> fpair vst \vs t -> not (any (isFreePat v) vs) && isFree v t) vsts
+  ; Ca x as -> isFree v x || isFree v (Pa $ first (:[]) <$> as)
   };
 
 freeCount v expr = case expr of
@@ -408,6 +411,7 @@ freeCount v expr = case expr of
   ; A x y -> freeCount v x + freeCount v y
   ; L w t -> ife (v == w) 0 $ freeCount v t
   ; Pa vsts -> foldr (+) 0 $ map (\vst -> fpair vst \vs t -> ife (any (isFreePat v) vs) 0 $ freeCount v t) vsts
+  ; Ca x as -> freeCount v x + freeCount v (Pa $ first (:[]) <$> as)
   };
 
 overFree s f t = case t of
@@ -416,6 +420,7 @@ overFree s f t = case t of
   ; A x y -> A (overFree s f x) (overFree s f y)
   ; L s' t' -> ife (s == s') t $ L s' $ overFree s f t'
   ; Pa vsxs -> Pa $ map (\vsx -> fpair vsx \vs x -> ife (any (isFreePat s) vs) vsx (vs, overFree s f x)) vsxs
+  ; Ca x as -> Ca (overFree s f x) $ map (\vx -> fpair vx \v x -> ife (isFreePat s v) vx (v, overFree s f x)) as
   };
 
 beta s t x = overFree s (const t) x;
@@ -443,13 +448,14 @@ coalesce ds = flst ds [] \h t -> flst t [h] \h' t' ->
         ; A _ _ -> bad
         ; L _ _ -> bad
         ; Pa vsts' -> coalesce $ (s, Pa $ vsts ++ vsts'):t'
+        ; Ca _ _ -> bad
         }
+      ; Ca _ _ -> bad
       }
     ) $ h:coalesce t
   ;
 
-def r =
-  opDef <$> apat <*> varSym <*> apat <*> (spch '=' *> r)
+def r = opDef <$> apat <*> varSym <*> apat <*> (spch '=' *> r)
   <|> liftA2 (,) var (liftA2 onePat (many apat) (spch '=' *> r));
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> optiApp name t $ maybeFix name def)) x ls;
@@ -572,6 +578,7 @@ debruijn m n e = case e of
   ; A x y -> App (debruijn m n x) (debruijn m n y)
   ; L s t -> La (debruijn m (s:n) t)
   ; Pa _ -> undefined
+  ; Ca _ _ -> undefined
   };
 
 -- Kiselyov bracket abstraction.
@@ -728,14 +735,18 @@ instantiate qt n = case qt of { Qual ps t ->
 --type SymTab = [(String, (Qual, Ast))];
 --type Subst = [(String, Type)];
 
+singleOut s cs = \scrutinee x ->
+  foldl A (A (V $ specialCase cs) scrutinee) $ map (\c' -> case c' of { Constr s' ts ->
+    ife (s == s') x $ foldr L (V "patjoin#") $ map (const "_") ts }) cs;
+
 unpat dcs n as x = case as of
   { [] -> (x, n)
   ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
-    { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "#"
+    { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "patjoin#"
     ; PatVar s _ -> unpat dcs (n + 1) at $ beta s (V freshv) x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
-      ; Just f -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ f (V freshv) y
+      ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
       }
     }
   };
@@ -744,30 +755,52 @@ unpatTop dcs n als x = case als of
   { [] -> (x, n)
   ; al:alt -> fpair al \a l -> let
     { go p t = case p of
-      { PatPred pre -> unpatTop dcs n alt $ A (A (A pre $ V l) t) $ V "#"
+      { PatPred pre -> unpatTop dcs n alt $ A (A (A pre $ V l) t) $ V "patjoin#"
       ; PatVar s m -> maybe (unpatTop dcs n alt) go m $ beta s (V l) t
       ; PatCon con args -> case lookup con dcs of
         { Nothing -> error "bad data constructor"
-        ; Just f -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ f (V l) y
+        ; Just cons -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ singleOut con cons (V l) y
         }
       }
     } in go a x
   };
 
-rewritePats dcs asxs ls n = case asxs of
+rewritePats' dcs asxs ls n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
   ; (:) asx asxt -> fpair asx \as x -> fpair (unpatTop dcs n (zip as ls) x) \y n1 ->
-    first (optiApp "#" y) $ rewritePats dcs asxt ls n1
+    first (optiApp "patjoin#" y) $ rewritePats' dcs asxt ls n1
   };
 
-head xs = case xs of
-  { [] -> Nothing
-  ; h:t -> Just h
+rewritePats dcs vsxs n = let
+  { ls = map (flip showInt "#") $ take (length $ flst vsxs undefined \h _ -> fst h) $ upFrom n }
+  in first (flip (foldr L) ls) $ rewritePats' dcs vsxs ls $ n + length ls;
+
+classifyAlt v x = case v of
+  { PatPred pre -> Left $ A (A (A pre $ V "of") x)
+  ; PatVar s m -> maybe (Left . optiApp "casejoin#") classifyAlt m $ beta s (V "of") x
+  ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
   };
+
+genCase dcs tab = ife (size tab == 0) id $ optiApp "casejoin#" $ let
+  { firstC = flst (toAscList tab) undefined (\h _ -> fst h)
+  ; cs = maybe (error "bad constructor") id $ lookup firstC dcs
+  } in foldl A (A (V $ specialCase cs) (V "of"))
+    $ map (\c -> case c of { Constr s ts -> case mlookup s tab of
+      { Nothing -> foldr L (V "casejoin#") $ const "_" <$> ts
+      ; Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "casejoin#")]
+      }}) cs;
+
+updateCaseSt dcs st alt = fpair st \acc tab -> case alt of
+  { Left f -> (acc . genCase dcs tab . f, Tip)
+  ; Right upd -> (acc, upd tab)
+  };
+
+rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as) \acc tab ->
+  acc . genCase dcs tab $ A (V "unsafePerformIO") (V "exitSuccess");
 
 --type AdtTab = [(String, Ast -> Ast)]
---infer' :: AdtTab -> SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
-infer' dcs typed loc ast csn = fpair csn \cs n ->
+--infer :: AdtTab -> SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
+infer dcs typed loc ast csn = fpair csn \cs n ->
   let
     { va = TV (showInt n "")
     ; insta ty = fpair (instantiate ty n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map (E . Proof) preds)), (cs, n1)) }
@@ -787,15 +820,12 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
     (fmaybe (lookup s typed) (error $ "bad symbol: " ++ s) $ insta . fst)
     ((, csn) . (, ast))
   ; A x y ->
-    fpair (infer' dcs typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
-    fpair (infer' dcs typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
+    fpair (infer dcs typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
+    fpair (infer dcs typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' dcs typed ((s, va):loc) x (cs, n + 1))
-  ; Pa vsxs -> let
-    { ls = map (flip showInt "#") $ take (length $ maybe undefined fst $ head vsxs) $ upFrom n
-    ; ren1 = rewritePats dcs vsxs ls (n + length ls)
-    }
-    in fpair ren1 \re n1 -> infer' dcs typed loc (flip (foldr L) ls re) (cs, n1)
+  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer dcs typed ((s, va):loc) x (cs, n + 1))
+  ; Pa vsxs -> fpair (rewritePats dcs vsxs n) \re n1 -> infer dcs typed loc re (cs, n1)
+  ; Ca x as -> infer dcs typed loc (optiApp "of" (rewriteCase dcs as) x) csn
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -888,6 +918,7 @@ prove' ienv sub psn a = case a of
     second (A x1) (prove' ienv sub psn1 y)
   ; L s t -> second (L s) (prove' ienv sub psn t)
   ; Pa _ -> undefined
+  ; Ca _ _ -> undefined
   };
 
 --prove :: [(String, [Qual])] -> (Type, Ast) -> Subst -> (Qual, Ast)
@@ -900,7 +931,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv dcs typed qi def = fpair def \s expr ->
-  fpair (infer' dcs typed [] expr (Just [], 0)) \ta msn ->
+  fpair (infer dcs typed [] expr (Just [], 0)) \ta msn ->
   case lookup s typed of
     { Nothing -> error $ "no such method: " ++ s
     -- e.g. qac = Eq a => a -> a -> Bool, some AST (product of single method)
@@ -931,7 +962,7 @@ inferInst ienv dcs typed inst = fpair inst \cl qds -> fpair qds \q ds ->
 reverse = foldl (flip (:)) [];
 inferDefs ienv defs dcs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
   { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
-    fpair (infer' dcs typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
+    fpair (infer dcs typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
       fpair msn \ms _ -> case prove ienv s ta <$> (unify (TV "self!") (fst ta) ms) of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> inferDefs ienv rest dcs ((s, qa):typed)

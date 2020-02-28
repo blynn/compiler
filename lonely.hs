@@ -656,8 +656,8 @@ instantiate qt n = case qt of { Qual ps t ->
 --type SymTab = [(String, (Qual, Ast))];
 --type Subst = [(String, Type)];
 
---infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
-infer' typed loc ast csn = fpair csn \cs n ->
+--infer :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> ((Type, Ast), (Maybe Subst, Int))
+infer typed loc ast csn = fpair csn \cs n ->
   let
     { va = TV (showInt n "")
     ; insta ty = fpair (instantiate ty n) \q n1 -> case q of { Qual preds ty -> ((ty, foldl A ast (map (E . Proof) preds)), (cs, n1)) }
@@ -677,10 +677,10 @@ infer' typed loc ast csn = fpair csn \cs n ->
     (fmaybe (lookup s typed) (error $ "bad symbol: " ++ s) $ insta . fst)
     ((, csn) . (, ast))
   ; A x y ->
-    fpair (infer' typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
-    fpair (infer' typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
+    fpair (infer typed loc x (cs, n + 1)) \tax csn1 -> fpair tax \tx ax ->
+    fpair (infer typed loc y csn1) \tay csn2 -> fpair tay \ty ay ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer' typed ((s, va):loc) x (cs, n + 1))
+  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer typed ((s, va):loc) x (cs, n + 1))
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
@@ -793,7 +793,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- qi = Qual of instance, e.g. Eq t => [t] -> [t] -> Bool
 inferMethod ienv typed qi def = fpair def \s expr ->
-  fpair (infer' typed [] expr (Just [], 0)) \ta msn ->
+  fpair (infer typed [] expr (Just [], 0)) \ta msn ->
   case lookup s typed of
     { Nothing -> error $ "no such method: " ++ s
     -- e.g. qac = Eq a => a -> a -> Bool, some AST (product of single method)
@@ -824,7 +824,7 @@ inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
 reverse = foldl (flip (:)) [];
 inferDefs ienv defs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
   { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
-    fpair (infer' typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
+    fpair (infer typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
       fpair msn \ms _ -> case prove ienv s ta <$> (unify (TV "self!") (fst ta) ms) of
     { Nothing -> Left ("bad type: " ++ s)
     ; Just qa -> inferDefs ienv rest ((s, qa):typed)
