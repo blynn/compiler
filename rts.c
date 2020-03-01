@@ -100,8 +100,6 @@ static void run() {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
     if (isAddr(x)) *--sp = mem[x]; else switch(x) {
-      case FORWARD: return;  // die("stray forwarding pointer");
-      case '.': return;
       case 'F': foreign(arg(1)); break;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'Q': lazy(3, arg(3), apparg(2, 1)); break;
@@ -131,6 +129,8 @@ static void run() {
         mem[arg(1) + 1] = arg(2);
         lazy(4, app(arg(4), 'K'), arg(3));
         break;
+      case '.': return;
+      case FORWARD: return;  // die("stray forwarding pointer");
       default: return;  // printf("?%u\n", x); die("unknown combinator");
     }
   }

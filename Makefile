@@ -11,16 +11,19 @@ SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js diff
 menu.html: menu; cobble menu menu
 
 %.html: %.lhs menu.html; cobble mathbook menu $<
+%:%.c;cc -O2 $^ -o $@
 
-vm:vm.c;cc -O2 $^ -o $@
+vm:vm.c
 raw:vm;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
-lonely:lonely.c;cc -O2 $^ -o $@
+lonely:lonely.c
 patty.c:lonely patty.hs rts.c;(cat rts.c && ./lonely < patty.hs) > $@
-patty:patty.c;cc -O2 $^ -o $@
-hilsys.c:patty hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./patty) > $@
+patty:patty.c
+guardedly.c:patty guardedly.hs rts.c;(cat rts.c && ./patty < guardedly.hs) > $@
+guardedly:guardedly.c
+hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
-test/mandelbrot:test/mandelbrot.c;cc -O2 $^ -o $@
+test/mandelbrot:test/mandelbrot.c
 
 WCC=clang -O3 -c --target=wasm32 -Wall
 WLD=wasm-ld-8 --export-dynamic --allow-undefined --no-entry --initial-memory=33554432

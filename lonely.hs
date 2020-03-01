@@ -342,9 +342,9 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat \c -> not (c == delim);
 litInt = E . Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
+litStr = between (char '"') (spch '"') $ many (litOne '"');
 litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
-lit = litStr <|> litChar <|> litInt;
+lit = E . StrCon <$> litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
 
 gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
@@ -376,8 +376,6 @@ isFree v expr = case expr of
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
-rawOne delim = escChar <|> sat (\c -> not (c == delim));
-rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 opDef x f y rhs = (f, L x $ L y rhs);
 def r =
   opDef <$> varId <*> varSym <*> varId <*> (spch '=' *> r)
@@ -446,7 +444,7 @@ instDecl r = keyword "instance" *>
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 ffiDecl = keyword "ffi" *>
-  (addFFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
+  (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
 tops precTab = sepBy
   (   adt
@@ -454,7 +452,7 @@ tops precTab = sepBy
   <|> instDecl (expr precTab 0)
   <|> ffiDecl
   <|> addDef <$> def (expr precTab 0)
-  <|> keyword "export" *> (addExport <$> rawStr <*> var)
+  <|> keyword "export" *> (addExport <$> litStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
@@ -823,7 +821,7 @@ inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
 
 reverse = foldl (flip (:)) [];
 inferDefs ienv defs typed = flst defs (Right $ reverse typed) \edef rest -> case edef of
-  { Left def -> fpair def \s expr ->  -- TODO: Check `s` is absent from `typed`.
+  { Left def -> fpair def \s expr ->
     fpair (infer typed [(s, TV "self!")] expr (Just [], 0)) \ta msn ->
       fpair msn \ms _ -> case prove ienv s ta <$> (unify (TV "self!") (fst ta) ms) of
     { Nothing -> Left ("bad type: " ++ s)

@@ -214,9 +214,9 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat \c -> not (c == delim);
 litInt = E . Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
+litStr = between (char '"') (spch '"') $ many (litOne '"');
 litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
-lit = litStr <|> litChar <|> litInt;
+lit = E . StrCon <$> litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
 alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
@@ -240,8 +240,6 @@ isFree v expr = case expr of
 
 maybeFix s x = ife (isFree s x) (A (ro 'Y') (L s x)) x;
 
-rawOne delim = escChar <|> sat (\c -> not (c == delim));
-rawStr = between (char '"') (spch '"') (many (rawOne '"'));
 def r = liftA2 (,) var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
 
 addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) $ maybeFix name def)) x ls;
@@ -312,9 +310,9 @@ instDecl r = keyword "instance" *>
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 ffiDecl = keyword "ffi" *>
-  (FFI <$> rawStr <*> var <*> (char ':' *> spch ':' *> _type aType));
+  (FFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
-eqn r = Def <$> (keyword "export" *> (Just <$> rawStr) <|> pure Nothing) <*> def r;
+eqn r = Def <$> (keyword "export" *> (Just <$> litStr) <|> pure Nothing) <*> def r;
 
 tops precTab = sepBy
   (   adt

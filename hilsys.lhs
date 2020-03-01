@@ -78,7 +78,6 @@ instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBin
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };
 instance Functor IO where { fmap f x = ioPure f <*> x };
 (>>) f g = f >>= \_ -> g;
-data Bool = True | False;
 f $ x = f x;
 f || g = if f then True else g;
 f && g = if f then g else False;
@@ -250,7 +249,7 @@ s =: t = Atom "=" [s, t];
 The two rules of inference are modus ponens and generalization:
 
 \begin{code}
-ponens (Theorem (p :==> q)) (Theorem p') = if p == p' then Theorem q else error "bogus ponens";
+ponens (Theorem (p :==> q)) (Theorem p') | p == p' = Theorem q;
 gen x (Theorem t) = Theorem $ Forall x t;
 \end{code}
 
@@ -266,10 +265,8 @@ axiomK p q        = Theorem $ p :==> (q :==> p);
 axiomS p q r      = Theorem $ (p :==> (q :==> r)) :==> ((p :==> q) :==> (p :==> r));
 axiomLEM p        = Theorem $ ((p :==> Bot) :==> Bot) :==> p;
 axiomAllImp x p q = Theorem $ Forall x (p :==> q) :==> (Forall x p :==> Forall x q);
-axiomImpAll x p   = if isFree (Var x) p then error "ImpAll: free fail"
-  else Theorem $ p :==> Forall x p;
-axiomExEq x t     = if occurs (Var x) t then error "ExEq: occurs fail"
-  else Theorem $ Exists x $ Var x =: t;
+axiomImpAll x p | isFree (Var x) p = Theorem $ p :==> Forall x p;
+axiomExEq x t | occurs (Var x) t = Theorem $ Exists x $ Var x =: t;
 axiomRefl t       = Theorem $ t =: t;
 axiomFunCong  f ls rs = Theorem $ foldr (:==>) (Fun f ls =: Fun f rs) $ zipWith (=:) ls rs;
 axiomPredCong p ls rs = Theorem $ foldr (:==>) (Atom p ls :==> Atom p rs) $ zipWith (=:) ls rs;
