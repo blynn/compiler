@@ -542,7 +542,7 @@ program = parse $ (
 prims = let
   { ii = arr (TC "Int") (TC "Int")
   ; iii = arr (TC "Int") ii
-  ; bin s = A (A (ro 'B') (ro 'T')) (A (ro 'T') (ro s)) } in map (second (first noQual)) $
+  ; bin s = A (ro 'Q') (ro s) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
@@ -742,7 +742,7 @@ unpat dcs n as x = case as of
   { [] -> (x, n)
   ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
     { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "patjoin#"
-    ; PatVar s _ -> unpat dcs (n + 1) at $ beta s (V freshv) x
+    ; PatVar s m -> maybe id (error "TODO") m $ unpat dcs (n + 1) at $ beta s (V freshv) x
     ; PatCon con args -> case lookup con dcs of
       { Nothing -> error "bad data constructor"
       ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y

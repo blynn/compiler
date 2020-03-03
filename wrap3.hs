@@ -9,6 +9,7 @@ import qualified Prelude
 import qualified Data.Map as Map
 import System.IO.Unsafe (unsafePerformIO)
 import System.Exit (exitSuccess)
+import Debug.Trace
 (*) = (Prelude.*) :: Int -> Int -> Int
 (+) = (Prelude.+) :: Int -> Int -> Int
 (-) = (Prelude.-) :: Int -> Int -> Int
@@ -23,4 +24,4 @@ intLE x y = x Prelude.<= y
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
-#include "guardedly.hs"
+#include "disassembly.hs"

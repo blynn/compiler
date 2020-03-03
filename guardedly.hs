@@ -364,16 +364,6 @@ isFree v expr = case expr of
   ; Ca x as -> isFree v x || isFree v (Pa $ first (:[]) <$> as)
   };
 
-sum = foldr (+) 0;
-freeCount v expr = case expr of
-  { E _ -> 0
-  ; V s -> if s == v then 1 else 0
-  ; A x y -> freeCount v x + freeCount v y
-  ; L w t -> if v == w then 0 else freeCount v t
-  ; Pa vsts -> sum $ map (\(vs, gs) -> if any (isFreePat v) vs then 0 else sum $ map (\(g, t) -> freeCount v g + freeCount v t) gs) vsts
-  ; Ca x as -> freeCount v x + freeCount v (Pa $ first (:[]) <$> as)
-  };
-
 overFree s f t = case t of
   { E _ -> t
   ; V s' -> if s == s' then f t else t
@@ -384,10 +374,6 @@ overFree s f t = case t of
   };
 
 beta s t x = overFree s (const t) x;
-
-optiApp s x = let { n = freeCount s x } in
-  if 2 <= n then A $ L s x else
-    if 0 == n then const x else flip (beta s) x;
 
 maybeFix s x = if isFree s x then A (ro 'Y') (L s x) else x;
 
@@ -401,7 +387,7 @@ coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
 def r = opDef <$> apat <*> varSym <*> apat <*> guards "=" r
   <|> liftA2 (,) var (liftA2 onePat (many apat) (guards "=" r));
 
-addLets ls x = foldr (\(name, def) t -> optiApp name t $ maybeFix name def) x ls;
+addLets ls x = foldr (\(name, def) t -> A (L name t) $ maybeFix name def) x ls;
 letin r = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> r) <*> (tok "then" *> r) <*> (tok "else" *> r);
@@ -489,7 +475,7 @@ program = parse $ (
 prims = let
   { ii = arr (TC "Int") (TC "Int")
   ; iii = arr (TC "Int") ii
-  ; bin s = A (A (ro 'B') (ro 'T')) (A (ro 'T') (ro s)) } in map (second (first noQual)) $
+  ; bin s = A (ro 'Q') (ro s) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
@@ -581,7 +567,25 @@ babs t = case t of
   ; App x y -> babsa (babs x) (babs y)
   };
 
-nolam m x = (\(Closed d) -> d) $ babs $ debruijn m [] x;
+freeCount v expr = case expr of
+  { E _ -> 0
+  ; V s -> if s == v then 1 else 0
+  ; A x y -> freeCount v x + freeCount v y
+  ; L w t -> if v == w then 0 else freeCount v t
+  };
+
+optiApp s x = let { n = freeCount s x } in
+  if 2 <= n then A $ L s x else
+    if 0 == n then const x else flip (beta s) x;
+
+optiApp' t = case t of
+  { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
+  ; A x y -> A (optiApp' x) (optiApp' y)
+  ; L s x -> L s (optiApp' x)
+  ; _ -> t
+  };
+
+nolam m x = (\(Closed d) -> d) $ babs $ debruijn m [] $ optiApp' x;
 
 isLeaf t c = case t of { Lf n -> n == ord c ; _ -> False };
 
@@ -683,7 +687,7 @@ unpat dcs n as x = case as of
   { [] -> (x, n)
   ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
     { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "pjoin#"
-    ; PatVar s _ -> unpat dcs (n + 1) at $ beta s (V freshv) x
+    ; PatVar s m -> maybe id (error "TODO") m $ unpat dcs (n + 1) at $ beta s (V freshv) x
     ; PatCon con args -> case mlookup con dcs of
       { Nothing -> error "bad data constructor"
       ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
@@ -713,7 +717,7 @@ rewriteGuard join gs = foldr (\(cond, x) acc -> case cond of
 rewritePats' dcs asxs ls n = case asxs of
   { [] -> (V "fail#", n)
   ; (as, gs):asxt -> fpair (unpatTop dcs n (zip as ls) $ rewriteGuard "pjoin#" gs) \y n1 ->
-    first (optiApp "pjoin#" y) $ rewritePats' dcs asxt ls n1
+    first (A $ L "pjoin#" y) $ rewritePats' dcs asxt ls n1
   };
 
 rewritePats dcs vsxs@((vs0, _):_) n = let
@@ -722,11 +726,11 @@ rewritePats dcs vsxs@((vs0, _):_) n = let
 
 classifyAlt v x = case v of
   { PatPred pre -> Left $ A (A (A pre $ V "of") x)
-  ; PatVar s m -> maybe (Left . optiApp "cjoin#") classifyAlt m $ beta s (V "of") x
+  ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ beta s (V "of") x
   ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, [(V "True", x)]):))
   };
 
-genCase dcs tab = if size tab == 0 then id else optiApp "cjoin#" $ let
+genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
   { firstC = flst (toAscList tab) undefined (\h _ -> fst h)
   ; cs = maybe (error $ "bad constructor: " ++ firstC) id $ mlookup firstC dcs
   } in foldl A (A (V $ specialCase cs) (V "of"))
@@ -769,7 +773,7 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
   ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer dcs typed ((s, va):loc) x (cs, n + 1))
   ; Pa vsxs -> fpair (rewritePats dcs vsxs n) \re n1 -> infer dcs typed loc re (cs, n1)
-  ; Ca x as -> infer dcs typed loc (optiApp "of" (rewriteCase dcs as) x) csn
+  ; Ca x as -> infer dcs typed loc (A (L "of" $ rewriteCase dcs as) x) csn
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
