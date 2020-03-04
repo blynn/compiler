@@ -577,7 +577,6 @@ freeCount v expr = case expr of
 optiApp s x = let { n = freeCount s x } in
   if 2 <= n then A $ L s x else
     if 0 == n then const x else flip (beta s) x;
-
 optiApp' t = case t of
   { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
   ; A x y -> A (optiApp' x) (optiApp' y)
