@@ -1031,5 +1031,5 @@ dumpTypes s = fmaybe (program s) "parse error" \(prog, rest) -> untangle prog
   ; Right typed -> concatMap (\(s, (q, _)) -> s ++ " :: " ++ showQual q ++ "\n") typed
   };
 
-main = getContents >>= putStr . dumpCombs;
--- main = getContents >>= putStr . compile;
+-- main = getContents >>= putStr . dumpCombs;
+main = getContents >>= putStr . compile;
