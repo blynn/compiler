@@ -269,6 +269,7 @@ https://www.youtube.com/watch?v=zhj_tUMwTe0[Edward Kmett's talk "Combinators Rev
 Other choices for implementing lambda calculus include:
 
   * https://en.wikipedia.org/wiki/SECD_machine[SECD machine]
+  * https://en.wikipedia.org/wiki/Krivine_machine[Krivine machine]
   * http://matt.might.net/articles/cek-machines/[CEK machine]
   * https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[G-machine; TIM machine] (Chapters 3 and 4)
   * https://www.microsoft.com/en-us/research/wp-content/uploads/1992/04/spineless-tagless-gmachine.pdf[Spineless Tagless G-machine]
