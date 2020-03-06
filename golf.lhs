@@ -75,7 +75,7 @@ Since SKK is the identity, the above program just returns the input.
 Kiselyov's bracket abstraction algorithm leads us to wonder: why limit
 ourselves to S and K? After all, in lambda calculus, we could prohibit terms
 with a De Bruijn index greater than 2 and retain the same computing power, but
-nobody bothers. Why do we insist on two particular combinators?
+nobody bothers. Why insist on two particular combinators?
 
 == Hole in one ==
 
