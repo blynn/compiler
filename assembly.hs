@@ -182,7 +182,7 @@ data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], [(Ast, Ast)])] | Ca Ast [(Pat, [(Ast, Ast)])] | Proof Pred;
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
 data Parser a = Parser (String -> Maybe (a, String));
 data Constr = Constr String [Type];
 data Pred = Pred String Type;
@@ -331,14 +331,16 @@ apat' r = PatVar <$> var <*> (tok "@" *> (Just <$> apat' r) <|> pure Nothing)
 pat = PatCon <$> gcon <*> many (apat' pat)
   <|> (&) <$> apat' pat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat' pat <|> pure id);
 apat = apat' pat;
-guards s r = tok s *> (itemize . (V "True",) <$> r) <|> some ((,) <$> (spch '|' *> r) <*> (tok s *> r));
+
+guards s r = tok s *> r <|> foldr ($) (V $ if s == "=" then "pjoin#" else "cjoin#")
+  <$> some ((\x y -> A (A (A (V "if") x) y)) <$> (spch '|' *> r) <*> (tok s *> r));
 alt r = (,) <$> pat <*> guards "->" r;
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas r = Ca <$> between (tok "case") (tok "of") r <*> alts r;
 lamCase r = tok "case" *> (L "\\case" . Ca (V "\\case") <$> alts r);
 onePat vs x = Pa [(vs, x)];
-lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (tok "->" *> (itemize . (V "True",) <$> r)));
+lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (tok "->" *> r));
 
 flipPairize y x = A (A (V ",") x) y;
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
@@ -357,7 +359,7 @@ isFree v expr = case expr of
   ; V s -> s == v
   ; A x y -> isFree v x || isFree v y
   ; L w t -> v /= w && isFree v t
-  ; Pa vsts -> any (\(vs, gs) -> not (any (isFreePat v) vs) && any (\(g, t) -> isFree v g || isFree v t) gs) vsts
+  ; Pa vsts -> any (\(vs, t) -> not (any (isFreePat v) vs) && isFree v t) vsts
   ; Ca x as -> isFree v x || isFree v (Pa $ first (:[]) <$> as)
   };
 
@@ -873,14 +875,9 @@ unpatTop dcs als x = case als of
     } in go a x
   };
 
-rewriteGuard join gs = foldr (\(cond, x) acc -> case cond of
-  { V "True" -> x
-  ; _ -> A (A (A (V "if") cond) x) acc
-  }) (V join) gs;
-
 rewritePats' dcs asxs ls = case asxs of
   { [] -> pure $ V "fail#"
-  ; (as, gs):asxt -> unpatTop dcs (zip as ls) (rewriteGuard "pjoin#" gs) >>=
+  ; (as, t):asxt -> unpatTop dcs (zip as ls) t >>=
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
   };
 
@@ -891,7 +888,7 @@ rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
 classifyAlt v x = case v of
   { PatLit lit -> Left $ patEq lit (V "of") x
   ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ beta s (V "of") x
-  ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, [(V "True", x)]):))
+  ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
   };
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
@@ -900,7 +897,7 @@ genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
   } in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of
       { Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
-      ; Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, [(V "True", V "cjoin#")])]
+      ; Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "cjoin#")]
       }) cs;
 
 updateCaseSt dcs (acc, tab) alt = case alt of
@@ -908,21 +905,19 @@ updateCaseSt dcs (acc, tab) alt = case alt of
   ; Right upd -> (acc, upd tab)
   };
 
-rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt . second (rewriteGuard "cjoin#") <$> as) \acc tab ->
+rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as) \acc tab ->
   acc . genCase dcs tab $ V "fail#";
 
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
+secondM f (a, b) = (a,) <$> f b;
 rewritePatterns dcs = let {
-  go t = let
-    { goPa (vs, ps) = (vs,) <$> mapM (\(x, y) -> liftA2 (,) (go x) (go y)) ps
-    ; goCa (vs, ps) = (vs,) <$> mapM (\(x, y) -> liftA2 (,) (go x) (go y)) ps
-    } in case t of
+  go t = case t of
     { E _ -> pure t
     ; V _ -> pure t
     ; A x y -> liftA2 A (go x) (go y)
     ; L s x -> L s <$> go x
-    ; Pa vsxs -> mapM goPa vsxs >>= rewritePats dcs
-    ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM goCa as >>= go) (go x)
+    ; Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
+    ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     }
   } in \case
   { Left (s, t) -> Left (s, evalState (go t) 0)
@@ -1013,9 +1008,9 @@ showTree prec t = case t of
     ; StrCon s -> ('"':) . (s++) . ('"':)
     }
   ; Nd (Lf (Basic 70)) (Lf (Basic i)) -> ("FFI_"++) . showInt i
-  ; Nd x y -> (if prec == 0 then id else par) (showTree 0 x . (' ':) . showTree 1 y)
+  ; Nd x y -> (if prec then par else id) (showTree False x . (' ':) . showTree True y)
   };
-disasm (s, t) = (s++) . (" = "++) . showTree 0 t . (";\n"++);
+disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
 
 dumpCombs s = fmaybe (program s) "parse error" \(prog, rest) -> untangle prog
   \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
