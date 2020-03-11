@@ -1,4 +1,4 @@
-== Patterns and Guards ==
+= Patterns and Guards =
 
 ++++++++++
 <script>

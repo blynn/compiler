@@ -12,6 +12,8 @@ golf,Golf
 ioccc,IOCCC
 type,Types
 c,Let me C
+pattern,Patterns | Guards
+hilsys,Hilbert Systems
 eq,Equality
 para,Parametricity
 logic,Logic Programming
