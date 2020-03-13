@@ -16,19 +16,18 @@ Or can we trust our link:fol.html[MESON prover for first-order logic]. Are
 there really no bugs in our code?
 
 https://en.wikipedia.org/wiki/Logic_for_Computable_Functions[The LCF theorem
-prover] pioneered a solution to this problem: first develop a small module that
-exports a data type representing theorems, along with a few functions that
-manipulate them according to the laws of logic. These functions provide the
-only ways to create or modify theorems.
+prover] pioneered a solution to this problem: first develop a core module that
+exports a few functions which provide the only ways to create or modify
+theorems. These functions correspond to the laws of logic.
 
 If this core module is correctly implemented, the rest of our program can be
 buggy, yet still produce only correct theorems because ultimately it is forced
 to obey the core's rules of inference.
 
 This is a proven approach in software engineering. For instance, a red-black
-tree module typically exports functions such that no matter how we call them,
-the relevant invariants are always satisfied; for example, at all times, a tree
-is approximately balanced and is a binary search tree.
+tree module typically exports functions that maintain particular invariants:
+for example, a tree is approximately balanced and is a binary search tree. No
+matter how we call these functions, we cannot violate these invariants.
 
 == Prelude ==
 

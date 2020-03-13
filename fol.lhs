@@ -410,7 +410,7 @@ skolemize t = evalState (skolem' $ nnf $ simplify t) (fst <$> functions t) where
         f = variant ((if null xs then "C_" else "F_") <> x) fns
         fx = Fun f $ Var <$> xs
       put $ f:fns
-      skolem' (subst (`lookup` [(x, fx)]) p)
+      skolem' $ subst (`lookup` [(x, fx)]) p
     FO t -> FO <$> mapM skolem' t
 \end{code}
 

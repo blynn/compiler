@@ -718,7 +718,7 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
     fpair (infer dcs typed loc x (cs, n + 1)) \(tx, ax) csn1 ->
     fpair (infer dcs typed loc y csn1) \(ty, ay) csn2 ->
       ((va, A ax ay), first (unify tx (arr ty va)) csn2)
-  ; L s x -> first (\ta -> fpair ta \t a -> (arr va t, L s a)) (infer dcs typed ((s, va):loc) x (cs, n + 1))
+  ; L s x -> first (\(t, a) -> (arr va t, L s a)) $ infer dcs typed ((s, va):loc) x (cs, n + 1)
   };
 
 onType f pred = case pred of { Pred s t -> Pred s (f t) };
