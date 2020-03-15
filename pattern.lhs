@@ -259,6 +259,9 @@ include::patty.hs[]
 </div>
 ++++++++++
 
+We predefine the `Bool` type, as our next compiler will handle guards, which
+translate to expressions involving booleans.
+
 == Guardedly ==
 
 Our last compiler passed an unfortunate milestone: it's over 1000 lines long.

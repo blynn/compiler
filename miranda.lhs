@@ -12,6 +12,8 @@ In January 2020, http://miranda.org.uk/downloads[Miranda's source] was
 released. Its approach to compilation has remained unchanged through the years,
 yielding an excellent opportunity for an exhibition match.
 
+&#9654; Download the files from this contest: link:cmpmira.tar.gz[cmpmira.tar.gz].
+
 == These go to eleven ==
 
 We bump up a Miranda example that solves the
@@ -71,8 +73,6 @@ real    0m7.288s
 user    0m7.246s
 sys     0m0.040s
 ------------------------------------------------------------------------
-
-link:q11.tar.gz[&#9654; Try it out: q11.tar.gz.]
 
 I can't help feeling proud. Miranda uses
 https://arxiv.org/pdf/1510.03794v1.pdf[Turner's bracket abstraction algorithm],
@@ -169,6 +169,45 @@ intersperse = B (C (T K)) (B (C (B B (:))) (R K (B foldr (B (B (++)) (R (R K (:)
 {Shows ([] a)} = B T (B (B (B ((:) 91))) (B (R ((:) 93)) (B (B B) (B (B (foldr B I)) (B (B (intersperse ((:) 44))) (B map shows))))));
 main = putStr (shows ({Shows ([] a)} ({Shows ([] a)} {Shows Int})) (queens 11) "");
 ------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+== A second opinion ==
+
+The difference is even more pronounced for another example that computes 'e' to
+4096 decimal places:
+
+------------------------------------------------------------------------
+$ time ./e4096 > /dev/null
+
+real    0m7.292s
+user    0m7.257s
+sys     0m0.033s
+$ time mira -exec e4096.m > /dev/null
+
+real    0m14.350s
+user    0m14.321s
+sys     0m0.013s
+------------------------------------------------------------------------
+
+The Miranda original:
+
+\begin{code}
+include::e4096.m[]
+\end{code}
+
+Our version:
+
+++++++++++
+<p><a onclick='hideshow("e4096");'>&#9654; Toggle e4096.hs</a></p>
+<div id='e4096' style='display:none'>
+++++++++++
+
+\begin{code}
+include::e4096.hs[]
+\end{code}
 
 ++++++++++
 </div>
