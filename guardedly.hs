@@ -232,7 +232,7 @@ addInstance s q is = fpair (select (\(k, _) -> s == k) is []) \m xs -> case m of
 mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
 showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
-showInt n s = (if 0 == n then ('0':) else showInt' n) s;
+showInt n = if 0 == n then ('0':) else showInt' n;
 
 mkFFIHelper n t acc = case t of
   { TC s -> acc
@@ -346,7 +346,7 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (tok "->" *> (item
 flipPairize y x = A (A (V ",") x) y;
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
 isFreePat v = \case
@@ -756,8 +756,6 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
   { E x -> case x of
     { Basic b -> if b == ord 'Y'
       then insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
-      else if b == ord 'C'
-      then insta $ noQual $ arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c")))
       else undefined
     ; Const c -> ((TC "Int",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)

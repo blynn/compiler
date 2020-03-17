@@ -264,7 +264,7 @@ mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
 ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
-showInt n s = ifz n ('0':) (showInt' n) s;
+showInt n = ifz n ('0':) (showInt' n);
 
 mkFFIHelper n t acc = case t of
   { TC s -> acc
@@ -387,7 +387,7 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (char '-' *> (spch
 flipPairize y x = A (A (V ",") x) y;
 thenComma r = spch ',' *> ((flipPairize <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
 isFreePat v = \case
@@ -808,8 +808,6 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
   { E x -> case x of
     { Basic b -> ife (b == ord 'Y')
       (insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a"))
-      $ ife (b == ord 'C')
-      (insta $ noQual $ arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
       undefined
     ; Const c -> ((TC "Int",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
