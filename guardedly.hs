@@ -682,16 +682,18 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs;
 
-unpat dcs n as x = case as of
-  { [] -> (x, n)
-  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
-    { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "pjoin#"
-    ; PatVar s m -> maybe id (error "TODO") m $ unpat dcs (n + 1) at $ beta s (V freshv) x
-    ; PatCon con args -> case mlookup con dcs of
-      { Nothing -> error "bad data constructor"
-      ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
+unpat dcs n as t = case as of
+  { [] -> (t, n)
+  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ let
+    { go n p x = case p of
+      { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "pjoin#"
+      ; PatVar s m -> maybe (unpat dcs (n + 1) at) (\p1 x1 -> go (n + 1) p1 x1) m $ beta s (V freshv) x
+      ; PatCon con args -> case mlookup con dcs of
+        { Nothing -> error "bad data constructor"
+        ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
+        }
       }
-    }
+    } in go n a t
   };
 
 unpatTop dcs n als x = case als of

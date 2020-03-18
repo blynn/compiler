@@ -847,11 +847,9 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
 
 genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
 
-inferInst ienv dcs typed (cl, (q, ds)) =
-  case q of { Qual ps t -> let { dvs = map snd $ fst $ dictVars ps 0 } in
+inferInst ienv dcs typed (cl, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
   (dictVarize cl t,) . (noQual (TC "DICT"),) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
-    <$> mapM (inferMethod ienv dcs typed q) ds
-  };
+    <$> mapM (inferMethod ienv dcs typed q) ds;
 
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
@@ -859,16 +857,18 @@ singleOut s cs = \scrutinee x ->
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y;
 
-unpat dcs as x = case as of
-  { [] -> pure x
-  ; a:at -> get >>= \n -> put (n + 1) >> let { freshv = showInt n "#" } in L freshv <$> case a of
-    { PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
-    ; PatVar s m -> maybe id (error "TODO") m $ unpat dcs at $ beta s (V freshv) x
-    ; PatCon con args -> case mlookup con dcs of
-      { Nothing -> error "bad data constructor"
-      ; Just cons -> unpat dcs args x >>= \y -> unpat dcs at $ singleOut con cons (V freshv) y
+unpat dcs as t = case as of
+  { [] -> pure t
+  ; a:at -> get >>= \n -> put (n + 1) >> let { freshv = showInt n "#" } in L freshv <$> let
+    { go p x = case p of
+      { PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
+      ; PatVar s m -> maybe (unpat dcs at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
+      ; PatCon con args -> case mlookup con dcs of
+        { Nothing -> error "bad data constructor"
+        ; Just cons -> unpat dcs args x >>= \y -> unpat dcs at $ singleOut con cons (V freshv) y
+        }
       }
-    }
+    } in go a t
   };
 
 unpatTop dcs als x = case als of
@@ -936,7 +936,6 @@ rewritePatterns dcs = let {
 prove ienv s (t, a) = flip fmap (prove' ienv ([], 0) a) \((ps, _), x) ->
   let { applyDicts expr = foldl A expr $ map (V . snd) ps }
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps));
-
 inferDefs' ienv dcs (typeTab, combF) edef = let
   { add (s, (q, cs)) = (insert s q typeTab, combF . ((s, cs):))
   } in add <$> case edef of

@@ -12,8 +12,8 @@ four colour map theorem], which relied upon a one-off program written in IBM
 perfectly? Could there be, say, an off-by-one bug in some loop that causes it
 to skip a case that actually requires 5 colours?
 
-Or can we trust our link:fol.html[MESON prover for first-order logic]. Are
-there really no bugs in our code?
+How about our link:fol.html[MESON prover for first-order logic]? Are there
+really no bugs in our code?
 
 https://en.wikipedia.org/wiki/Logic_for_Computable_Functions[The LCF theorem
 prover] pioneered a solution to this problem: first develop a core module that
@@ -26,8 +26,9 @@ to obey the core's rules of inference.
 
 This is a proven approach in software engineering. For instance, a red-black
 tree module typically exports functions that maintain particular invariants:
-for example, a tree is approximately balanced and is a binary search tree. No
-matter how we call these functions, we cannot violate these invariants.
+such as ensuring a tree is always approximately balanced and is a binary search
+tree. No matter how we call these functions, we cannot violate these
+invariants.
 
 == Prelude ==
 
