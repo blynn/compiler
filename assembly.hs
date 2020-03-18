@@ -217,7 +217,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
-data Extra = Basic Int | Const Int | StrCon String;
+data Extra = Basic Char | Const Int | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
 data Parser a = Parser (String -> Maybe (a, String));
@@ -243,15 +243,16 @@ data Neat = Neat
   ;
 fneat (Neat a b c d e f) z = z a b c d e f;
 
-ro = E . Basic . ord;
+ro = E . Basic;
 conOf (Constr s _) = s;
-specialCase = concatMap (('|':) . conOf);
+specialCase (h:_) = '|':conOf h;
 mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro 'I'));
 mkStrs = snd . foldl (\(s, l) u -> ('*':s, s:l)) ("*", []);
 index n s (t:ts) = if s == t then n else index (n + 1) s ts;
 length = foldr (\_ n -> n + 1) 0;
+scottEncode _ ":" _ = ro ':';
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
@@ -494,15 +495,15 @@ tops precTab = sepBy
   <|> ffiDecl
   <|> addDefs . coalesce <$> sepBy1 (def $ expr precTab 0) (spch ';')
   <|> tok "export" *> (addExport <$> litStr <*> var)
-  ) (spch ';');
-program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
+  ) (spch ';') <* (spch ';' <|> pure ';');
+program = parse $ sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 
 -- Primitives.
 
-program = parse $ (
+primAdts =
   [ addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
   , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
-  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]] ++) <$> program';
+  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]];
 
 prims = let
   { ii = arr (TC "Int") (TC "Int")
@@ -542,7 +543,7 @@ debruijn n e = case e of
 data IntTree = Lf Extra | LfVar String | Nd IntTree IntTree;
 data Sem = Defer | Closed IntTree | Need Sem | Weak Sem;
 
-lf = Lf . Basic . ord;
+lf = Lf . Basic;
 
 ldef = \r y -> case y of
   { Defer -> Need (Closed (Nd (Nd (lf 'S') (lf 'I')) (lf 'I')))
@@ -595,7 +596,7 @@ babs t = case t of
 
 nolam' x = (\(Closed d) -> d) $ babs $ debruijn [] x;
 
-isLeaf t c = case t of { Lf (Basic n) -> n == ord c ; _ -> False };
+isLeaf t c = case t of { Lf (Basic n) -> n == chr (ord c) ; _ -> False };
 
 optim comtab t = case t of
   { LfVar s -> let { u = maybe t id $ mlookup s comtab } in case u of
@@ -608,22 +609,26 @@ optim comtab t = case t of
     if isLeaf p 'I' then q else
     if isLeaf q 'I' then case p of
       { Lf (Basic c)
-        | c == ord 'C' -> lf 'T'
-        | c == ord 'B' -> lf 'I'
+        | c == 'C' -> lf 'T'
+        | c == 'B' -> lf 'I'
       ; Nd p1 p2 -> case p1 of
         { Lf (Basic c)
-          | c == ord 'B' -> p2
-          | c == ord 'R' -> Nd (lf 'T') p2
+          | c == 'B' -> p2
+          | c == 'R' -> Nd (lf 'T') p2
         ; _ -> Nd (Nd p1 p2) q
         }
+      ; _ -> Nd p q
+      } else
+    if isLeaf q 'T' then case p of
+      { Nd (Lf (Basic 'B')) (Lf (Basic 'C')) -> lf 'V'
       ; _ -> Nd p q
       } else Nd p q
   };
 
 enc mem t = case t of
   { Lf d -> case d of
-    { Basic n -> (n, mem)
-    ; Const c -> enc mem $ Nd (lf '#') (Lf $ Basic c)
+    { Basic c -> (ord c, mem)
+    ; Const c -> fpair mem \hp bs -> (hp, (hp + 2, bs . (ord '#':) . (c:)))
     ; StrCon s -> enc mem $ foldr (\h t -> Nd (Nd (lf ':') (Nd (lf '#') (lf h))) t) (lf 'K') s
     }
   ; Nd x y -> fpair mem \hp bs -> let
@@ -654,7 +659,7 @@ nolam combs = let
   } in map (\(s, _) -> (s, maybe undefined id $ mlookup s comtab)) combs;
 
 resolve tab t = case t of
-  { LfVar s -> maybe undefined (Lf . Basic) $ mlookup s tab
+  { LfVar s -> maybe undefined (Lf . Basic . chr) $ mlookup s tab
   ; Lf _ -> t
   ; Nd x y -> Nd (resolve tab x) (resolve tab y)
   };
@@ -740,7 +745,7 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
     }
   in case ast of
   { E x -> case x of
-    { Basic b | b == ord 'Y' -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
+    { Basic b | b == 'Y' -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
     ; Const c -> ((TC "Int",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
     }
@@ -986,14 +991,14 @@ ffiDefine n ffis = case ffis of
 
 getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
 
-untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) ->
-  fneat (foldr ($) (Neat [] [] prims Tip [] []) prog) \ienv fs typed dcs ffis exs ->
-  case inferDefs ienv fs dcs typed of
-    { Left err -> Left err
-    ; Right qas -> Right (qas, (ffis, exs))
-    };
-
-dregs s = maybe "parse error" snd $ program s;
+untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
+  { "" -> fneat (foldr ($) (Neat [] [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
+    case inferDefs ienv fs dcs typed of
+      { Left err -> Left err
+      ; Right qas -> Right (qas, (ffis, exs))
+      }
+  ; s -> Left $ "dregs: " ++ s
+  };
 
 compile s = case untangle s of
   { Left err -> err
@@ -1017,11 +1022,11 @@ par f = ('(':) . f . (')':);
 showTree prec t = case t of
   { LfVar s@(h:_) -> (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++)
   ; Lf n -> case n of
-    { Basic i -> (chr i:)
+    { Basic i -> (i:)
     ; Const i -> showInt i
     ; StrCon s -> ('"':) . (s++) . ('"':)
     }
-  ; Nd (Lf (Basic 70)) (Lf (Basic i)) -> ("FFI_"++) . showInt i
+  ; Nd (Lf (Basic 'F')) (Lf (Basic c)) -> ("FFI_"++) . showInt (ord c)
   ; Nd x y -> (if prec then par else id) (showTree False x . (' ':) . showTree True y)
   };
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
@@ -1038,5 +1043,10 @@ dumpTypes s = case untangle s of
   ; Right ((typed, _), _) -> concatMap (\(s, q) -> s ++ " :: " ++ showQual q ++ "\n") $ toAscList typed
   };
 
--- main = getContents >>= putStr . dumpCombs;
+export "main_compile" main;
+export "main_comb" mainComb;
+export "main_type" mainType;
+
+mainComb = getContents >>= putStr . dumpCombs;
+mainType = getContents >>= putStr . dumpTypes;
 main = getContents >>= putStr . compile;

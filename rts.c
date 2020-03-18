@@ -107,6 +107,7 @@ static void run() {
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
       case 'C': lazy(3, apparg(1, 3), arg(2)); break;
       case 'R': lazy(3, apparg(2, 3), arg(1)); break;
+      case 'V': lazy(3, apparg(3, 1), arg(2)); break;
       case 'I': sp[1] = arg(1); sp++; break;
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;

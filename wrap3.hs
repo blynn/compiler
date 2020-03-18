@@ -18,10 +18,11 @@ import Debug.Trace
 instance Eq Char where (==) x y = x Prelude.== y
 instance Ord Char where (<=) x y = x Prelude.<= y
 intEq :: Int -> Int -> Bool
-intEq x y = x Prelude.== y
+intEq = (Prelude.==)
 intLE :: Int -> Int -> Bool
-intLE x y = x Prelude.<= y
+intLE = (Prelude.<=)
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
+#define export --
 #include "assembly.hs"

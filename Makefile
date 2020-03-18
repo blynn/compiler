@@ -21,7 +21,7 @@ patty.c:lonely patty.hs rts.c;(cat rts.c && ./lonely < patty.hs) > $@
 patty:patty.c
 guardedly.c:patty guardedly.hs rts.c;(cat rts.c && ./patty < guardedly.hs) > $@
 guardedly:guardedly.c
-assembly.c:guardedly assembly.hs rts.c;(cat rts.c && ./guardedly < assembly.hs) > $@
+assembly.c:guardedly assembly.hs rts.c assembly.coda.c;(cat rts.c && ./guardedly < assembly.hs && cat assembly.coda.c) > $@
 assembly:assembly.c
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
