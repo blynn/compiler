@@ -25,6 +25,7 @@ class Monad m where
 (>>) f g = f >>= \_ -> g;
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
+instance Eq Char where { (==) = charEq };
 ($) f x = f x;
 id x = x;
 const x y = x;
@@ -32,6 +33,7 @@ flip f x y = f y x;
 (&) x f = f x;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
+instance Ord Char where { (<=) = charLE };
 data Ordering = LT | GT | EQ;
 compare x y = case x <= y of
   { True -> case y <= x of
@@ -191,7 +193,7 @@ noQual = Qual [];
 
 data Neat = Neat
   -- | Instance environment.
-  [(String, [Qual])]
+  (Map String [Qual])
   -- | Either top-level or instance definitions.
   [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
@@ -221,14 +223,6 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-select f xs acc = flst xs (Nothing, acc) \x xt ->
-  if f x then (Just x, xt ++ acc) else select f xt (x:acc);
-
-addInstance s q is = fpair (select (\(k, _) -> s == k) is []) \m xs -> case m of
-  { Nothing -> (s, [q]):xs
-  ; Just sqs -> second (q:) sqs:xs
-  };
-
 mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
 showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
@@ -245,7 +239,7 @@ addAdt t cs acc = fneat acc \ienv fs typed dcs ffis exs ->
   Neat ienv fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs;
 addClass classId v ms acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv fs
   (map (\(s, t) -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms ++ typed) dcs ffis exs;
-addInst cl q ds acc = fneat acc \ienv fs typed dcs ffis exs -> Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
+addInst cl q ds acc = fneat acc \ienv fs typed dcs ffis exs -> Neat (insertWith (++) cl [q] ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv fs
   ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
 addDefs ds acc = fneat acc \ienv fs typed dcs ffis exs -> Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
@@ -478,6 +472,8 @@ prims = let
   ; bin s = A (ro 'Q') (ro s) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin '='))
+    , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
     -- Pattern matching helper:
     , ("if#", (arr (arr (TV "a") $ TC "Bool") $ arr (TV "a") $ arr (TV "b") $ arr (TV "b") (TV "b"), ro 'I'))
@@ -830,10 +826,10 @@ findInst r qn p insts = case insts of
       (r (predApply u p) qn1)) (qn, V (case p of { Pred s _ -> showPred $ Pred s h})) ps
   }};
 
-findProof is pred psn@(ps, n) = case lookup pred ps of
-  { Nothing -> case pred of { Pred s t -> case lookup s is of
+findProof ienv pred psn@(ps, n) = case lookup pred ps of
+  { Nothing -> case pred of { Pred s t -> case mlookup s ienv of
     { Nothing -> error $ "no instances: " ++ s
-    ; Just insts -> findInst (findProof is) psn pred insts
+    ; Just insts -> findInst (findProof ienv) psn pred insts
     }}
   ; Just s -> (psn, V s)
   };
@@ -894,7 +890,7 @@ inferDefs ienv defs dcs typed = flst defs (Right $ reverse typed) \edef rest -> 
 
 showQual (Qual ps t) = concatMap showPred ps ++ showType t;
 
-untangle = foldr ($) (Neat [] [] prims Tip [] []);
+untangle = foldr ($) (Neat Tip [] prims Tip [] []);
 
 dumpTypes s = fmaybe (program s) "parse error" \(prog, rest) ->
   fneat (untangle prog) \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of

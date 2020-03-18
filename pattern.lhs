@@ -50,7 +50,7 @@ f = \1# 2# 3# -> ...
 \end{code}
 
 In our example, we start numbering the generated variable names from 1, but in
-general they start from the value of a carefully maintained ocunter.
+general they start from the value of a carefully maintained counter.
 
 We bind a `join#` variable that represents a join point which we later
 construct from the other defining equations.
@@ -278,8 +278,15 @@ use a list because there can be multiple guards.
 We rewrite guards as chains of if-then-else expressions, where the last else
 branch is the pattern- or case-join point.
 
-Now that the syntax is nicer, we move `optiApp` to a dedicated optimization
-phase.
+Our previous compiler defined `charEq` and `charLE` which we use in this
+compiler to define the typeclass instance for `Eq Char`. This prepares for
+treating `Int` and `Char` as distinct types in our next compiler.
+
+Doing so will correct a subtle bug. Up until now, a hack treats `Int` and
+`Char` as equal during type checking, but it fails to treat them as equals in
+dictionaries; for example, `Eq Char` differs to `Eq Int`. We could have fixed
+this by treating `Char` as a type synonym for `Int` in the same way `String` is
+a type synonym for `[Char]`, but this breaks FFI typing.
 
 ++++++++++
 <p><a onclick='hideshow("guardedly");'>&#9654; Toggle `guardedly.hs`</a></p>

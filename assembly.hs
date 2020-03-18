@@ -27,6 +27,7 @@ liftA2 f x y = f <$> x <*> y;
 (>>) f g = f >>= \_ -> g;
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
+instance Eq Char where { (==) = charEq };
 ($) f x = f x;
 id x = x;
 const x y = x;
@@ -34,6 +35,7 @@ flip f x y = f y x;
 (&) x f = f x;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
+instance Ord Char where { (<=) = charLE };
 data Ordering = LT | GT | EQ;
 compare x y = case x <= y of
   { True -> case y <= x of
@@ -217,7 +219,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
-data Extra = Basic Char | Const Int | StrCon String;
+data Extra = Basic Char | Const Int | ChrCon Char | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
 data Parser a = Parser (String -> Maybe (a, String));
@@ -228,7 +230,7 @@ noQual = Qual [];
 
 data Neat = Neat
   -- | Instance environment.
-  [(String, [Qual])]
+  (Map String [Qual])
   -- | Either top-level or instance definitions.
   [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
@@ -259,14 +261,6 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-select f xs acc = flst xs (Nothing, acc) \x xt ->
-  if f x then (Just x, xt ++ acc) else select f xt (x:acc);
-
-addInstance s q is = fpair (select (\(k, _) -> s == k) is []) \m xs -> case m of
-  { Nothing -> (s, [q]):xs
-  ; Just sqs -> second (q:) sqs:xs
-  };
-
 mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
 showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
@@ -284,7 +278,7 @@ addAdt t cs (Neat ienv fs typed dcs ffis exs) =
 addClass classId v ms (Neat ienv fs typed dcs ffis exs) =
   Neat ienv fs (map (\(s, t) -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms ++ typed) dcs ffis exs;
 addInst cl q ds (Neat ienv fs typed dcs ffis exs) =
-  Neat (addInstance cl q ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
+  Neat (insertWith (++) cl [q] ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
   Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro 'F') (ro $ chr $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
 addDefs ds (Neat ienv fs typed dcs ffis exs) = Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
@@ -350,7 +344,7 @@ anyOne = fmap itemize (spc (sat (\c -> True)));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-litChar = Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
+litChar = ChrCon <$> between (char '\'') (spch '\'') (litOne '\'');
 litStr = between (char '"') (spch '"') $ many (litOne '"');
 lit = StrCon <$> litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ sepBy r (spch ',');
@@ -460,7 +454,7 @@ expr precTab = fix \r n -> if n <= 9
 
 bType r = foldl1 TAp <$> some r;
 _type r = foldr1 arr <$> sepBy (bType r) (spc (tok "->"));
-typeConst = (\s -> if s == "String" then TAp (TC "[]") (TC "Int") else TC s) <$> conId;
+typeConst = (\s -> if s == "String" then TAp (TC "[]") (TC "Char") else TC s) <$> conId;
 aType = spch '(' *> (spch ')' *> pure (TC "()") <|> ((&) <$> _type aType <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type aType)) <|> pure id)) <* spch ')') <|>
   typeConst <|> (TV <$> varId) <|>
   (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type aType <* spch ']')));
@@ -511,10 +505,12 @@ prims = let
   ; bin s = A (ro 'Q') (ro s) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin '='))
+    , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
     , ("()", (TC "()", ro 'K'))
-    , ("chr", (ii, ro 'I'))
-    , ("ord", (ii, ro 'I'))
+    , ("chr", (arr (TC "Int") (TC "Char"), ro 'I'))
+    , ("ord", (arr (TC "Char") (TC "Int"), ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (E $ Const $ 1) (ro '+'))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
@@ -596,7 +592,7 @@ babs t = case t of
 
 nolam' x = (\(Closed d) -> d) $ babs $ debruijn [] x;
 
-isLeaf t c = case t of { Lf (Basic n) -> n == chr (ord c) ; _ -> False };
+isLeaf t c = case t of { Lf (Basic n) -> n == c ; _ -> False };
 
 optim comtab t = case t of
   { LfVar s -> let { u = maybe t id $ mlookup s comtab } in case u of
@@ -629,6 +625,7 @@ enc mem t = case t of
   { Lf d -> case d of
     { Basic c -> (ord c, mem)
     ; Const c -> fpair mem \hp bs -> (hp, (hp + 2, bs . (ord '#':) . (c:)))
+    ; ChrCon c -> fpair mem \hp bs -> (hp, (hp + 2, bs . (ord '#':) . (ord c:)))
     ; StrCon s -> enc mem $ foldr (\h t -> Nd (Nd (lf ':') (Nd (lf '#') (lf h))) t) (lf 'K') s
     }
   ; Nd x y -> fpair mem \hp bs -> let
@@ -654,9 +651,9 @@ optiApp' t = case t of
   ; _ -> t
   };
 
-nolam combs = let
-  { comtab = foldl (\m (s, t) -> insert s (optim m $ nolam' $ optiApp' t) m) Tip combs
-  } in map (\(s, _) -> (s, maybe undefined id $ mlookup s comtab)) combs;
+nolam lambs = let
+  { comtab = foldl (\m (s, t) -> insert s (optim m $ nolam' $ optiApp' t) m) Tip lambs
+  } in map (\(s, _) -> (s, maybe undefined id $ mlookup s comtab)) lambs;
 
 resolve tab t = case t of
   { LfVar s -> maybe undefined (Lf . Basic . chr) $ mlookup s tab
@@ -664,12 +661,12 @@ resolve tab t = case t of
   ; Nd x y -> Nd (resolve tab x) (resolve tab y)
   };
 
-asm combs = foldl (\(tab, mem) (s, t) ->
+asm lambs = foldl (\(tab, mem) (s, t) ->
   fpair (enc mem $ resolve (insert s (fst mem) tab) t) \p m' -> let
   -- Definitions like "t = t;" must be handled with care.
   { m'' = fpair m' \hp bs -> if p == hp then (hp + 2, bs . (ord 'I':) . (p:)) else m'
   } in (insert s p tab, m''))
-    (Tip, (128, id)) $ nolam combs;
+    (Tip, (128, id)) $ nolam lambs;
 
 -- Type checking.
 
@@ -693,11 +690,9 @@ varBind s t = case t of
   ; TAp a b -> if occurs s t then Nothing else Just [(s, t)]
   };
 
-charIsInt s = if s == "Char" then "Int" else s;
-
 mgu unify t u = case t of
   { TC a -> case u of
-    { TC b -> if charIsInt a == charIsInt b then Just [] else Nothing
+    { TC b -> if a == b then Just [] else Nothing
     ; TV b -> varBind b t
     ; TAp a b -> Nothing
     }
@@ -745,9 +740,10 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
     }
   in case ast of
   { E x -> case x of
-    { Basic b | b == 'Y' -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
-    ; Const c -> ((TC "Int",  ast), csn)
-    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
+    { Basic 'Y' -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
+    ; Const _ -> ((TC "Int",  ast), csn)
+    ; ChrCon _ -> ((TC "Char",  ast), csn)
+    ; StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
     }
   ; V s -> fmaybe (lookup s loc)
     (fmaybe (mlookup s typed) (error $ "bad symbol: " ++ s) insta)
@@ -760,7 +756,7 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
   };
 
 infer dcs typed loc ast = fpair (infer' dcs typed loc ast (Just [], 0)) \(t, a) (ms, n) ->
-  let { ms' = unify (TV "self!") t ms } in case ms' of
+  case unify (TV "self!") t ms of
   { Just sub -> ((apply sub t, proofApply sub a), n)
   };
 
@@ -797,13 +793,15 @@ match h t = case h of
     }
   };
 
+par f = ('(':) . f . (')':);
 showType t = case t of
-  { TC s -> s
-  ; TV s -> s
-  ; TAp a b -> concat ["(", showType a, " ", showType b, ")"]
+  { TC s -> (s++)
+  ; TV s -> (s++)
+  ; TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
+  ; TAp a b -> par $ showType a . (' ':) . showType b
   };
-showPred (Pred s t) = s ++ (' ':showType t) ++ " => ";
-dictVarize s t = '{':s ++ (' ':showType t) ++ "}";
+showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++);
+dictVarize s t = '{':s ++ (' ':showType t "") ++ "}";
 
 findInst r qn p@(Pred cl ty) insts = case insts of
   { [] -> fpair qn \q n -> let { v = '*':showInt n "" } in Right (((p, v):q, n + 1), V v)
@@ -813,10 +811,10 @@ findInst r qn p@(Pred cl ty) insts = case insts of
       <$> r (Pred cl1 $ apply u ty1) qn1) (qn, V $ dictVarize cl h) ps
   }};
 
-findProof is pred psn@(ps, n) = case lookup pred ps of
-  { Nothing -> case pred of { Pred s t -> case lookup s is of
+findProof ienv pred psn@(ps, n) = case lookup pred ps of
+  { Nothing -> case pred of { Pred s t -> case mlookup s ienv of
     { Nothing -> Left $ "no instances: " ++ s
-    ; Just insts -> findInst (findProof is) psn pred insts
+    ; Just insts -> findInst (findProof ienv) psn pred insts
     }}
   ; Just s -> Right (psn, V s)
   };
@@ -949,8 +947,8 @@ inferDefs' ienv dcs (typeTab, combF) edef = let
   };
 inferDefs ienv defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
-  ; combs = second snd <$> typed
-  } in foldM (inferDefs' ienv dcs) (typeTab, (combs++)) $ rewritePatterns dcs <$> defs;
+  ; lambs = second snd <$> typed
+  } in foldM (inferDefs' ienv dcs) (typeTab, (lambs++)) $ rewritePatterns dcs <$> defs;
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
@@ -992,7 +990,7 @@ ffiDefine n ffis = case ffis of
 getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
 
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
-  { "" -> fneat (foldr ($) (Neat [] [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
+  { "" -> fneat (foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
     case inferDefs ienv fs dcs typed of
       { Left err -> Left err
       ; Right qas -> Right (qas, (ffis, exs))
@@ -1002,7 +1000,7 @@ untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest 
 
 compile s = case untangle s of
   { Left err -> err
-  ; Right ((_, combF), (ffis, exs)) -> fpair (asm $ combF []) \tab mem ->
+  ; Right ((_, lambF), (ffis, exs)) -> fpair (asm $ lambF []) \tab mem ->
     (concatMap ffiDeclare ffis ++) .
     ("static void foreign(u n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
@@ -1018,12 +1016,12 @@ compile s = case untangle s of
       concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
   };
 
-par f = ('(':) . f . (')':);
 showTree prec t = case t of
   { LfVar s@(h:_) -> (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++)
   ; Lf n -> case n of
     { Basic i -> (i:)
     ; Const i -> showInt i
+    ; ChrCon c -> ('\'':) . (c:) . ('\'':)
     ; StrCon s -> ('"':) . (s++) . ('"':)
     }
   ; Nd (Lf (Basic 'F')) (Lf (Basic c)) -> ("FFI_"++) . showInt (ord c)
@@ -1033,14 +1031,15 @@ disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
 
 dumpCombs s = case untangle s of
   { Left err -> err
-  ; Right ((_, combF), _) -> foldr ($) [] $ map disasm $ nolam $ combF []
+  ; Right ((_, lambF), _) -> foldr ($) [] $ map disasm $ nolam $ lambF []
   };
 
-showQual (Qual ps t) = concatMap showPred ps ++ showType t;
+showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t;
 
 dumpTypes s = case untangle s of
   { Left err -> err
-  ; Right ((typed, _), _) -> concatMap (\(s, q) -> s ++ " :: " ++ showQual q ++ "\n") $ toAscList typed
+  ; Right ((typed, _), _) -> ($ "") $ foldr (.) id $
+    map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
 
 export "main_compile" main;

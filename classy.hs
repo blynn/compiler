@@ -112,7 +112,7 @@ cas r = cas' <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (V "\\C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
@@ -217,7 +217,6 @@ prims = let
   ; iii = arr (TC "Int") ii
   ; bin s = R $ "``BT`T" ++ s } in map (second (first noQual)) $
     [ ("\\Y", (arr (arr (TV "a") (TV "a")) (TV "a"), R "Y"))
-    , ("\\C", (arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))), R "C"))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "="))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "L"))
     , ("chr", (ii, R "I"))

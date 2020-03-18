@@ -72,9 +72,11 @@ data LC = Var VarId | Lam VarId LC | LC :@ LC
 A program is represented by a 'closed' lambda term, which means every `Var`
 node must be a descendant of a `Lam` node with a matching `VarId`.
 
-As for its semantics, we break convention and define a closed lambda term to
-be notation for a combinatory logic term, which we define to be a full binary
-tree whose leaves can be one of 6 different values:
+Normally, we next talk about variable substitution (or 'beta reduction') to
+describe the 'dynamic semantics', that is, how to compute with a lambda term.
+We leave that for the textbooks. For our purposes, a closed lambda term to be
+notation for a 'combinatory logic' term, which is a full binary tree whose
+leaves can be one of 6 different values:
 
 ++++++++++
 <script>
@@ -104,7 +106,7 @@ import Control.Monad.State
 data Com = S | K | I | B | C | T
 \end{code}
 
-We actually only need S and K; the others are basically useful macros.
+We actually only need S and K; the others can be thought of as macros.
 
 \begin{code}
 data CL = Lf Com | CL :# CL | Ext String
@@ -116,7 +118,8 @@ functions with our combinators.
 The `rewrite` function below rewrites a closed LC term as a CL term, using an
 algorithm known as 'bracket abstraction'. See
 https://en.wikipedia.org/wiki/To_Mock_a_Mockingbird[Smullyan's "To Mock a
-Mockingbird"] for a particularly enjoyable explanation.
+Mockingbird"] for a particularly enjoyable explanation of why this results in a
+combinatory logic term whose meaning matches that of the original lambda term.
 
 \begin{code}
 type VarId = String
@@ -144,8 +147,8 @@ amalgam of CL and LC terms.
 
 == What is combinatory logic? ==
 
-In a combinatory logic term, subterms matching certain patterns 'reduce' to
-other subterms:
+To execute a combinatory logic term, we 'reduce' subterms matching certain
+patterns to other subterms:
 
 \begin{code}
 reduce :: CL -> Maybe CL
@@ -165,11 +168,12 @@ the same copy of the argument that is duplicated, that is, we employ 'sharing'
 to conserve memory. The S combinator also means a tree need not shrink after a
 so-called reduction.
 
-If none of the patterns appear, then no reductions are possible and the term
-is said to be in 'normal form'. Otherwise there are one or more subterms that
-can be reduced, and we must choose which to reduce.
+If none of the patterns appear, then no reductions are possible and the term is
+said to be in 'normal form'. Otherwise one or more subterms can be reduced, and
+we must choose which to reduce. After a reduction, new reducible subterms may
+appear, and again we must choose.
 
-One choice is to reduce them in 'normal order': repeatedly reduce the leftmost
+One strategy is to reduce in 'normal order': repeatedly reduce the leftmost
 subtree that can be reduced.
 
 If a term can be reduced to a normal form (which is in some sense unique by
@@ -178,12 +182,11 @@ then normal-order reduction will find it. Other evaluation orders might never
 terminate even when a normal form exists.
 
 The left 'spine' of the tree is the path that starts from the root node and
-recursively follows the left child. To evaluate in normal order,
-we walk down the left spine until we bottom out, then reduce as we walk back
-up to the root; on each reduction, we must walk back down again in case the
-replacement subtree can be reduced. Afterwards, we walk down the left spine
-again to the bottom, and this time as we walk back up again, we recursively
-normalize the right branches.
+recursively follows the left child. To evaluate in normal order, we walk down
+the left spine until we bottom out, then reduce as we walk back up to the root;
+on each reduction, we must walk back down again in case the replacement subtree
+can be reduced. Afterwards, we again walk down the left spine to the bottom,
+and this time as we walk back up, we recursively normalize the right branches.
 
 \begin{code}
 normalize :: CL -> CL

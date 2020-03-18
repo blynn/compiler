@@ -15,12 +15,14 @@ import Debug.Trace
 (-) = (Prelude.-) :: Int -> Int -> Int
 (/) = Prelude.div
 (%) = Prelude.mod
-instance Eq Char where (==) x y = x Prelude.== y
-instance Ord Char where (<=) x y = x Prelude.<= y
 intEq :: Int -> Int -> Bool
 intEq = (Prelude.==)
 intLE :: Int -> Int -> Bool
 intLE = (Prelude.<=)
+charEq :: Char -> Char -> Bool
+charEq = (Prelude.==)
+charLE :: Char -> Char -> Bool
+charLE = (Prelude.<=)
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall

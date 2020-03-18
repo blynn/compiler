@@ -130,7 +130,8 @@ type `x`. If successful, it returns `Just` the value along with the unparsed
 remainder of the input string. Otherwise it returns `Nothing`.
 
 Values of type `Parser x` compose in natural ways. See
-http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf['Combinator Parsing: A Short Tutorial` by Swierstra] for details.
+http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf[Swierstra,
+'Combinator Parsing: A Short Tutorial'].
 
 ------------------------------------------------------------------------
 pure x inp = Just (P x inp);

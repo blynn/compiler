@@ -228,7 +228,7 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (ro 'C') (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
@@ -513,8 +513,6 @@ infer' typed loc ast csn = fpair csn \cs n ->
   { E x -> case x of
     { Basic b -> ife (b == ord 'Y')
       (insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a"))
-      $ ife (b == ord 'C')
-      (insta $ noQual $ arr (arr (TV "a") (arr (TV "b") (TV "c"))) (arr (TV "b") (arr (TV "a") (TV "c"))))
       undefined
     ; Const _ -> ((TC "Int",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)

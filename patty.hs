@@ -545,6 +545,8 @@ prims = let
   ; bin s = A (ro 'Q') (ro s) } in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin '='))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin 'L'))
+    , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin '='))
+    , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin 'L'))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro 'I'))
     -- Pattern matching helper:
     , ("if#", (arr (arr (TV "a") $ TC "Bool") $ arr (TV "a") $ arr (TV "b") $ arr (TV "b") (TV "b"), ro 'I'))
