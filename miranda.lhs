@@ -69,9 +69,9 @@ $ (cat rts.c;./assembly < q11.hs) > q11.c
 $ cc -O2 q11.c -o q11
 $ time ./q11 > /dev/null
 
-real    0m7.288s
-user    0m7.246s
-sys     0m0.040s
+real    0m6.783s
+user    0m6.734s
+sys     0m0.048s
 ------------------------------------------------------------------------
 
 I can't help feeling proud. Miranda uses
@@ -81,14 +81,14 @@ large set of combinators, including dedicated combinators for map and fold.
 And surely its runtime system must be expertly tuned.
 
 Our program, on the other hand, compiles to a handful of basic combinators,
-interprets them on a hastily designed virtual machine, uses the Scott encoding
-for all data types except unsigned ints, and is largely written in Haskell
-that prizes brevity over efficiency: it began life as link:ioccc.html[an IOCCC
-entry] after all. Yet somehow it produces faster code!
+uses the Scott encoding for all data types except unsigned ints, and the source
+to its hastily designed virtual machine prizes brevity over efficiency: it
+began life as link:ioccc.html[an IOCCC entry] after all. Indeed, simple
+changes boost its speed by 10%, which we shall examine in depth another day.
 
-But really its performance has little to do with my coding skills. The credit
-goes to Oleg Kiselyov's bracket abstraction algorithm (with minor tweaks from a
-few syntactic rewrites).
+But really its performance has little to do with my prowess. The credit goes to
+Oleg Kiselyov's bracket abstraction algorithm (with minor tweaks from a few
+syntactic rewrites).
 
 ++++++++++
 <p><a onclick='hideshow("combo");'>&#9654; Toggle combinators</a></p>
@@ -182,9 +182,9 @@ The difference is even more pronounced for another example that computes 'e' to
 ------------------------------------------------------------------------
 $ time ./e4096 > /dev/null
 
-real    0m7.292s
-user    0m7.257s
-sys     0m0.033s
+real    0m6.532s
+user    0m6.471s
+sys     0m0.060s
 $ time mira -exec e4096.m > /dev/null
 
 real    0m14.350s

@@ -188,7 +188,7 @@ conOf con = case con of { Constr s _ -> s };
 mkCase t cs = (concatMap (('|':) . conOf) cs,
   ( arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
   , L "x" $ V "x"));
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('@':s, s : l))) ("@", []);
 -- For example, creates `Just = \x a b -> b x`.
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,

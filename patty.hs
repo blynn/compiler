@@ -239,7 +239,7 @@ specialCase = concatMap (('|':) . conOf);
 mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
   , ro 'I'));
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('@':s, s : l))) ("@", []);
 index n s ss = case ss of
   { [] -> undefined
   ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
@@ -260,7 +260,7 @@ addInstance s q is = fpair (select (\kv -> s == fst kv) is []) \m xs -> case m o
   ; Just sqs -> second (q:) sqs:xs
   };
 
-mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
+mkSel ms s = L "@" $ A (V "@") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
 
 ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
@@ -951,7 +951,7 @@ inferMethod ienv dcs typed qi def = fpair def \s expr ->
                 ; Just subx -> snd $ prove' ienv (subx @@ sub) (dictVars ps2 0) ax
               }}}}}}}}};
 
-genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
+genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
 
 inferInst ienv dcs typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in

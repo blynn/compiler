@@ -20,7 +20,8 @@ Patterns and guards make programming much more pleasant.
 We support definitions spread across multiple equations, and patterns in
 lambdas, case expressions, and the arguments of function definitions.
 
-We leave supporting patterns as the left-hand side of an equation for another day.
+We leave supporting patterns as the left-hand side of an equation for another
+day. We also ignore fixity declarations for pattern infix operators.
 
 *Definitions with multiple equations*
 

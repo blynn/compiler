@@ -37,13 +37,7 @@ class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
 instance Ord Char where { (<=) = charLE };
 data Ordering = LT | GT | EQ;
-compare x y = case x <= y of
-  { True -> case y <= x of
-    { True -> EQ
-    ; False -> LT
-    }
-  ; False -> GT
-  };
+compare x y = if x <= y then if y <= x then EQ else LT else GT;
 instance Ord a => Ord [a] where {
   (<=) xs ys = case xs of
     { [] -> True
@@ -85,6 +79,8 @@ take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t;
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
+instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
+instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
 mapM_ f = foldr ((>>) . f) (pure ());
@@ -261,8 +257,6 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-mkSel ms s = L "*" $ A (V "*") $ foldr L (V $ '*':s) $ map (('*':) . fst) ms;
-
 showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
 showInt n = if 0 == n then ('0':) else showInt' n;
 
@@ -275,8 +269,11 @@ mkFFIHelper n t acc = case t of
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs;
 addAdt t cs (Neat ienv fs typed dcs ffis exs) =
   Neat ienv fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs;
-addClass classId v ms (Neat ienv fs typed dcs ffis exs) =
-  Neat ienv fs (map (\(s, t) -> (s, (Qual [Pred classId v] t, mkSel ms s))) ms ++ typed) dcs ffis exs;
+addClass classId v ms (Neat ienv fs typed dcs ffis exs) = let
+  { vars = zipWith (\_ n -> showInt n "") ms $ upFrom 0
+  } in Neat ienv fs (zipWith (\var (s, t) ->
+    (s, (Qual [Pred classId v] t,
+      L "@" $ A (V "@") $ foldr L (V var) vars))) vars ms ++ typed) dcs ffis exs;
 addInst cl q ds (Neat ienv fs typed dcs ffis exs) =
   Neat (insertWith (++) cl [q] ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
@@ -364,12 +361,15 @@ pat = PatCon <$> gcon <*> many (apat' pat)
 apat = apat' pat;
 
 guards s r = tok s *> r <|> foldr ($) (V $ if s == "=" then "pjoin#" else "cjoin#")
-  <$> some ((\x y -> A (A (A (V "if") x) y)) <$> (spch '|' *> r) <*> (tok s *> r));
+  <$> some ((\x y -> case x of
+    { V "True" -> \_ -> y
+    ; _ -> A (A (A (V "if") x) y)
+    }) <$> (spch '|' *> r) <*> (tok s *> r));
 alt r = (,) <$> pat <*> guards "->" r;
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas r = Ca <$> between (tok "case") (tok "of") r <*> alts r;
-lamCase r = tok "case" *> (L "\\case" . Ca (V "\\case") <$> alts r);
+lamCase r = tok "case" *> (L "@" . Ca (V "@") <$> alts r);
 onePat vs x = Pa [(vs, x)];
 lam r = spch '\\' *> (lamCase r <|> liftA2 onePat (some apat) (tok "->" *> r));
 
@@ -700,11 +700,11 @@ mgu unify t u = case t of
   ; TAp a b -> case u of
     { TC b -> Nothing
     ; TV b -> varBind b t
-    ; TAp c d -> unify b d (mgu unify a c)
+    ; TAp c d -> mgu unify a c >>= unify b d
     }
   };
 
-unify a b = maybe Nothing \s -> (@@ s) <$> (mgu unify (apply s a) (apply s b));
+unify a b s = (@@ s) <$> mgu unify (apply s a) (apply s b);
 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
@@ -751,14 +751,12 @@ infer' dcs typed loc ast csn = fpair csn \cs n ->
   ; A x y ->
     fpair (infer' dcs typed loc x (cs, n + 1)) \(tx, ax) csn1 ->
     fpair (infer' dcs typed loc y csn1) \(ty, ay) csn2 ->
-      ((va, A ax ay), first (unify tx (arr ty va)) csn2)
+      ((va, A ax ay), first (maybe (error "unify failed") id . unify tx (arr ty va)) csn2)
   ; L s x -> first (\(t, a) -> (arr va t, L s a)) $ infer' dcs typed ((s, va):loc) x (cs, n + 1)
   };
 
-infer dcs typed loc ast = fpair (infer' dcs typed loc ast (Just [], 0)) \(t, a) (ms, n) ->
-  case unify (TV "self!") t ms of
-  { Just sub -> ((apply sub t, proofApply sub a), n)
-  };
+infer dcs typed loc ast = fpair (infer' dcs typed loc ast ([], 0)) \(t, a) (cs, n) ->
+  case unify (TV "self!") t cs of { Just sub -> ((apply sub t, proofApply sub a), n) };
 
 instance Eq Type where
   { (TC s) == (TC t) = s == t
@@ -848,7 +846,7 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
             ; Just subx -> snd <$> prove' ienv (dictVars ps2 0) (proofApply subx ax)
           }}};
 
-genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
+genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
 
 inferInst ienv dcs typed (cl, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
   (dictVarize cl t,) . (noQual (TC "DICT"),) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)

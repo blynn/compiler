@@ -504,7 +504,7 @@ inferMethod ienv typed qi def = fpair def \s expr ->
                 ; Just subx -> snd $ prove' ienv (subx @@ sub) (dictVars ps2 0) ax
               }}}}}}}}};
 
-genProduct ds = foldr L (L "*" $ foldl A (V "*") $ map V ds) ds;
+genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
 
 inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in
@@ -526,7 +526,7 @@ conOf con = case con of { Constr s _ -> s };
 mkCase t cs = (concatMap (('|':) . conOf) cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
   , L "x" $ V "x"));
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('*':s, s : l))) ("*", []);
+mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('@':s, s : l))) ("@", []);
 -- For example, creates `Just = \x a b -> b x`.
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
