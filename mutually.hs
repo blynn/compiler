@@ -154,28 +154,24 @@ doubleL k x l (Bin _ rk rkx (Bin _ rlk rlkx rll rlr) rr) =
 singleR k x (Bin _ lk lkx ll lr) r = node lk lkx ll (node k x lr r);
 doubleR k x (Bin _ lk lkx ll (Bin _ lrk lrkx lrl lrr)) r =
   node lrk lrkx (node lk lkx ll lrl) (node k x lrr r);
-balance k x l r = case size l + size r <= 1 of
-  { True -> node
-  ; False -> case 5 * size l + 3 <= 2 * size r of
-    { True -> case r of
+balance k x l r = (if size l + size r <= 1
+  then node
+  else if 5 * size l + 3 <= 2 * size r
+    then case r of
       { Tip -> node
-      ; Bin sz _ _ rl rr -> case 2 * size rl + 1 <= 3 * size rr of
-        { True -> singleL
-        ; False -> doubleL
-        }
+      ; Bin sz _ _ rl rr -> if 2 * size rl + 1 <= 3 * size rr
+        then singleL
+        else doubleL
       }
-    ; False -> case 5 * size r + 3 <= 2 * size l of
-      { True -> case l of
+    else if 5 * size r + 3 <= 2 * size l
+      then case l of
         { Tip -> node
-        ; Bin sz _ _ ll lr -> case 2 * size lr + 1 <= 3 * size ll of
-          { True -> singleR
-          ; False -> doubleR
-          }
+        ; Bin sz _ _ ll lr -> if 2 * size lr + 1 <= 3 * size ll
+          then singleR
+          else doubleR
         }
-      ; False -> node
-      }
-    }
-  } k x l r;
+      else node
+  ) k x l r;
 insert kx x t = case t of
   { Tip -> singleton kx x
   ; Bin sz ky y l r -> case compare kx ky of

@@ -27,4 +27,4 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
 #define export --
-#include "mutually.hs"
+#include "virtually.hs"

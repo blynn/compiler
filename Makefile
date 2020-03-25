@@ -11,30 +11,32 @@ SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js diff
 menu.html: menu; cobble menu menu
 
 %.html: %.lhs menu.html; cobble mathbook menu $<
-%:%.c;cc -O2 $^ -o $@
+%:%.c;clang -O3 $^ -o $@
 
 vm:vm.c
 raw:vm;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c
-patty.c:lonely patty.hs rts.c;(cat rts.c && ./lonely < patty.hs) > $@
+patty.c:lonely patty.hs rts.c;(cat rts.c && time ./lonely < patty.hs) > $@
 patty:patty.c
-guardedly.c:patty guardedly.hs rts.c;(cat rts.c && ./patty < guardedly.hs) > $@
+guardedly.c:patty guardedly.hs rts.c;(cat rts.c && time ./patty < guardedly.hs) > $@
 guardedly:guardedly.c
-assembly.c:guardedly assembly.hs rts.c assembly.coda.c;(cat rts.c && ./guardedly < assembly.hs && cat assembly.coda.c) > $@
+assembly.c:guardedly assembly.hs rts.c assembly.coda.c;(cat rts.c && time ./guardedly < assembly.hs && cat assembly.coda.c) > $@
 assembly:assembly.c
-mutually.c:assembly mutually.hs rts.c assembly.coda.c;(cat rts.c && ./assembly < mutually.hs && cat assembly.coda.c) > $@
+mutually.c:assembly mutually.hs rts.c assembly.coda.c;(cat rts.c && time ./assembly < mutually.hs && cat assembly.coda.c) > $@
 mutually:mutually.c
+virtually.c:mutually virtually.hs rts.c assembly.coda.c;(cat rts.c && time ./mutually < virtually.hs && cat assembly.coda.c) > $@
+virtually:virtually.c
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
 
 WCC=clang -O3 -c --target=wasm32 -Wall
-WLD=wasm-ld-8 --export-dynamic --allow-undefined --no-entry --initial-memory=33554432
+WLD=wasm-ld-8 --export-dynamic --allow-undefined --no-entry
 wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
 wasm/douady.o:wasm/douady.c;$(WCC) $^ -o $@
 wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
-douady.wasm:wasm/std.o wasm/douady.o;$(WLD) $^ -o $@
+douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
 
 site: $(SITE)
