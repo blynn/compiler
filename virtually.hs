@@ -1144,15 +1144,9 @@ genBin op = genComb op 2 [Raw "_NUM", Raw $ "num(1)" ++ op ++ "num(2)"];
 genVM = id
   . genLazy 2
   . genLazy 3
-  . genLazy 4
   . ("static void run(){\n  for(;;){\n"++)
-  . ("#ifdef __clang__\n"++)
-  . ("    if (hp > TOP - 32) gc();\n"++)
-  . ("    u x; while(isAddr(x = *sp)) *--sp = mem[x]; switch(x) {\n"++)
-  . ("#else\n"++)
-  . ("    if (mem + hp > sp - 32) gc();\n"++)
-  . ("    u x = *sp; switch(x) {\n"++)
-  . ("#endif\n"++)
+  . ("    if (mem + hp > sp - 8) gc();\n"++)
+  . ("    u x = *sp; if(isAddr(x)) *--sp = mem[x]; else switch(x) {\n"++)
   . genComb "B" 3 [Stk 1, Stk 2 :-: Stk 3]
   . genComb "C" 3 [Stk 1, Stk 3, Stk 2]
   . genComb "S" 3 [Stk 1, Stk 3, Stk 2 :-: Stk 3]
@@ -1176,11 +1170,7 @@ genVM = id
   . genComb "newIORef" 3 [Stk 3, Raw "_END" :-: Stk 1, Stk 2]  -- newIORef
   . genComb "readIORef" 3 [Stk 3, Raw "mem[arg(1) + 1]", Stk 2]  -- readIORef
   . genComb "writeIORef" 3 [Stk 3, Stk 4 :-: Raw "(mem[arg(1) + 1] = arg(2), _K)", Stk 3]  -- writeIORef
-  . genCaseComb "." . ("return;\n"++)
-  . ("#ifdef __clang__\n"++)
-  . ("#else\n"++)
-  . ("default:*--sp = mem[x];\n"++)
-  . ("#endif\n"++)
+  . ("default:return;\n"++)
   . ("}\n  }\n}\n"++)
   ;
 

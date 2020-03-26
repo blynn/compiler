@@ -66,11 +66,7 @@ static u evac(u n) {
 static void gc() {
   hp = 128;
   u di = hp;
-#ifdef __clang__
-  sp = mem + TOP - 1;
-#else
   sp = altmem + TOP - 1;
-#endif
   for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
   *sp = evac(*spTop);
   while (di < hp) {
@@ -104,14 +100,10 @@ void rts_reduce(u n) {
 
 void rts_init() __attribute__((visibility("default")));
 void rts_init() {
-  mem = malloc(TOP * 2 * sizeof(u)); altmem = mem + TOP;
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
-#ifdef __clang__
-  spTop = altmem + TOP - 1;
-#else
   spTop = mem + TOP - 1;
-#endif
 }
 
 static u pro_offset;

@@ -91,6 +91,8 @@ static inline void lazy(u height, u f, u x) {
   *sp = f;
 }
 
+static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
+
 static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
 static void foreign(u n);
@@ -103,15 +105,15 @@ static void run() {
       case 'F': foreign(arg(1)); break;
       case 'Y': lazy(1, arg(1), sp[1]); break;
       case 'Q': lazy(3, arg(3), apparg(2, 1)); break;
-      case 'S': lazy(3, apparg(1, 3), apparg(2, 3)); break;
+      case 'S': lazy3(3, arg(1), arg(3), apparg(2, 3)); break;
       case 'B': lazy(3, arg(1), apparg(2, 3)); break;
-      case 'C': lazy(3, apparg(1, 3), arg(2)); break;
-      case 'R': lazy(3, apparg(2, 3), arg(1)); break;
-      case 'V': lazy(3, apparg(3, 1), arg(2)); break;
+      case 'C': lazy3(3, arg(1), arg(3), arg(2)); break;
+      case 'R': lazy3(3, arg(2), arg(3), arg(1)); break;
+      case 'V': lazy3(3, arg(3), arg(1), arg(2)); break;
       case 'I': sp[1] = arg(1); sp++; break;
       case 'T': lazy(2, arg(2), arg(1)); break;
       case 'K': lazy(2, 'I', arg(1)); break;
-      case ':': lazy(4, apparg(4, 1), arg(2)); break;
+      case ':': lazy3(4, arg(4), arg(1), arg(2)); break;
       case '#': lazy(2, arg(2), sp[1]); break;
       case '=': num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
       case 'L': num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I'); break;
@@ -121,14 +123,14 @@ static void run() {
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
       case 'n':  // newIORef
-        lazy(3, app(arg(3), app('?', arg(1))), arg(2));
+        lazy3(3, arg(3), app('?', arg(1)), arg(2));
         break;
       case 'r':  // readIORef
-        lazy(3, app(arg(3), mem[arg(1) + 1]), arg(2));
+        lazy3(3, arg(3), mem[arg(1) + 1], arg(2));
         break;
       case 'w':  // writeIORef
         mem[arg(1) + 1] = arg(2);
-        lazy(4, app(arg(4), 'K'), arg(3));
+        lazy3(4, arg(4), 'K', arg(3));
         break;
       case '.': return;
       case FORWARD: return;  // die("stray forwarding pointer");
