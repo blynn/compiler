@@ -172,7 +172,7 @@ case scrutinee of
 
 Conceptually, we combine contiguous data constructor alternatives into maps,
 where the keys are the data constructors, and the values are the corresponding
-expressions appeneded in the order they appear.
+expressions appended in the order they appear.
 
 \begin{code}
   [ (Foo, [(Left 42) -> expr1, (Right a) -> expr3])
@@ -277,7 +277,7 @@ element of a pair, and the corresponding expression is the second element. We
 use a list because there can be multiple guards.
 
 We rewrite guards as chains of if-then-else expressions, where the last else
-branch is the pattern- or case-join point.
+branch is the pattern join point.
 
 Our previous compiler defined `charEq` and `charLE` which we use in this
 compiler to define the typeclass instance for `Eq Char`. This prepares for

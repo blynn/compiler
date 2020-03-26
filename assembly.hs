@@ -356,11 +356,10 @@ pat = PatCon <$> gcon <*> many (apat' pat)
   <|> (&) <$> apat' pat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat' pat <|> pure id);
 apat = apat' pat;
 
-guards s r = tok s *> r <|> foldr ($) (V $ if s == "=" then "pjoin#" else "cjoin#")
-  <$> some ((\x y -> case x of
-    { V "True" -> \_ -> y
-    ; _ -> A (A (A (V "if") x) y)
-    }) <$> (spch '|' *> r) <*> (tok s *> r));
+guards s r = tok s *> r <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+  { V "True" -> \_ -> y
+  ; _ -> A (A (A (V "if") x) y)
+  }) <$> (spch '|' *> r) <*> (tok s *> r));
 alt r = (,) <$> pat <*> guards "->" r;
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);

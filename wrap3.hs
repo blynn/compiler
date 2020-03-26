@@ -3,6 +3,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleInstances #-}
 import Prelude (Bool(..), Char, Int, String, succ, Show, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
@@ -27,4 +28,4 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
 #define export --
-#include "virtually.hs"
+#include "uniquely.hs"

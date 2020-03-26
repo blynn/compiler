@@ -223,7 +223,7 @@ noQual = Qual [];
 
 data Neat = Neat
   -- | Instance environment.
-  (Map String [Qual])
+  (Map String [(String, Qual)])
   -- | Either top-level or instance definitions.
   [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
@@ -275,8 +275,9 @@ addClass classId v ms (Neat ienv fs typed dcs ffis exs) = let
   } in Neat ienv fs (zipWith (\var (s, t) ->
     (s, (Qual [Pred classId v] t,
       L "@" $ A (V "@") $ foldr L (V var) vars))) vars ms ++ typed) dcs ffis exs;
-addInst cl q ds (Neat ienv fs typed dcs ffis exs) =
-  Neat (insertWith (++) cl [q] ienv) (Right (cl, (q, ds)):fs) typed dcs ffis exs;
+dictName cl (Qual _ t) = '{':cl ++ (' ':showType t "") ++ "}";
+addInst cl q ds (Neat ienv fs typed dcs ffis exs) = let { name = dictName cl q } in
+  Neat (insertWith (++) cl [(name, q)] ienv) (Right (name, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
   Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "ffi") (E . Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
 addDefs ds (Neat ienv fs typed dcs ffis exs) = Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
@@ -362,11 +363,10 @@ pat = PatCon <$> gcon <*> many apat
 
 maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce <$> braceSep def) <|> pure id);
 
-guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V $ if s == "=" then "pjoin#" else "cjoin#")
-  <$> some ((\x y -> case x of
-    { V "True" -> \_ -> y
-    ; _ -> A (A (A (V "if") x) y)
-    }) <$> (spch '|' *> expr) <*> (tok s *> expr));
+guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+  { V "True" -> \_ -> y
+  ; _ -> A (A (A (V "if") x) y)
+  }) <$> (spch '|' *> expr) <*> (tok s *> expr));
 alt = (,) <$> pat <*> guards "->";
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts = braceSep alt;
@@ -788,20 +788,19 @@ showType t = case t of
   ; TAp a b -> par $ showType a . (' ':) . showType b
   };
 showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++);
-dictVarize s t = '{':s ++ (' ':showType t "") ++ "}";
 
-findInst r qn p@(Pred cl ty) insts = case insts of
+findInst ienv qn p@(Pred cl ty) insts = case insts of
   { [] -> fpair qn \q n -> let { v = '*':showInt n "" } in Right (((p, v):q, n + 1), V v)
-  ; (Qual ps h):is -> case match h ty of
-    { Nothing -> findInst r qn p is
-    ; Just u -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
-      <$> r (Pred cl1 $ apply u ty1) qn1) (qn, V $ dictVarize cl h) ps
+  ; (name, Qual ps h):is -> case match h ty of
+    { Nothing -> findInst ienv qn p is
+    ; Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
+      <$> findProof ienv (Pred cl1 $ apply subs ty1) qn1) (qn, V name) ps
   }};
 
 findProof ienv pred psn@(ps, n) = case lookup pred ps of
   { Nothing -> case pred of { Pred s t -> case mlookup s ienv of
     { Nothing -> Left $ "no instances: " ++ s
-    ; Just insts -> findInst (findProof ienv) psn pred insts
+    ; Just insts -> findInst ienv psn pred insts
     }}
   ; Just s -> Right (psn, V s)
   };
@@ -837,8 +836,8 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
 
 genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
 
-inferInst ienv dcs typed (cl, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
-  (dictVarize cl t,) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
+inferInst ienv dcs typed (name, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
+  (name,) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
     <$> mapM (inferMethod ienv dcs typed q) ds;
 
 singleOut s cs = \scrutinee x ->
