@@ -6,7 +6,16 @@ static const u prog_size;
 static u root[];
 static const u root_size;
 
-enum { FORWARD = 27, REDUCING = 9 };
+enum {
+  _END = 0,
+  _K,
+  _I,
+  _T,
+  _F,
+  _NUM,
+  REDUCING = 126,
+  FORWARD,
+};
 enum { TOP = 1<<24 };
 static u *mem, *altmem, *sp, *spTop, hp;
 
@@ -15,14 +24,14 @@ static u isAddr(u n) { return n>=128; }
 static u evac(u n) {
   if (!isAddr(n)) return n;
   u x = mem[n];
-  while (isAddr(x) && mem[x] == 'T') {
+  while (isAddr(x) && mem[x] == _T) {
     mem[n] = mem[n + 1];
     mem[n + 1] = mem[x + 1];
     x = mem[n];
   }
-  if (isAddr(x) && mem[x] == 'K') {
+  if (isAddr(x) && mem[x] == _K) {
     mem[n + 1] = mem[x + 1];
-    x = mem[n] = 'I';
+    x = mem[n] = _I;
   }
   u y = mem[n + 1];
   switch(x) {
@@ -32,11 +41,11 @@ static u evac(u n) {
       mem[n + 1] = hp;
       hp += 2;
       return mem[n + 1];
-    case 'I':
+    case _I:
       mem[n] = REDUCING;
       y = evac(y);
       if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = 'I';
+        altmem[mem[n + 1]] = _I;
         altmem[mem[n + 1] + 1] = y;
       } else {
         mem[n] = FORWARD;
@@ -57,13 +66,17 @@ static u evac(u n) {
 static void gc() {
   hp = 128;
   u di = hp;
+#ifdef __clang__
+  sp = mem + TOP - 1;
+#else
   sp = altmem + TOP - 1;
+#endif
   for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != 'F' && x != '#') altmem[di] = evac(altmem[di]);
+    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
@@ -82,17 +95,10 @@ static u arg(u n) { return mem[sp [n] + 1]; }
 static u num(u n) { return mem[arg(n) + 1]; }
 static void foreign(u n);
 static void run();
-static void lazy(u height, u f, u x) {
-  u *p = mem + sp[height];
-  *p = f;
-  *++p = x;
-  sp += height - 1;
-  *sp = f;
-}
 
 void rts_reduce(u) __attribute__((visibility("default")));
 void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, '?'), '.');
+  *(sp = spTop) = app(app(n, REDUCING), _END);
   run();
 }
 
@@ -101,7 +107,11 @@ void rts_init() {
   mem = malloc(TOP * 2 * sizeof(u)); altmem = mem + TOP;
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
+#ifdef __clang__
+  spTop = altmem + TOP - 1;
+#else
   spTop = mem + TOP - 1;
+#endif
 }
 
 static u pro_offset;
