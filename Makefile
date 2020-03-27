@@ -27,8 +27,10 @@ mutually.c:assembly mutually.hs rts.c assembly.coda.c;(cat rts.c && time ./assem
 mutually:mutually.c
 virtually.c:mutually virtually.hs rts.c assembly.coda.c;(cat rts.c && time ./mutually < virtually.hs && cat assembly.coda.c) > $@
 virtually:virtually.c
-uniquely.c:mutually uniquely.hs rts.c assembly.coda.c;(cat rts.c && time ./mutually < uniquely.hs && cat assembly.coda.c) > $@
+uniquely.c:mutually uniquely.hs rts.c uniquely.coda.c;(cat rts.c && time ./mutually < uniquely.hs && cat uniquely.coda.c) > $@
 uniquely:uniquely.c
+internally.c:uniquely internally.hs rts.c uniquely.coda.c;(cat rts.c && time ./uniquely < internally.hs && cat uniquely.coda.c) > $@
+internally:internally.c
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
