@@ -460,6 +460,8 @@ they really meant `D` to be a "partial-derivative-taking operator", that is
 differential variables to zero except for `d x`. With these
 definitions, there are no surprises; the example evaluates to what we expect.
 
+https://www.microsoft.com/en-us/research/uploads/prod/2019/07/autodiff-icfp-2019.pdf[A more modern paper] agrees with my interpretation (see Section 4.3).
+
 == Two weird tricks ==
 
 It may seem we could beef up our code to get something like TensorFlow, that

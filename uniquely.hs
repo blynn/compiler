@@ -392,13 +392,21 @@ patVars = \case
   ; PatCon _ args -> concat $ patVars <$> args
   };
 
-isFree v expr = case expr of
-  { E _ -> False
-  ; V s -> s == v
-  ; A x y -> isFree v x || isFree v y
-  ; L w t -> v /= w && isFree v t
-  ; Pa vsts -> any (\(vs, t) -> not (any (elem v . patVars) vs) && isFree v t) vsts
-  ; Ca x as -> isFree v x || isFree v (Pa $ first (:[]) <$> as)
+union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
+fv bound = \case
+  { V s | not (elem s bound) -> [s]
+  ; A x y -> fv bound x `union` fv bound y
+  ; L s t -> fv (s:bound) t
+  ; _ -> []
+  };
+
+fvPro bound expr = case expr of
+  { V s | not (elem s bound) -> [s]
+  ; A x y -> fvPro bound x `union` fvPro bound y
+  ; L s t -> fvPro (s:bound) t
+  ; Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
+  ; Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
+  ; _ -> []
   };
 
 overFree s f t = case t of
@@ -408,9 +416,18 @@ overFree s f t = case t of
   ; L s' t' -> if s == s' then t else L s' $ overFree s f t'
   };
 
+overFreePro s f t = case t of
+  { E _ -> t
+  ; V s' -> if s == s' then f t else t
+  ; A x y -> A (overFreePro s f x) (overFreePro s f y)
+  ; L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
+  ; Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
+  ; Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
+  };
+
 beta s t x = overFree s (const t) x;
 
-maybeFix s x = if isFree s x then A (ro 'Y') (L s x) else x;
+maybeFix s x = if elem s $ fvPro [] x then A (ro 'Y') (L s x) else x;
 
 opDef x f y rhs = [(f, onePat [x, y] rhs)];
 
@@ -430,7 +447,22 @@ leftyPat p expr = let { pvs = patVars p } in case pvs of
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
 
-addLets ls x = foldr (\(name, def) t -> A (L name t) $ maybeFix name def) x ls;
+nonemptyTails [] = [];
+nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
+
+addLets ls x = let
+  { vs = fst <$> ls
+  ; ios = foldr (\(s, dsts) (ins, outs) ->
+    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
+  ; components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
+  ; foo names expr = let
+    { tnames = nonemptyTails names
+    ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
+    ; insLams vs t = foldr L t vs
+    } in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+  } in foldr foo x components;
+
 letin = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep def) <*> expr;
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> expr) <*> (tok "then" *> expr) <*> (tok "else" *> expr);
@@ -920,14 +952,6 @@ rewritePatterns dcs = let {
   ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp' $ evalState (go t) 0) <$> ds))
   };
 
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
-fv bound = \case
-  { V s | not (elem s bound) -> [s]
-  ; A x y -> fv bound x `union` fv bound y
-  ; L s t -> fv (s:bound) t
-  ; _ -> []
-  };
-
 depGraph typed (s, ast) (vs, es) = (insert s ast vs,
   foldr (\k ios@(ins, outs) -> case lookup k typed of
     { Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
@@ -1065,18 +1089,25 @@ compile s = case untangle s of
 
 showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
 
+showExtra = \case
+  { Basic i -> (i:)
+  ; Const i -> showInt i
+  ; ChrCon c -> ('\'':) . (c:) . ('\'':)
+  ; StrCon s -> ('"':) . (s++) . ('"':)
+  };
+showPat = \case
+  { PatLit e -> showExtra e
+  ; PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
+  ; PatCon s ps -> (s++) . ("TODO"++)
+  };
 showAst prec t = case t of
-  { E n -> case n of
-    { Basic i -> (i:)
-    ; Const i -> showInt i
-    ; ChrCon c -> ('\'':) . (c:) . ('\'':)
-    ; StrCon s -> ('"':) . (s++) . ('"':)
-    }
+  { E e -> showExtra e
   ; V s -> showVar s
   ; A (E (Basic 'F')) (E (Basic c)) -> ("FFI_"++) . showInt (ord c)
   ; A x y -> (if prec then par else id) (showAst False x . (' ':) . showAst True y)
   ; L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  ; _ -> ("TODO"++)
+  ; Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
+  ; Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
   };
 
 showTree prec t = case t of
