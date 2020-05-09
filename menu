@@ -14,13 +14,14 @@ type,Types
 c,Let me C
 pattern,Patterns | Guards
 miranda,Miranda
-hilsys,Hilbert Systems
 eq,Equality
 para,Parametricity
 logic,Logic Programming
 differ,Differential
 atp,Automated Proving
 fol,First-order Logic
+hilsys,Hilbert Systems
+Hol,HOL Light
 \
 \''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 \
