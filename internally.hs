@@ -12,6 +12,8 @@ infixr 0 $;
 
 ffi "putchar" putChar :: Int -> IO Int;
 ffi "getchar" getChar :: IO Int;
+ffi "getargcount" getArgCount :: IO Int;
+ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -359,7 +361,6 @@ con = (conId <|> paren conSym) >>= internParse;
 var = (varId <|> paren varSym) >>= internParse;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId) >>= internParse;
 conop = (conSym <|> between (spch '`') (spch '`') conId) >>= internParse;
-anyOne = itemize <$> spc (sat \_ -> True);
 escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
@@ -1060,6 +1061,8 @@ optiComb' (subs, combs) (s, lamb) = let
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+
 compile s = case untangle s of
   { Left err -> err
   ; Right (_, ((_, lambF), (ffis, exs))) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
@@ -1073,9 +1076,9 @@ compile s = case untangle s of
     ("static u root[]={" ++) .
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
-    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup (strCode "main") tab) ");return 0;}") $ \_ _ ->
-      concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
+    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) .
+    (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
+    maybe "" genMain (mlookup (strCode "main") tab)
   };
 
 showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
@@ -1125,16 +1128,6 @@ dumpTypes s = case untangle s of
   ; Right (strs, ((typed, _), _)) -> ($ "") $ foldr (.) id $
     map (\(s, q) -> (unintern s strs++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
-
-export "main_compile" main;
-export "main_comb" mainComb;
-export "main_lamb" mainLamb;
-export "main_type" mainType;
-
-mainComb = getContents >>= putStr . dumpCombs;
-mainLamb = getContents >>= putStr . dumpLambs;
-mainType = getContents >>= putStr . dumpTypes;
-main = getContents >>= putStr . compile;
 
 data MemKey = VarKey Int | NdKey (Either Int Int) (Either Int Int);
 instance Eq (Either Int Int) where
@@ -1207,3 +1200,14 @@ asm combs = foldM
 
 hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
   \(symtab, ntab) (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` ntab)) id <$> f [];
+
+getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
+getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
+
+interact f = getContents >>= putStr . f;
+main = getArgs >>= \case
+  { "comb":_ -> interact dumpCombs
+  ; "lamb":_ -> interact dumpLambs
+  ; "type":_ -> interact dumpTypes
+  ; _ -> interact compile
+  };

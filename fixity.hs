@@ -82,7 +82,6 @@ var = varId <|> paren (spc opLex);
 
 data Ast = R String | V String | A Ast Ast | L String Ast;
 
-anyOne = fmap itemize (spc (sat (\c -> True)));
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));

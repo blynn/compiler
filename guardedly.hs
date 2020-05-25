@@ -306,7 +306,6 @@ con = conId <|> paren conSym;
 var = varId <|> paren varSym;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
-anyOne = fmap itemize (spc (sat (\c -> True)));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
@@ -386,7 +385,10 @@ letin r = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep (def
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> r) <*> (tok "then" *> r) <*> (tok "else" *> r);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
-atom r = ifthenelse r <|> letin r <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
+anyChar = sat \_ -> True;
+rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
+rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
+atom r = ifthenelse r <|> letin r <|> rawQQ <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
@@ -937,6 +939,8 @@ ffiDefine n ffis = case ffis of
 
 getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
 
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+
 compile s = fmaybe (program s) "parse error" \(prog, rest) -> fneat (untangle prog)
   \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
   { Left err -> err
@@ -952,8 +956,8 @@ compile s = fmaybe (program s) "parse error" \(prog, rest) -> fneat (untangle pr
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
     ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup (fst $ last qas) tab) ");return 0;}") $ \_ _ ->
-      concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
+    (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
+    maybe "" genMain (mlookup "main" tab)
   };
 
 main = getContents >>= putStr . compile;

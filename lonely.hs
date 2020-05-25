@@ -337,7 +337,6 @@ con = conId <|> paren conSym;
 var = varId <|> paren varSym;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
-anyOne = fmap itemize (spc (sat (\c -> True)));
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat \c -> not (c == delim);

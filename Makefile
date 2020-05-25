@@ -21,15 +21,15 @@ patty.c:lonely patty.hs rts.c;(cat rts.c && time ./lonely < patty.hs) > $@
 patty:patty.c
 guardedly.c:patty guardedly.hs rts.c;(cat rts.c && time ./patty < guardedly.hs) > $@
 guardedly:guardedly.c
-assembly.c:guardedly assembly.hs rts.c assembly.coda.c;(cat rts.c && time ./guardedly < assembly.hs && cat assembly.coda.c) > $@
+assembly.c:guardedly assembly.hs rts.c;(cat rts.c && time ./guardedly < assembly.hs) > $@
 assembly:assembly.c
-mutually.c:assembly mutually.hs rts.c assembly.coda.c;(cat rts.c && time ./assembly < mutually.hs && cat assembly.coda.c) > $@
+mutually.c:assembly mutually.hs rts.c;(cat rts.c && time ./assembly < mutually.hs) > $@
 mutually:mutually.c
-virtually.c:mutually virtually.hs rts.c assembly.coda.c;(cat rts.c && time ./mutually < virtually.hs && cat assembly.coda.c) > $@
+virtually.c:mutually virtually.hs rts.c;(cat rts.c && time ./mutually < virtually.hs) > $@
 virtually:virtually.c
-uniquely.c:mutually uniquely.hs rts.c uniquely.coda.c;(cat rts.c && time ./mutually < uniquely.hs && cat uniquely.coda.c) > $@
+uniquely.c:mutually uniquely.hs rts.c;(cat rts.c && time ./mutually < uniquely.hs) > $@
 uniquely:uniquely.c
-internally.c:uniquely internally.hs rts.c uniquely.coda.c;(cat rts.c && time ./uniquely < internally.hs && cat uniquely.coda.c) > $@
+internally.c:uniquely internally.hs rts.c;(cat rts.c && time ./uniquely < internally.hs) > $@
 internally:internally.c
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@

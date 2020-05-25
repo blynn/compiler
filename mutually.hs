@@ -12,6 +12,8 @@ infixr 0 $;
 
 ffi "putchar" putChar :: Int -> IO Int;
 ffi "getchar" getChar :: IO Int;
+ffi "getargcount" getArgCount :: IO Int;
+ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -333,7 +335,6 @@ con = conId <|> paren conSym;
 var = varId <|> paren varSym;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
-anyOne = fmap itemize (spc (sat (\c -> True)));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
@@ -1034,6 +1035,8 @@ optiComb' (subs, combs) (s, lamb) = let
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (asm $ optiComb $ lambF []) \tab mem ->
@@ -1047,9 +1050,9 @@ compile s = case untangle s of
     ("static u root[]={" ++) .
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
-    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup "main" tab) ");return 0;}") $ \_ _ ->
-      concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
+    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) .
+    (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
+    maybe "" genMain (mlookup "main" tab)
   };
 
 showTree prec t = case t of
@@ -1078,10 +1081,12 @@ dumpTypes s = case untangle s of
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
 
-export "main_compile" main;
-export "main_comb" mainComb;
-export "main_type" mainType;
+getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
+getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
 
-mainComb = getContents >>= putStr . dumpCombs;
-mainType = getContents >>= putStr . dumpTypes;
-main = getContents >>= putStr . compile;
+interact f = getContents >>= putStr . f;
+main = getArgs >>= \case
+  { "comb":_ -> interact dumpCombs
+  ; "type":_ -> interact dumpTypes
+  ; _ -> interact compile
+  };

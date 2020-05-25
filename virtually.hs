@@ -12,6 +12,8 @@ infixr 0 $;
 
 ffi "putchar" putChar :: Int -> IO Int;
 ffi "getchar" getChar :: IO Int;
+ffi "getargcount" getArgCount :: IO Int;
+ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -339,7 +341,6 @@ con = conId <|> paren conSym;
 var = varId <|> paren varSym;
 op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
-anyOne = itemize <$> spc (sat \_ -> True);
 escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
@@ -1096,14 +1097,6 @@ dumpTypes s = case untangle s of
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
 
-export "main_compile" main;
-export "main_comb" mainComb;
-export "main_type" mainType;
-
-mainComb = getContents >>= putStr . dumpCombs;
-mainType = getContents >>= putStr . dumpTypes;
-main = getContents >>= putStr . compile;
-
 data ComTree = Stk Int | ComTree :-: ComTree | Raw String;
 
 genArgApp = \case
@@ -1182,3 +1175,13 @@ words s = case dropWhile (' ' ==) s of
 com2int s = let { m = fromList $ zip comlist $ upFrom 0 } in maybe (error $ "BUG! " ++ s) id $ mlookup s m;
 int2com k = let { m = fromList $ zip (upFrom 0) comlist } in maybe (error $ "BUG! " ++ showInt k "") id $ mlookup k m;
 comlist = words ". K I T ffi # B C S Q R V Y : + - * / % EQ LE newIORef readIORef writeIORef";
+
+getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
+getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
+
+interact f = getContents >>= putStr . f;
+main = getArgs >>= \case
+  { "comb":_ -> interact dumpCombs
+  ; "type":_ -> interact dumpTypes
+  ; _ -> interact compile
+  };

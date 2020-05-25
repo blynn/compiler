@@ -164,4 +164,9 @@ void rts_pro(u n) { mem[hp++] = n < 128 ? n : n + pro_offset; }
 void rts_pro_end(u) __attribute__((visibility("default")));
 void rts_pro_end(u n) { rts_reduce(n < 128 ? n : n + pro_offset); }
 
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+
 #define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
