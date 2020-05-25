@@ -22,6 +22,7 @@ atp,Automated Proving
 fol,First-order Logic
 hilsys,Hilbert Systems
 Hol,HOL Light
+HolPro,HOL Proof Tactics
 \
 \''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 \

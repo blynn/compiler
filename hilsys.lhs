@@ -358,10 +358,8 @@ rightDoubleNeg th@(Theorem (p :==> ((_ :==> Bot) :==> Bot))) = impTrans th $ axi
 -- |- 0 ==> p
 exFalso p = rightDoubleNeg $ axiomK Bot (p :==> Bot);
 
-
 -- |- 1
 truth = ponens (iffImp2 axiomTrue) (impRefl Bot);
-
 
 -- |- s = t ==> t = s
 eqSym s t = let
