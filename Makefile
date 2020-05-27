@@ -17,20 +17,19 @@ vm:vm.c
 raw:vm;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c
-patty.c:lonely patty.hs rts.c;(cat rts.c && time ./lonely < patty.hs) > $@
-patty:patty.c
-guardedly.c:patty guardedly.hs rts.c;(cat rts.c && time ./patty < guardedly.hs) > $@
-guardedly:guardedly.c
-assembly.c:guardedly assembly.hs rts.c;(cat rts.c && time ./guardedly < assembly.hs) > $@
-assembly:assembly.c
-mutually.c:assembly mutually.hs rts.c;(cat rts.c && time ./assembly < mutually.hs) > $@
-mutually:mutually.c
-virtually.c:mutually virtually.hs rts.c;(cat rts.c && time ./mutually < virtually.hs) > $@
-virtually:virtually.c
-uniquely.c:mutually uniquely.hs rts.c;(cat rts.c && time ./mutually < uniquely.hs) > $@
-uniquely:uniquely.c
-internally.c:uniquely internally.hs rts.c;(cat rts.c && time ./uniquely < internally.hs) > $@
-internally:internally.c
+
+define lvlup
+$(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
+endef
+
+$(call lvlup,internally,uniquely)
+$(call lvlup,patty,lonely)
+$(call lvlup,guardedly,patty)
+$(call lvlup,assembly,guardedly)
+$(call lvlup,mutually,assembly)
+$(call lvlup,uniquely,mutually)
+$(call lvlup,virtually,mutually)
+
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
