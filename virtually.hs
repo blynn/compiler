@@ -1,4 +1,4 @@
--- Generate code for VM main loop.
+-- Bundle VM code with output.
 infixr 9 .;
 infixl 7 * , / , %;
 infixl 6 + , -;
@@ -243,7 +243,7 @@ fneat (Neat a b c d e f) z = z a b c d e f;
 getPrecs = Parser \st@(ParseState _ precs) -> Just (precs, st);
 putPrecs precs = Parser \(ParseState s _) -> Just ((), ParseState s precs);
 
-ro = E . Basic . com2int;
+ro = E . Basic . comEnum;
 conOf (Constr s _) = s;
 specialCase (h:_) = '|':conOf h;
 mkCase t cs = (specialCase cs,
@@ -252,7 +252,7 @@ mkCase t cs = (specialCase cs,
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", []);
 index n s (t:ts) = if s == t then n else index (n + 1) s ts;
 length = foldr (\_ n -> n + 1) 0;
-scottEncode _ ":" _ = ro ":";
+scottEncode _ ":" _ = ro "CONS";
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
@@ -281,7 +281,7 @@ dictName cl (Qual _ t) = '{':cl ++ (' ':showType t "") ++ "}";
 addInst cl q ds (Neat ienv fs typed dcs ffis exs) = let { name = dictName cl q } in
   Neat (insertWith (++) cl [(name, q)] ienv) (Right (name, (q, ds)):fs) typed dcs ffis exs;
 addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
-  Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "ffi") (E . Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
+  Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
 addDefs ds (Neat ienv fs typed dcs ffis exs) = Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
 addExport e f (Neat ienv fs typed dcs ffis exs) = Neat ienv fs typed dcs ffis ((e, f):exs);
 
@@ -329,6 +329,9 @@ wantWith pred f = Parser \inp -> case parse f inp of
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
+hexdigit = sat \x -> (x <= '9') && ('0' <= x)
+  || (x <= 'F') && ('A' <= x)
+  || (x <= 'f') && ('a' <= x);
 digit = sat \x -> (x <= '9') && ('0' <= x);
 symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
@@ -343,7 +346,13 @@ op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
 escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
-litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+hexValue d
+  | d <= '9' = ord d - ord '0'
+  | d <= 'F' = 10 + ord d - ord 'A'
+  | d <= 'f' = 10 + ord d - ord 'a';
+hexadecimal = char '0' *> char 'x' *> (foldl (\n d -> 16*n + hexValue d) 0 <$> spc (some hexdigit));
+litInt = Const <$> (decimal <|> hexadecimal);
 litChar = ChrCon <$> between (char '\'') (spch '\'') (litOne '\'');
 litStr = between (char '"') (spch '"') $ many (litOne '"');
 lit = StrCon <$> litStr <|> litChar <|> litInt;
@@ -359,8 +368,13 @@ apat = PatVar <$> var <*> (tok "@" *> (Just <$> apat) <|> pure Nothing)
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" []) <$> sqList pat
   <|> paren ((&) <$> pat <*> ((spch ',' *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
   ;
-pat = PatCon <$> gcon <*> many apat
-  <|> (&) <$> apat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat <|> pure id);
+withPrec precTab n = wantWith (\s -> n == precOf s precTab);
+binPat f x y = PatCon f [x, y];
+patP n = if n <= 9
+  then getPrecs >>= \precTab -> (liftA2 (opFold precTab binPat) (patP $ succ n) $ many $ liftA2 (,) (withPrec precTab n conop) $ patP $ succ n) >>= either (const fail) pure
+  else PatCon <$> gcon <*> many apat <|> apat
+  ;
+pat = patP 0;
 
 maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce <$> braceSep def) <|> pure id);
 
@@ -382,19 +396,27 @@ parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pur
 rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> expr;
 section = spch '(' *> (parenExpr <* spch ')' <|> rightSect <* spch ')' <|> spch ')' *> pure (V "()"));
 
-isFreePat v = \case
-  { PatLit _ -> False
-  ; PatVar s m -> s == v || maybe False (isFreePat v) m
-  ; PatCon _ args -> any (isFreePat v) args
+patVars = \case
+  { PatLit _ -> []
+  ; PatVar s m -> s : maybe [] patVars m
+  ; PatCon _ args -> concat $ patVars <$> args
   };
 
-isFree v expr = case expr of
-  { E _ -> False
-  ; V s -> s == v
-  ; A x y -> isFree v x || isFree v y
-  ; L w t -> v /= w && isFree v t
-  ; Pa vsts -> any (\(vs, t) -> not (any (isFreePat v) vs) && isFree v t) vsts
-  ; Ca x as -> isFree v x || isFree v (Pa $ first (:[]) <$> as)
+union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
+fv bound = \case
+  { V s | not (elem s bound) -> [s]
+  ; A x y -> fv bound x `union` fv bound y
+  ; L s t -> fv (s:bound) t
+  ; _ -> []
+  };
+
+fvPro bound expr = case expr of
+  { V s | not (elem s bound) -> [s]
+  ; A x y -> fvPro bound x `union` fvPro bound y
+  ; L s t -> fvPro (s:bound) t
+  ; Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
+  ; Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
+  ; _ -> []
   };
 
 overFree s f t = case t of
@@ -404,26 +426,61 @@ overFree s f t = case t of
   ; L s' t' -> if s == s' then t else L s' $ overFree s f t'
   };
 
+overFreePro s f t = case t of
+  { E _ -> t
+  ; V s' -> if s == s' then f t else t
+  ; A x y -> A (overFreePro s f x) (overFreePro s f y)
+  ; L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
+  ; Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
+  ; Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
+  };
+
 beta s t x = overFree s (const t) x;
 
-maybeFix s x = if isFree s x then A (ro "Y") (L s x) else x;
+maybeFix s x = if elem s $ fvPro [] x then A (ro "Y") (L s x) else x;
 
-opDef x f y rhs = (f, onePat [x, y] rhs);
+opDef x f y rhs = [(f, onePat [x, y] rhs)];
 
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  { f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  ; f _ _ = error "bad multidef"
-  } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t;
+coalesce = let {
+  go ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
+    { f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+    ; f _ _ = error "bad multidef"
+    } in if s == s' then go $ (s, f x x'):t' else h:go t
+  } in go . concat;
 
-def = opDef <$> apat <*> varSym <*> apat <*> guards "="
-  <|> liftA2 (,) var (liftA2 onePat (many apat) $ guards "=");
+leftyPat p expr = let { pvs = patVars p } in case pvs of
+  { [] -> []
+  ; (h:t) -> let { gen = '@':h } in
+    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
+  };
 
-addLets ls x = foldr (\(name, def) t -> A (L name t) $ maybeFix name def) x ls;
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
+
+nonemptyTails [] = [];
+nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
+
+addLets ls x = let
+  { vs = fst <$> ls
+  ; ios = foldr (\(s, dsts) (ins, outs) ->
+    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
+  ; components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
+  ; foo names expr = let
+    { tnames = nonemptyTails names
+    ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
+    ; insLams vs t = foldr L t vs
+    } in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+  } in foldr foo x components;
+
 letin = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep def) <*> expr;
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> expr) <*> (tok "then" *> expr) <*> (tok "else" *> expr);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
-atom = ifthenelse <|> letin <|> listify <$> sqList expr <|> section <|> cas <|> lam <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
+anyChar = sat \_ -> True;
+rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
+rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
+atom = ifthenelse <|> letin <|> rawQQ <|> listify <$> sqList expr <|> section <|> cas <|> lam <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
 aexp = foldl1 A <$> some atom;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
@@ -435,25 +492,27 @@ instance Eq Assoc where
 };
 precOf s precTab = fmaybe (mlookup s precTab) 5 fst;
 assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd;
-opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
-opFold precTab e xs = case xs of
-  { [] -> e
-  ; x:xt -> case find (\y -> assocOf (fst x) precTab /= assocOf (fst y) precTab) xt of
-    { Nothing -> case assocOf (fst x) precTab of
+
+opFold precTab f x xs = case xs of
+  { [] -> Right x
+  ; (op, y):xt -> case find (\(op', _) -> assocOf op precTab /= assocOf op' precTab) xt of
+    { Nothing -> case assocOf op precTab of
       { NAssoc -> case xt of
-        { [] -> fpair x (\op y -> A (A (V op) e) y)
-        ; y:yt -> undefined
+        { [] -> Right $ f op x y
+        ; y:yt -> Left "NAssoc repeat"
         }
-      ; LAssoc -> foldl (\a (op, y) -> A (A (V op) a) y) e xs
-      ; RAssoc -> foldr (\(op, y) b -> \e -> A (A (V op) e) (b y)) id xs $ e
+      ; LAssoc -> Right $ foldl (\a (op, y) -> f op a y) x xs
+      ; RAssoc -> Right $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
       }
-    ; Just y -> undefined
+    ; Just y -> Left "Assoc clash"
     }
   };
 exprP n = if n <= 9
-  then getPrecs >>= \precTab -> liftA2 (opFold precTab) (exprP $ succ n) (many (liftA2 (,) (opWithPrec precTab n) (exprP $ succ n)))
+  then getPrecs >>= \precTab -> liftA2 (opFold precTab \op x y -> A (A (V op) x) y) (exprP $ succ n)
+    (many (liftA2 (,) (withPrec precTab n op) (exprP $ succ n))) >>= either (const fail) pure
   else aexp;
 expr = exprP 0;
+fail = Parser $ const Nothing;
 
 bType = foldl1 TAp <$> some aType;
 _type = foldr1 arr <$> sepBy bType (spc (tok "->"));
@@ -518,16 +577,22 @@ prims = let
     , ("()", (TC "()", ro "K"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
-    , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "+"))))
+    , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "ADD"))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
-    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro "newIORef"))
-    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro "readIORef"))
-    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro "writeIORef"))
-    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "."))
-    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "."))) (ro "K")))
+    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro "NEWREF"))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro "READREF"))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro "WRITEREF"))
+    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
+    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    ] ++ map (\s -> (itemize s, (iii, bin $ itemize s))) "+-*/%";
+    ] ++ map (\(s, v) -> (s, (iii, bin v)))
+      [ ("+", "ADD")
+      , ("-", "SUB")
+      , ("*", "MUL")
+      , ("/", "DIV")
+      , ("%", "MOD")
+      ];
 
 -- Conversion to De Bruijn indices.
 
@@ -546,7 +611,7 @@ debruijn n e = case e of
 data IntTree = Lf Extra | LfVar String | Nd IntTree IntTree;
 data Sem = Defer | Closed IntTree | Need Sem | Weak Sem;
 
-lf = Lf . Basic . com2int;
+lf = Lf . Basic . comEnum;
 
 ldef y = case y of
   { Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
@@ -599,19 +664,19 @@ babs t = case t of
 
 nolam x = (\(Closed d) -> d) $ babs $ debruijn [] x;
 
-isLeaf t c = case t of { Lf (Basic n) -> n == com2int c ; _ -> False };
+isLeaf t c = case t of { Lf (Basic n) -> n == comEnum c ; _ -> False };
 
 optim t = case t of
   { Nd x y -> let { p = optim x ; q = optim y } in
     if isLeaf p "I" then q else
     if isLeaf q "I" then case p of
       { Lf (Basic c)
-        | c == com2int "C" -> lf "T"
-        | c == com2int "B" -> lf "I"
+        | c == comEnum "C" -> lf "T"
+        | c == comEnum "B" -> lf "I"
       ; Nd p1 p2 -> case p1 of
         { Lf (Basic c)
-          | c == com2int "B" -> p2
-          | c == com2int "R" -> Nd (lf "T") p2
+          | c == comEnum "B" -> p2
+          | c == comEnum "R" -> Nd (lf "T") p2
         ; _ -> Nd (Nd p1 p2) q
         }
       ; _ -> Nd p q
@@ -631,33 +696,17 @@ freeCount v expr = case expr of
   ; L w t -> if v == w then 0 else freeCount v t
   };
 
-optiApp s x = let { n = freeCount s x } in
-  if 2 <= n then A $ L s x else
-    if 0 == n then const x else flip (beta s) x;
+optiApp s x = let { n = freeCount s x } in case n of
+  { 0 -> const x
+  ; 1 -> flip (beta s) x
+  ; _ -> A $ L s x
+  };
 optiApp' t = case t of
   { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
   ; A x y -> A (optiApp' x) (optiApp' y)
   ; L s x -> L s (optiApp' x)
   ; _ -> t
   };
-
-enc tab mem t = case t of
-  { Lf d -> case d of
-    { Basic c -> (c, mem)
-    ; Const c -> fpair mem \hp bs -> (hp, (hp + 2, bs . (com2int "#":) . (c:)))
-    ; ChrCon c -> fpair mem \hp bs -> (hp, (hp + 2, bs . (com2int "#":) . (ord c:)))
-    ; StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf ":") (Nd (lf "#") (Lf $ Basic $ ord h))) t) (lf "K") s
-    }
-  ; LfVar s -> maybe (error $ "resolve " ++ s) (, mem) $ mlookup s tab
-  ; Nd x y -> fpair mem \hp bs -> let
-    { pm qm = enc tab (hp + 2, bs . (fst (pm qm):) . (fst qm:)) x
-    ; qm = enc tab (snd $ pm qm) y
-    } in (hp, snd qm)
-  };
-
-asm combs = let
-  { tabmem = foldl (\(as, m) (s, t) -> let { pm' = enc (fst tabmem) m t } in
-    (insert s (fst pm') as, snd pm')) (Tip, (128, id)) combs } in second (($[]) . snd) tabmem;
 
 -- Type checking.
 
@@ -733,7 +782,7 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
     }
   in case ast of
   { E x -> Right $ case x of
-    { Basic _ -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")  -- Can only be Y combinator.
+    { Basic n | n == comEnum "Y" -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
     ; Const _ -> ((TC "Int",  ast), csn)
     ; ChrCon _ -> ((TC "Char",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
@@ -923,14 +972,6 @@ rewritePatterns dcs = let {
   ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp' $ evalState (go t) 0) <$> ds))
   };
 
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
-fv bound = \case
-  { V s | not (elem s bound) -> [s]
-  ; A x y -> fv bound x `union` fv bound y
-  ; L s t -> fv (s:bound) t
-  ; _ -> []
-  };
-
 depGraph typed (s, ast) (vs, es) = (insert s ast vs,
   foldr (\k ios@(ins, outs) -> case lookup k typed of
     { Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
@@ -1042,51 +1083,78 @@ optiComb' (subs, combs) (s, lamb) = let
   ; c = optim $ gosub $ nolam $ optiApp' lamb
   ; combs' = combs . ((s, c):)
   } in case c of
-  { Lf (Basic b) -> ((s, c):subs, combs')
-  ; LfVar v -> if v == s then (subs, combs . ((s, lf "."):)) else ((s, gosub c):subs, combs')
+  { Lf (Basic _) -> ((s, c):subs, combs')
+  ; LfVar v -> if v == s then (subs, combs . ((s, Nd (lf "Y") (lf "I")):)) else ((s, gosub c):subs, combs')
   ; _ -> (subs, combs')
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+
 compile s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambF), (ffis, exs)) -> fpair (asm $ optiComb $ lambF []) \tab mem ->
-    genVM .
-    (concatMap ffiDeclare ffis ++) .
-    ("static void foreign(u n) {\n  switch(n) {\n" ++) .
-    ffiDefine (length ffis - 1) ffis .
-    ("\n  }\n}\n" ++) .
-    ("static const u prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) mem) .
-    ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
-    ("static u root[]={" ++) .
-    foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
-    ("};\n" ++) .
-    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    flst exs ("int main(){rts_init();rts_reduce(" ++ maybe undefined showInt (mlookup "main" tab) ");return 0;}") $ \_ _ ->
-      concat $ zipWith (\p n -> "EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") exs (upFrom 0)
+  ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
+      ("typedef unsigned u;\n" ++)
+    . ("enum{_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
+    . ("static const u prog[]={" ++)
+    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
+    . ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++)
+    . ("static u root[]={" ++)
+    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
+    . ("};\n" ++)
+    . ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++)
+    . (preamble++)
+    . (concatMap ffiDeclare ffis ++)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . ffiDefine (length ffis - 1) ffis
+    . ("\n  }\n}\n" ++)
+    . runFun
+    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
+    $ maybe "" genMain (mlookup "main" tab)
   };
 
-showTree prec t = let { go x y = (if prec then par else id) (showTree False x . (' ':) . showTree True y)
-  } in case t of
-  { LfVar s@(h:_) -> (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++)
-  ; Lf n -> case n of
-    { Basic i -> (int2com i++)
-    ; Const i -> showInt i
-    ; ChrCon c -> ('\'':) . (c:) . ('\'':)
-    ; StrCon s -> ('"':) . (s++) . ('"':)
-    }
-  -- Pattern/guard rewrite bug: the following fails:
-  -- ; Nd (Lf (Basic n)) (Lf (Basic i)) | n == com2int "ffi" -> ("FFI_"++) . showInt i
-  -- ; Nd x y -> (if prec then par else id) (showTree False x . (' ':) . showTree True y)
-  ; Nd x@(Lf (Basic n)) y@(Lf (Basic i)) -> if n == com2int "ffi" then ("FFI_"++) . showInt i else go x y
-  ; Nd x y -> go x y
+showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
+
+showExtra = \case
+  { Basic i -> (comName i++)
+  ; Const i -> showInt i
+  ; ChrCon c -> ('\'':) . (c:) . ('\'':)
+  ; StrCon s -> ('"':) . (s++) . ('"':)
+  };
+showPat = \case
+  { PatLit e -> showExtra e
+  ; PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
+  ; PatCon s ps -> (s++) . ("TODO"++)
+  };
+showAst prec t = case t of
+  { E e -> showExtra e
+  ; V s -> showVar s
+  ; A (E (Basic f)) (E (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
+  ; A x y -> (if prec then par else id) (showAst False x . (' ':) . showAst True y)
+  ; L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
+  ; Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
+  ; Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
+  };
+
+showTree prec t = case t of
+  { LfVar s -> showVar s
+  ; Lf extra -> showExtra extra
+  ; Nd (Lf (Basic f)) (Lf (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
+  ; Nd x y -> (if prec then par else id) (showTree False x . (' ':) . showTree True y)
   };
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
 
 dumpCombs s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), _) -> foldr ($) [] $ map disasm $ optiComb $ lambF []
+  };
+
+dumpLambs s = case untangle s of
+  { Left err -> err
+  ; Right ((_, lambF), _) -> foldr ($) [] $
+    (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambF []
   };
 
 showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t;
@@ -1097,84 +1165,77 @@ dumpTypes s = case untangle s of
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
 
-data ComTree = Stk Int | ComTree :-: ComTree | Raw String;
+data MemKey = VarKey String | NdKey (Either Int Int) (Either Int Int);
+instance Eq (Either Int Int) where
+{ (Left a) == (Left b) = a == b
+; (Right a) == (Right b) = a == b
+; _ == _ = False
+};
+instance Ord (Either Int Int) where
+{ x <= y = case x of
+  { Left a -> case y of
+    { Left b -> a <= b
+    ; Right _ -> True
+    }
+  ; Right a -> case y of
+    { Left _ -> False
+    ; Right b -> a <= b
+    }
+  }
+};
 
-genArgApp = \case
-  { Stk n -> ("arg"++) . par (showInt n)
-  ; x :-: y -> ("app"++) . par (genArgApp x . (',':) . genArgApp y)
-  ; Raw s -> (s++)
+instance Eq MemKey where
+{ (VarKey a) == (VarKey b) = a == b
+; (NdKey a1 b1) == (NdKey a2 b2) = a1 == a2 && b1 == b2
+; _ == _ = False
+};
+instance Ord MemKey where
+{ x <= y = case x of
+  { VarKey a -> case y of
+    { VarKey b -> a <= b
+    ; NdKey _ _ -> True
+    }
+  ; NdKey a1 b1 -> case y of
+    { VarKey _ -> False
+    ; NdKey a2 b2 | a1 <= a2 -> if a1 == a2 then b1 <= b2 else True
+                  | True -> False
+    }
+  }
+};
+
+memget k = get >>=
+  \((n, tab), (hp, f)) -> case mlookup k tab of
+  { Nothing -> case k of
+    { NdKey a b -> put ((n, insert k hp tab), (hp + 2, f . (a:) . (b:))) >> pure hp
+    ; VarKey v -> put ((n + 2, insert k n tab), (hp, f)) >> pure n
+    }
+  ; Just v -> pure v
   };
 
-setStack k = ("sp["++) . showInt k . ("]="++);
-
--- VM main loop code generation.
-
-genLazy l =
-    ("static void lazy"++) . showInt l . ("(u height"++)
-  . foldr (.) id (take l $ (\i -> (",u x"++) . showInt i) <$> upFrom 1) . ("){"++)
-  . ("u*p=mem+sp[height];"++)
-  . foldr (.) id (take (l-2) $ map (\i ->
-      ('x':) . showInt i . ("=app(x"++) . showInt (i-1) . (",x"++) . showInt i . (");"++)
-      . ("sp[height-"++) . showInt (l - i) . ("]=x"++) . showInt i . (';':)
-    ) $ upFrom 2)
-  . ("*p=x"++) . showInt (l - 1) . (";*++p=x"++) . showInt l
-  . (";*(sp+=height-"++) . showInt (l - 1) . (")=x1;}\n"++)
-  ;
-
-genCaseComb com = ("case "++) . (showInt $ com2int com) . (":/* "++) . (com++) . (" */"++);
-
-genComb com n as = let { l = length as } in
-  genCaseComb com . ("lazy"++) . showInt l . ('(':) . showInt n . (',':)
-  . foldr (.) id (intersperse (',':) $ genArgApp <$> as)
-  . (");break;\n"++)
-  ;
-
-genBinTest op cop = genCaseComb op . ("num(1)"++) . (cop++)
-  . ("num(2)?lazy2(2,_I,_K):lazy2(2,_K,_I);break;\n"++);
-genBin op = genComb op 2 [Raw "_NUM", Raw $ "num(1)" ++ op ++ "num(2)"];
-
-genVM = id
-  . genLazy 2
-  . genLazy 3
-  . ("static void run(){\n  for(;;){\n"++)
-  . ("    if (mem + hp > sp - 8) gc();\n"++)
-  . ("    u x = *sp; if(isAddr(x)) *--sp = mem[x]; else switch(x) {\n"++)
-  . genComb "B" 3 [Stk 1, Stk 2 :-: Stk 3]
-  . genComb "C" 3 [Stk 1, Stk 3, Stk 2]
-  . genComb "S" 3 [Stk 1, Stk 3, Stk 2 :-: Stk 3]
-  . genComb "Q" 3 [Stk 3, Stk 2 :-: Stk 1]
-  . genComb "R" 3 [Stk 2, Stk 3, Stk 1]
-  . genComb "V" 3 [Stk 3, Stk 1, Stk 2]
-  . genComb "K" 2 [Raw "_I", Stk 1]
-  . genComb "T" 2 [Stk 2, Stk 1]
-  . genComb ":" 4 [Stk 4, Stk 1, Stk 2]
-  . genComb "#" 2 [Stk 2, Raw "sp[1]"]
-  . genBinTest "EQ" "=="
-  . genBinTest "LE" "<="
-  . genBin "+"
-  . genBin "-"
-  . genBin "*"
-  . genBin "/"
-  . genBin "%"
-  . genCaseComb "ffi" . ("foreign(arg(1)); break;\n"++)
-  . genCaseComb "I" . ("sp[1] = arg(1); sp++; break;\n"++)
-  . genCaseComb "Y" . ("lazy2(1, arg(1), sp[1]); break;\n"++)
-  . genComb "newIORef" 3 [Stk 3, Raw "_END" :-: Stk 1, Stk 2]  -- newIORef
-  . genComb "readIORef" 3 [Stk 3, Raw "mem[arg(1) + 1]", Stk 2]  -- readIORef
-  . genComb "writeIORef" 3 [Stk 3, Stk 4 :-: Raw "(mem[arg(1) + 1] = arg(2), _K)", Stk 3]  -- writeIORef
-  . ("default:return;\n"++)
-  . ("}\n  }\n}\n"++)
-  ;
-
-dropWhile p xs = flst xs [] \x xt -> if p x then dropWhile p xt else xs;
-break p xs = flst xs ([], []) \x xt -> if p x then ([], xs) else first (x:) $ break p xt;
-words s = case dropWhile (' ' ==) s of
-  { [] -> []
-  ; t -> fpair (break (' '==) t) \w s' -> w:words s'
+enc t = case t of
+  { Lf n -> case n of
+    { Basic c -> pure $ Right c
+    ; Const c -> Right <$> memget (NdKey (Right $ comEnum "NUM") (Right c))
+    ; ChrCon c -> enc $ Lf $ Const $ ord c
+    ; StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
+    }
+  ; LfVar s -> Left <$> memget (VarKey s)
+  ; Nd x y ->
+    enc x >>=
+    \hx -> enc y >>=
+    \hy -> Right <$> memget (NdKey hx hy)
   };
-com2int s = let { m = fromList $ zip comlist $ upFrom 0 } in maybe (error $ "BUG! " ++ s) id $ mlookup s m;
-int2com k = let { m = fromList $ zip (upFrom 0) comlist } in maybe (error $ "BUG! " ++ showInt k "") id $ mlookup k m;
-comlist = words ". K I T ffi # B C S Q R V Y : + - * / % EQ LE newIORef readIORef writeIORef";
+
+asm combs = foldM
+  (\(symtab, ntab) (s, t) -> memget (VarKey s) >>=
+    \n -> enc t >>=
+    \ea -> let
+      { a = either (maybe undefined id . (`mlookup` ntab)) id ea
+      } in pure (insert s a symtab, insert n a ntab))
+  (Tip, Tip) combs;
+
+hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
+  \(symtab, ntab) (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` ntab)) id <$> f [];
 
 getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
 getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
@@ -1182,6 +1243,183 @@ getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
 interact f = getContents >>= putStr . f;
 main = getArgs >>= \case
   { "comb":_ -> interact dumpCombs
+  ; "lamb":_ -> interact dumpLambs
   ; "type":_ -> interact dumpTypes
   ; _ -> interact compile
   };
+
+comdefsrc = [r|
+F x = "foreign(arg(1));"
+Y x = x "sp[1]"
+Q x y z = z(y x)
+S x y z = x z(y z)
+B x y z = x (y z)
+C x y z = x z y
+R x y z = y z x
+V x y z = z x y
+T x y = y x
+K x y = "_I" x
+I x = "sp[1] = arg(1); sp++;"
+CONS x y z w = w x y
+NUM x y = y "sp[1]"
+ADD x y = "_NUM" "num(1) + num(2)"
+SUB x y = "_NUM" "num(1) - num(2)"
+MUL x y = "_NUM" "num(1) * num(2)"
+DIV x y = "_NUM" "num(1) / num(2)"
+MOD x y = "_NUM" "num(1) % num(2)"
+EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+NEWREF x y z = z ("_UNDEFINED" x) y
+READREF x y z = z "num(1)" y
+WRITEREF x y z w = w "((mem[arg(1) + 1] = arg(2)), _K)" z
+END = "return;"
+|];
+
+comb = (,)
+  <$> spc (some $ large)
+  <*> ((,)
+    <$> many (spc $ (:"") <$> small)
+    <*> (spch '=' *> combExpr));
+combExpr = foldl1 A <$> some
+  (   V . (:"") <$> spc small
+  <|> E . StrCon <$> litStr
+  <|> paren combExpr
+  );
+
+comdefs = maybe (error "x") fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
+
+comEnum s = maybe (error $ s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
+comName i = maybe (error "z") id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
+
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+void *malloc(unsigned long);
+enum { FORWARD = 127, REDUCING = 126 };
+enum { TOP = 1<<24 };
+u *mem, *altmem, *sp, *spTop, hp;
+static inline u isAddr(u n) { return n>=128; }
+static u evac(u n) {
+  if (!isAddr(n)) return n;
+  u x = mem[n];
+  while (isAddr(x) && mem[x] == _T) {
+    mem[n] = mem[n + 1];
+    mem[n + 1] = mem[x + 1];
+    x = mem[n];
+  }
+  if (isAddr(x) && mem[x] == _K) {
+    mem[n + 1] = mem[x + 1];
+    x = mem[n] = _I;
+  }
+  u y = mem[n + 1];
+  switch(x) {
+    case FORWARD: return y;
+    case REDUCING:
+      mem[n] = FORWARD;
+      mem[n + 1] = hp;
+      hp += 2;
+      return mem[n + 1];
+    case _I:
+      mem[n] = REDUCING;
+      y = evac(y);
+      if (mem[n] == FORWARD) {
+        altmem[mem[n + 1]] = _I;
+        altmem[mem[n + 1] + 1] = y;
+      } else {
+        mem[n] = FORWARD;
+        mem[n + 1] = y;
+      }
+      return mem[n + 1];
+    default: break;
+  }
+  u z = hp;
+  hp += 2;
+  mem[n] = FORWARD;
+  mem[n + 1] = z;
+  altmem[z] = x;
+  altmem[z + 1] = y;
+  return z;
+}
+
+static void gc() {
+  hp = 128;
+  u di = hp;
+  sp = altmem + TOP - 1;
+  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
+  *sp = evac(*spTop);
+  while (di < hp) {
+    u x = altmem[di] = evac(altmem[di]);
+    di++;
+    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
+    di++;
+  }
+  spTop = sp;
+  u *tmp = mem;
+  mem = altmem;
+  altmem = tmp;
+}
+
+static inline u app(u f, u x) {
+  mem[hp] = f;
+  mem[hp + 1] = x;
+  hp += 2;
+  return hp - 2;
+}
+
+static inline u arg(u n) { return mem[sp [n] + 1]; }
+static inline u num(u n) { return mem[arg(n) + 1]; }
+static inline void lazy2(u height, u f, u x) {
+  u *p = mem + sp[height];
+  *p = f;
+  *++p = x;
+  sp += height - 1;
+  *sp = f;
+}
+static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
+static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
+
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+|];
+
+runFun = ([r|static void run() {
+  for(;;) {
+    if (mem + hp > sp - 8) gc();
+    u x = *sp;
+    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+|]++)
+  . foldr (.) id (genComb <$> comdefs)
+  . ([r|
+    }
+  }
+}
+
+void rts_reduce(u n) {
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
+}
+
+void rts_init() {
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  hp = 128;
+  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
+  spTop = mem + TOP - 1;
+}
+|]++)
+  ;
+
+genArg m a = case a of
+  { V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  ; E (StrCon s) -> (s++)
+  ; A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
+  };
+genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as;
+genComb (s, (args, body)) = let
+  { argc = ('(':) . showInt (length args)
+  ; m = zip args $ upFrom 1
+  } in ("case _"++) . (s++) . (':':) . (case body of
+  { A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
+  ; A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
+  ; E (StrCon s) -> (s++)
+  }) . ("break;\n"++)
+  ;

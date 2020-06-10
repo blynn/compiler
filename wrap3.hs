@@ -1,4 +1,6 @@
 -- GHC wrapper for "guardedly" and friends.
+-- $ cc -c stub.c
+-- $ ghci wrap3.hs stub.o
 {-# LANGUAGE BlockArguments, LambdaCase #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TupleSections #-}
@@ -29,4 +31,4 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
 #define export --
-#include "internally.hs"
+#include "virtually.hs"

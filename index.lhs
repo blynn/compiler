@@ -10,7 +10,7 @@ course, and written a few toy compilers for fun. I resolved to one day unravel
 the mystery.
 
 Since then, I have sporadically read about various compiler topics. Did my
-younger self did deserve to fail? Maybe. There were certainly gaps in that
+younger self deserve to fail? Maybe. There were certainly gaps in that
 guy's knowledge (which are only a shade narrower now). On the other hand,
 there are equally alarming gaps in my textbooks, so maybe I shouldn't have
 failed.

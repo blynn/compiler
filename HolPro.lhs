@@ -300,7 +300,7 @@ testSpec = spec (basic "f:(Num->Num) z:Num") (assume $ basic "!x:Num.(x = y)")
 
 == Tactics ==
 
-In practice, to prove a thoerem, sometimes we work backwards. For example,
+In practice, to prove a theorem, sometimes we work backwards. For example,
 we may suspect induction is the right approach. then work on the base case
 while leaving the inductive case for later.
 

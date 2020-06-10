@@ -468,7 +468,10 @@ letin = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep def) <
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> expr) <*> (tok "then" *> expr) <*> (tok "else" *> expr);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
-atom = ifthenelse <|> letin <|> listify <$> sqList expr <|> section <|> cas <|> lam <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
+anyChar = sat \_ -> True;
+rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
+rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
+atom = ifthenelse <|> letin <|> rawQQ <|> listify <$> sqList expr <|> section <|> cas <|> lam <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
 aexp = foldl1 A <$> some atom;
 
 data Assoc = NAssoc | LAssoc | RAssoc;

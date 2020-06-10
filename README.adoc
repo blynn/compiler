@@ -75,5 +75,8 @@ compiler with:
   $ (cat rts.c; ./vm run effectively.hs) > lonely.c
   $ cc -O2 lonely.c -o lonely
 
+(A few generations later, our `virtually.hs` compiler bundles the runtime
+system with the output, so the `cat` is no longer needed.)
+
 Our compiler is fairly portable. For example, we can compile to WebAssembly
 with little ceremony.

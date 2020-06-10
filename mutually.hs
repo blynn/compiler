@@ -416,7 +416,10 @@ letin r = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep (def
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> r) <*> (tok "then" *> r) <*> (tok "else" *> r);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
-atom r = ifthenelse r <|> letin r <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
+anyChar = sat \_ -> True;
+rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
+rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
+atom r = ifthenelse r <|> letin r <|> rawQQ <|>  listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
@@ -1030,7 +1033,7 @@ optiComb' (subs, combs) (s, lamb) = let
   ; combs' = combs . ((s, c):)
   } in case c of
   { Lf (Basic b) -> ((s, c):subs, combs')
-  ; LfVar v -> if v == s then (subs, combs . ((s, lf '.'):)) else ((s, gosub c):subs, combs')
+  ; LfVar v -> if v == s then (subs, combs . ((s, Nd (lf 'Y') (lf 'I')):)) else ((s, gosub c):subs, combs')
   ; _ -> (subs, combs')
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;

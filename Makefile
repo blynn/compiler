@@ -28,7 +28,7 @@ $(call lvlup,guardedly,patty)
 $(call lvlup,assembly,guardedly)
 $(call lvlup,mutually,assembly)
 $(call lvlup,uniquely,mutually)
-$(call lvlup,virtually,mutually)
+$(call lvlup,virtually,uniquely)
 
 hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
