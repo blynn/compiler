@@ -1,12 +1,13 @@
-infixr 9 .;
+infixr 9 . , !! , !;
 infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
-infix 4 == , /= , <=;
-infixl 3 &&; --  , <|>;
+infix 4 == , /= , <= , >= , < , >;
+infixl 3 && , <|>;
 infixl 2 ||;
 infixl 1 >> , >>=;
+infixr 1 =<<;
 infixr 0 $;
 
 ffi "putchar" putChar :: Char -> IO ();
@@ -15,6 +16,11 @@ ffi "eof" _eof :: IO Int;
 
 isEOF = (0 /=) <$> _eof;
 
+($) f x = f x;
+id x = x;
+const x y = x;
+flip f x y = f y x;
+(&) x f = f x;
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
 { pure :: a -> f a
@@ -29,14 +35,10 @@ liftA2 f x y = f <$> x <*> y;
 (*>) = liftA2 \x y -> y;
 (<*) = liftA2 \x y -> x;
 (>>) f g = f >>= \_ -> g;
+(=<<) = flip (>>=);
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
 instance Eq Char where { (==) = charEq };
-($) f x = f x;
-id x = x;
-const x y = x;
-flip f x y = f y x;
-(&) x f = f x;
 class Ord a where { (<=) :: a -> a -> Bool };
 instance Ord Int where { (<=) = intLE };
 instance Ord Char where { (<=) = charLE };
@@ -55,6 +57,19 @@ instance Ord a => Ord [a] where {
       }
     }
 };
+-- Add `Ord a, Ord b => Ord (a, b)` (and similar for `Eq`)
+-- after supporting multiple predicates.
+instance Ord (Int, Int) where {
+  (x1, y1) <= (x2, y2)
+    | x1 == x2 = y1 <= y2
+    | otherwise = x1 <= x2
+};
+instance Eq (Int, Int) where {
+  (x1, y1) == (x2, y2) = x1 == x2 && y1 == y2
+};
+(>=) = flip (<=);
+x > y = y <= x && y /= x;
+x < y = x <= y && x /= y;
 data Maybe a = Nothing | Just a;
 data Either a b = Left a | Right b;
 fst (x, y) = x;
@@ -104,16 +119,18 @@ elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
+and = foldr (&&) True;
+or = foldr (||) False;
+all f = and . map f;
+any f = or . map f;
+(x:xt) !! n = if n == 0 then x else xt !! (n - 1);
 instance Functor [] where { fmap = map };
 instance Applicative [] where { pure = (:[]); f <*> x = concatMap (<$> x) f };
 instance Monad [] where { return = (:[]); (>>=) = flip concatMap };
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing;
-all f = foldr (&&) True . map f;
-any f = foldr (||) False . map f;
-upFrom n = n : upFrom (n + 1);
+iterate f x = x : iterate f (f x);
 zipWith _ [] _ = [];
 zipWith _ _ [] = [];
 zipWith f (x:xt) (y:yt) = f x y : zipWith f xt yt;
@@ -121,6 +138,7 @@ zip = zipWith (,);
 head (h:_) = h;
 tail (_:t) = t;
 repeat x = x : repeat x;
+cycle = concat . repeat;
 data State s a = State (s -> (a, s));
 runState (State f) = f;
 instance Functor (State s) where { fmap f = \(State h) -> State (first f . h) };
@@ -210,6 +228,8 @@ mlookup kx t = case t of
     }
   };
 fromList = foldl (\t (k, x) -> insert k x t) Tip;
+member k t = maybe False (const True) $ mlookup k t;
+t!k = maybe undefined id $ mlookup k t;
 
 foldrWithKey f = let
   { go z t = case t of
@@ -223,3 +243,61 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents;
 
 interact f = f <$> getContents >>= putStr;
+
+abs x = if 0 <= x then x else 0 - x;
+
+show = flip shows "";
+print = putStrLn . show;
+
+class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
+instance Alternative Maybe where
+{ empty = Nothing
+; Nothing <|> r = r
+; Just x <|> _ = Just x
+};
+instance Alternative [] where { empty = [] ; (<|>) = (++) };
+guard False = empty;
+guard True = pure ();
+asum = foldr (<|>) empty;
+
+-- I'll fix `Shows` after supporting default methods in typeclasses.
+class Shows a where { shows :: a -> String -> String };
+showInt' n
+  | 0 == n = id
+  | True = showInt' (n`div`10) . (chr (48+n`mod`10):)
+  ;
+instance Shows Int where {
+  shows n
+    | 0 == n = ('0':)
+    | 1 <= n = showInt' n
+    | True = ('-':) . showInt' (0 - n)  -- Fails for INT_MIN.
+};
+intersperse _ [] = [];
+intersperse x (a:at) = a : foldr (\h t -> [x, h] ++ t) [] at;
+instance Shows a => Shows [a] where { shows xs = ('[':) . foldr (.) id (intersperse (',':) $ map shows xs) . (']':) };
+otherwise = True;
+
+unwords [] = "";
+unwords ws = foldr1 (\w s -> w ++ ' ':s) ws;
+
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
+span _ [] = ([], []);
+span p (x:xt)
+  | p x       = first (x:) $ span p xt
+  | otherwise = ([],x:xt)
+  ;
+break p = span (not . p);
+dropWhile _ [] = [];
+dropWhile p (x:xt)
+  | p x       = dropWhile p xt
+  | otherwise = x:xt
+  ;
+words s = case dropWhile isSpace s of
+  { "" -> []
+  ; s' -> w : words s'' where { (w, s'') = break isSpace s' }
+  };
+filter _ [] = [];
+filter p (x:xt)
+  | p x       = x : filter p xt
+  | otherwise = filter p xt
+  ;

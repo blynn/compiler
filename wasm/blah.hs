@@ -1,4 +1,6 @@
--- Compiler running on browser.
+-- In-browser compiler.
+-- It's blah: Ben Lynn's Atrocious Haskell.
+-- (Or Awful? Awkward? Anti-establishment?)
 infixr 9 .;
 infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
@@ -1253,8 +1255,8 @@ hexy s = case s of
   ; (d1:d0:rest) -> (((chr $ hexValue d1 * 16 + hexValue d0):), 1) <> hexy rest
   };
 
-getIOType (Qual [] (TAp (TC "IO") t)) = Just t;
-getIOType _ = Nothing;
+getIOType (Qual [] (TAp (TC "IO") t)) = Right t;
+getIOType q = Left q;
 
 compile s = case untangle s of
   { Left err -> err
@@ -1271,7 +1273,7 @@ compile s = case untangle s of
 --   1048576 - 4: hp
 --   1048576: initial heap contents
       <> leb 11 <> extendSection (0, "") [roots, prog]) ""
-    } in maybe (error "main must be IO type") (const wasm) $ getIOType mainQT
+    } in either (error . ("main :: "++) . flip showQual "") (const wasm) $ getIOType mainQT
   }
   ;
 

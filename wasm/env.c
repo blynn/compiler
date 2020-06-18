@@ -79,7 +79,7 @@ static void gc() {
 
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
-static inline u num(u n) { return mem[arg(n) + 1]; }
+static inline int num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
   u *p = mem + sp[height];
   *p = f;

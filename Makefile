@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz stringfun.wasm stringfun.html
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz blah.wasm blah.html
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^; closure-compiler $@ > $@.clo; mv $@.clo $@
 
@@ -45,10 +45,10 @@ douady.html:douady.txt menu.html;cobble mathbook menu $<
 wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
 wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 wasm/cross.c:wasm/cross.hs virtually;./virtually < $< > $@
-wasm/stringfun.c:wasm/stringfun.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat stringfun.hs && ./section < env.wasm) | ./cross > stringfun.c
-wasm/stringfun.o:wasm/stringfun.c;$(WCC) $^ -c -o $@
-stringfun.wasm:wasm/stringfun.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-stringfun.html:stringfun.txt wasm/stringfun.pre;cobble mathbook menu $<
+wasm/blah.c:wasm/blah.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ./cross > blah.c
+wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
+blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+blah.html:blah.lhs wasm/blah.pre;cobble mathbook menu $<
 
 site: $(SITE)
 
