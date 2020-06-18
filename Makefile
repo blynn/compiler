@@ -48,7 +48,7 @@ wasm/cross.c:wasm/cross.hs virtually;./virtually < $< > $@
 wasm/stringfun.c:wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat stringfun.hs && ./section < env.wasm) | ./cross > stringfun.c
 wasm/stringfun.o:wasm/stringfun.c;$(WCC) $^ -c -o $@
 stringfun.wasm:wasm/stringfun.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-stringfun.html:stringfun.txt;cobble mathbook menu $^
+stringfun.html:stringfun.txt wasm/stringfun.pre;cobble mathbook menu $<
 
 site: $(SITE)
 

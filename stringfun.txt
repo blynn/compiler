@@ -2,40 +2,64 @@
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<form method='GET' id='stringfun'>
-<label for="prog">Program:</label>
+<p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> Prelude</span></p>
 <p>
-<textarea rows='12' id="prog" name="prog" form="stringfun"
-style='box-sizing:border-box;width:100%;'>
+<textarea readonly id='pre' rows='8' style='display:none;box-sizing:border-box;width:100%;'>
 include::wasm/stringfun.pre[]
 </textarea>
 </p>
+<label for="prog">Program:</label>
+<p>
+<textarea rows='12' id="prog" name="prog"
+style='box-sizing:border-box;width:100%;'>
+fun _ = "Hello, World!";
+</textarea>
+</p>
+<p>
+<button onclick="go()">Run</button> <span id="msg"></span>
+</p>
 <label for="inp">Input:</label>
-<input id="inp" name="inp" type="text">
-<input name="action" value="Test" type="submit">
-</form>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-[pass]
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<p>
+<textarea id='inp' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
+</p>
+<label for="out">Output:</label>
+<p>
 <textarea readonly id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
-<br>
-<button onclick='downloadTxt()'>Download</button>
+</p>
+<button onclick='downloadWasm()'>Download</button>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script>
 "use strict";
-var params = (new URL(window.location.href)).searchParams;
+function hideshow(s) {
+  var x = document.getElementById(s);
+  var xt = document.getElementById(s + "_toggle");
+  if (x.style.display === "none") {
+    x.style.display = "block";
+    xt.innerHTML = "[-] Hide"
+  } else {
+    x.style.display = "none";
+    xt.innerHTML = "[-] Show"
+  }
+}
 
+var params = (new URL(window.location.href)).searchParams;
+var msg = document.getElementById("msg");
 var wasmArr;
+var lastProg = "";
 
 function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
 
-function getWithThe(program) {
+function run(program, stdin) {
+  if (lastProg == program) {
+    interact(stdin);
+    return;
+  }
+  lastProg = program;
   var inp = program, inpLen = inp.length, inpCur = 0;
+  document.getElementById("out").value = "";
   function gc() {
     if (inpCur == inpLen) return -1;
     inpCur++;
@@ -43,24 +67,21 @@ function getWithThe(program) {
   }
   var out = [];
   function pc(x) { out.push(x); }
-  console.log("compiling...");
-  document.getElementById("prog").value = inp;
+  msg.innerHTML = "compiling...";
   WebAssembly.instantiateStreaming(fetch('stringfun.wasm'), {
       env:{ getchar:gc, putchar:pc }
     }).then(obj => {
     obj.instance.exports.compile();
-    console.log("finished compiling");
-    interact(out);
+    wasmArr = out;
+    msg.innerHTML = "";
+    interact(stdin);
   });
 }
 
-function interact(w1) {
-  wasmArr = w1;
+function interact(inp) {
   var out = "";
   function pc(x) { out += String.fromCharCode(x); }
 
-  var inp = parm("inp");
-  document.getElementById("inp").value = inp;
   var inpLen, inpCur;
   function gc() {
     if (inpCur == inpLen) return -1;
@@ -69,15 +90,33 @@ function interact(w1) {
   }
   inpCur = 0;
   inpLen = inp.length;
-
-  console.log("inp: " + inp);
-  console.log("running...");
-
   WebAssembly.instantiate(new Uint8Array(wasmArr),
       {env:{getchar:gc, putchar:pc}}).then(x => {
     x.instance.exports.fun();
     document.getElementById("out").value = out;
   });
+}
+
+function downloadWasm() {
+  var blob = new Blob([new Uint8Array(wasmArr)], {type: "application/octet-stream"});
+  var a = document.createElement('a');
+  a.style.display = 'none';
+  document.body.append(a);
+  var url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = "out.wasm";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+var prelude = document.getElementById("pre");
+var program = document.getElementById("prog");
+var stdin = document.getElementById("inp");
+
+if (parm("action") == "Test") {
+  program.value = banishBadLuck(parm("prog"));
+  stdin.value = banishBadLuck(parm("inp"));
+  run(program.value, stdin.value);
 }
 
 function banishBadLuck(s) {
@@ -86,20 +125,6 @@ function banishBadLuck(s) {
   return r;
 }
 
-function downloadTxt() {
-  var blob = new Blob([new Uint8Array(wasmArr)], {type: "application/octet-stream"});
-  var a = document.createElement('a');
-  a.style.display = 'none';
-  document.body.append(a);
-  var url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = "out.txt";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-if (parm("action") == "Test") {
-  getWithThe(banishBadLuck(parm("prog")));
-}
+function go() { run(prelude.value + program.value, stdin.value); }
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
