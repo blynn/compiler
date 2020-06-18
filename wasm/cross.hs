@@ -1,4 +1,4 @@
--- Bundle VM code with output.
+-- Cross-compiler targeting wasm.
 infixr 9 .;
 infixl 7 * , / , %;
 infixl 6 + , -;
@@ -329,9 +329,6 @@ wantWith pred f = Parser \inp -> case parse f inp of
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
-hexdigit = sat \x -> (x <= '9') && ('0' <= x)
-  || (x <= 'F') && ('A' <= x)
-  || (x <= 'f') && ('a' <= x);
 digit = sat \x -> (x <= '9') && ('0' <= x);
 symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
@@ -346,13 +343,7 @@ op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
 escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
-decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-hexValue d
-  | d <= '9' = ord d - ord '0'
-  | d <= 'F' = 10 + ord d - ord 'A'
-  | d <= 'f' = 10 + ord d - ord 'a';
-hexadecimal = char '0' *> char 'x' *> (foldl (\n d -> 16*n + hexValue d) 0 <$> spc (some hexdigit));
-litInt = Const <$> (decimal <|> hexadecimal);
+litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
 litChar = ChrCon <$> between (char '\'') (spch '\'') (litOne '\'');
 litStr = between (char '"') (spch '"') $ many (litOne '"');
 lit = StrCon <$> litStr <|> litChar <|> litInt;
@@ -1089,22 +1080,19 @@ optiComb' (subs, combs) (s, lamb) = let
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
-
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
-      ("typedef unsigned u;\n" ++)
+      ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++)
+    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
     . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("};\n" ++)
-    . ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++)
+    . ("0};\n" ++)
     . (preamble++)
     . (concatMap ffiDeclare ffis ++)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
@@ -1112,7 +1100,7 @@ compile s = case untangle s of
     . ("\n  }\n}\n" ++)
     . runFun
     . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
-    $ maybe "" genMain (mlookup "main" tab)
+    $ ""
   };
 
 showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
@@ -1286,16 +1274,20 @@ combExpr = foldl1 A <$> some
   <|> paren combExpr
   );
 
-comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
+comdefs = maybe (error "x") fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
+comEnum s = maybe (error $ s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
+comName i = maybe (error "z") id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
+preamble = "#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));\n"
+  ++ [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
 
-comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
-comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
-
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-void *malloc(unsigned long);
+extern u __heap_base;
+void* malloc(unsigned long n) {
+  static u bump = (u) &__heap_base;
+  return (void *) ((bump += n) - n);
+}
 enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<24 };
-u *mem, *altmem, *sp, *spTop, hp;
+enum { TOP = 1<<22 };
+static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
   if (!isAddr(n)) return n;
@@ -1343,7 +1335,7 @@ static void gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
-  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
+  for(u *r = root; *r; r++) *r = evac(*r);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
@@ -1357,13 +1349,7 @@ static void gc() {
   altmem = tmp;
 }
 
-static inline u app(u f, u x) {
-  mem[hp] = f;
-  mem[hp + 1] = x;
-  hp += 2;
-  return hp - 2;
-}
-
+static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
 static inline u num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
@@ -1374,15 +1360,12 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
-
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
+extern int getchar(void);
+extern void putchar(int c);
 |];
 
-runFun = ([r|static void run() {
+runFun = ([r|
+static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -1394,16 +1377,16 @@ runFun = ([r|static void run() {
   }
 }
 
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
-
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
+}
+void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
 }
 |]++)
   ;

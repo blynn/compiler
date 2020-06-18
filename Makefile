@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz stringfun.wasm stringfun.html
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^; closure-compiler $@ > $@.clo; mv $@.clo $@
 
@@ -35,12 +35,20 @@ test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
 
 WCC=clang -O3 -c --target=wasm32 -Wall
-WLD=wasm-ld --export-dynamic --allow-undefined --no-entry
+WLD=wasm-ld-10 --export-dynamic --allow-undefined --no-entry
 wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
 wasm/douady.o:wasm/douady.c;$(WCC) $^ -o $@
 wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
+
+wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
+wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+wasm/cross.c:wasm/cross.hs virtually;./virtually < $< > $@
+wasm/stringfun.c:wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat stringfun.hs && ./section < env.wasm) | ./cross > stringfun.c
+wasm/stringfun.o:wasm/stringfun.c;$(WCC) $^ -c -o $@
+stringfun.wasm:wasm/stringfun.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+stringfun.html:stringfun.txt;cobble mathbook menu $^
 
 site: $(SITE)
 

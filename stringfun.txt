@@ -1,0 +1,105 @@
+= String Fun =
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<form method='GET' id='stringfun'>
+<label for="prog">Program:</label>
+<p>
+<textarea rows='12' id="prog" name="prog" form="stringfun"
+style='box-sizing:border-box;width:100%;'>
+include::wasm/stringfun.pre[]
+</textarea>
+</p>
+<label for="inp">Input:</label>
+<input id="inp" name="inp" type="text">
+<input name="action" value="Test" type="submit">
+</form>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<textarea readonly id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
+<br>
+<button onclick='downloadTxt()'>Download</button>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script>
+"use strict";
+var params = (new URL(window.location.href)).searchParams;
+
+var wasmArr;
+
+function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
+
+function getWithThe(program) {
+  var inp = program, inpLen = inp.length, inpCur = 0;
+  function gc() {
+    if (inpCur == inpLen) return -1;
+    inpCur++;
+    return inp.charCodeAt(inpCur - 1);
+  }
+  var out = [];
+  function pc(x) { out.push(x); }
+  console.log("compiling...");
+  document.getElementById("prog").value = inp;
+  WebAssembly.instantiateStreaming(fetch('stringfun.wasm'), {
+      env:{ getchar:gc, putchar:pc }
+    }).then(obj => {
+    obj.instance.exports.compile();
+    console.log("finished compiling");
+    interact(out);
+  });
+}
+
+function interact(w1) {
+  wasmArr = w1;
+  var out = "";
+  function pc(x) { out += String.fromCharCode(x); }
+
+  var inp = parm("inp");
+  document.getElementById("inp").value = inp;
+  var inpLen, inpCur;
+  function gc() {
+    if (inpCur == inpLen) return -1;
+    inpCur++;
+    return inp.charCodeAt(inpCur - 1);
+  }
+  inpCur = 0;
+  inpLen = inp.length;
+
+  console.log("inp: " + inp);
+  console.log("running...");
+
+  WebAssembly.instantiate(new Uint8Array(wasmArr),
+      {env:{getchar:gc, putchar:pc}}).then(x => {
+    x.instance.exports.fun();
+    document.getElementById("out").value = out;
+  });
+}
+
+function banishBadLuck(s) {
+  var r = "";
+  for (const c of s) { if (c.charCodeAt(0) != 13) r += c; }
+  return r;
+}
+
+function downloadTxt() {
+  var blob = new Blob([new Uint8Array(wasmArr)], {type: "application/octet-stream"});
+  var a = document.createElement('a');
+  a.style.display = 'none';
+  document.body.append(a);
+  var url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = "out.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+if (parm("action") == "Test") {
+  getWithThe(banishBadLuck(parm("prog")));
+}
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

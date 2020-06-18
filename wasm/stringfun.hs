@@ -1,4 +1,4 @@
--- Bundle VM code with output.
+-- Compiler running on browser.
 infixr 9 .;
 infixl 7 * , / , %;
 infixl 6 + , -;
@@ -10,10 +10,8 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
+ffi "putchar" putChar :: Int -> IO ();
 ffi "getchar" getChar :: IO Int;
-ffi "getargcount" getArgCount :: IO Int;
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -280,8 +278,10 @@ addClass classId v ms (Neat ienv fs typed dcs ffis exs) = let
 dictName cl (Qual _ t) = '{':cl ++ (' ':showType t "") ++ "}";
 addInst cl q ds (Neat ienv fs typed dcs ffis exs) = let { name = dictName cl q } in
   Neat (insertWith (++) cl [(name, q)] ienv) (Right (name, (q, ds)):fs) typed dcs ffis exs;
+
 addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
   Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
+
 addDefs ds (Neat ienv fs typed dcs ffis exs) = Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
 addExport e f (Neat ienv fs typed dcs ffis exs) = Neat ienv fs typed dcs ffis ((e, f):exs);
 
@@ -554,7 +554,7 @@ tops = sepBy
   <|> ffiDecl
   <|> addDefs . coalesce <$> sepBy1 def (spch ';')
   <|> fixity
-  <|> tok "export" *> (addExport <$> litStr <*> var)
+  -- <|> tok "export" *> (addExport <$> litStr <*> var)
   ) (spch ';');
 program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ insert ":" (5, RAssoc) Tip;
 
@@ -1062,8 +1062,6 @@ ffiDefine n ffis = case ffis of
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
   };
 
-getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
-
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
   { ParseState s _ -> if s == ""
     then fneat (foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
@@ -1088,32 +1086,6 @@ optiComb' (subs, combs) (s, lamb) = let
   ; _ -> (subs, combs')
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
-
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
-
-compile s = case untangle s of
-  { Left err -> err
-  ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
-      ("typedef unsigned u;\n" ++)
-    . ("enum{_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++)
-    . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("};\n" ++)
-    . ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++)
-    . (preamble++)
-    . (concatMap ffiDeclare ffis ++)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . ffiDefine (length ffis - 1) ffis
-    . ("\n  }\n}\n" ++)
-    . runFun
-    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
-    $ maybe "" genMain (mlookup "main" tab)
-  };
 
 showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
 
@@ -1149,6 +1121,11 @@ disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
 dumpCombs s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), _) -> foldr ($) [] $ map disasm $ optiComb $ lambF []
+  };
+
+dumpHeap s = case untangle s of
+  { Left err -> err
+  ; Right ((_, lambF), (_, _)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem -> foldr (.) id (map (\n -> showInt n . (',':)) mem) $ ""
   };
 
 dumpLambs s = case untangle s of
@@ -1237,189 +1214,90 @@ asm combs = foldM
 hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
   \(symtab, ntab) (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` ntab)) id <$> f [];
 
-getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
-getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
+replicate n f = if n == 0 then [] else f : replicate (n - 1) f;
 
-interact f = getContents >>= putStr . f;
-main = getArgs >>= \case
-  { "comb":_ -> interact dumpCombs
-  ; "lamb":_ -> interact dumpLambs
-  ; "type":_ -> interact dumpTypes
-  ; _ -> interact compile
+getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
+
+go f = getContents >>= putStr . f;
+
+export "compile" goCompile;
+goCompile = go compile;
+export "type" goType;
+goType = go dumpTypes;
+export "comb" goComb;
+goComb = go dumpCombs;
+export "lamb" goLamb;
+goLamb = go dumpLambs;
+export "heap" goHeap;
+goHeap = go dumpHeap;
+
+dropWhile p xs = flst xs [] \x xt -> if p x then dropWhile p xt else xs;
+break p xs = flst xs ([], []) \x xt -> if p x then ([], xs) else first (x:) $ break p xt;
+words s = case dropWhile (' ' ==) s of
+  { [] -> []
+  ; t -> fpair (break (' '==) t) \w s' -> w:words s'
+  };
+comdefs = words "F Y Q S B C R V T K I CONS NUM ADD SUB MUL DIV MOD EQ LE NEWREF READREF WRITEREF END";
+comEnum s = maybe (error $ s) id $ lookup s $ zip comdefs (upFrom 1);
+comName i = maybe (error "z") id $ lookup i $ zip (upFrom 1) comdefs;
+
+(s1, n1) <> (s2, n2) = (s1 . s2, n1 + n2);
+
+mempty = (id, 0);
+mconcat = foldr (<>) mempty;
+hexy s = case s of
+  { [] -> mempty
+  ; (d1:d0:rest) -> (((chr $ hexValue d1 * 16 + hexValue d0):), 1) <> hexy rest
   };
 
-comdefsrc = [r|
-F x = "foreign(arg(1));"
-Y x = x "sp[1]"
-Q x y z = z(y x)
-S x y z = x z(y z)
-B x y z = x (y z)
-C x y z = x z y
-R x y z = y z x
-V x y z = z x y
-T x y = y x
-K x y = "_I" x
-I x = "sp[1] = arg(1); sp++;"
-CONS x y z w = w x y
-NUM x y = y "sp[1]"
-ADD x y = "_NUM" "num(1) + num(2)"
-SUB x y = "_NUM" "num(1) - num(2)"
-MUL x y = "_NUM" "num(1) * num(2)"
-DIV x y = "_NUM" "num(1) / num(2)"
-MOD x y = "_NUM" "num(1) % num(2)"
-EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-NEWREF x y z = z ("_UNDEFINED" x) y
-READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(1) + 1] = arg(2)), _K)" z
-END = "return;"
-|];
-
-comb = (,)
-  <$> spc (some $ large)
-  <*> ((,)
-    <$> many (spc $ (:"") <$> small)
-    <*> (spch '=' *> combExpr));
-combExpr = foldl1 A <$> some
-  (   V . (:"") <$> spc small
-  <|> E . StrCon <$> litStr
-  <|> paren combExpr
-  );
-
-comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
-
-comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
-comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
-
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-void *malloc(unsigned long);
-enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<24 };
-u *mem, *altmem, *sp, *spTop, hp;
-static inline u isAddr(u n) { return n>=128; }
-static u evac(u n) {
-  if (!isAddr(n)) return n;
-  u x = mem[n];
-  while (isAddr(x) && mem[x] == _T) {
-    mem[n] = mem[n + 1];
-    mem[n + 1] = mem[x + 1];
-    x = mem[n];
+compile s = case untangle s of
+  { Left err -> err
+  ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem -> let
+    { go (n, sec) = leb n <> extendSection sec []
+    ; roots = encodeData rootBase rs00
+    ; rs00 = wordLE (length mem + 128) <> wordLE 0
+    ; must s = maybe undefined wordLE $ mlookup s tab
+    ; prog = encodeData heapBase hpHeap
+    ; hpHeap = wordLE (length mem + 2) <> mconcat (map wordLE mem) <> must "interact" <> must "fun"
+    } in fst (hexy "0061736d01000000" <> mconcat (map go rts)
+-- Data section:
+--   512 : null-terminated roots array
+--   1048576 - 4: hp
+--   1048576: initial heap contents
+      <> leb 11 <> extendSection (0, "") [roots, prog]) ""
   }
-  if (isAddr(x) && mem[x] == _K) {
-    mem[n + 1] = mem[x + 1];
-    x = mem[n] = _I;
-  }
-  u y = mem[n + 1];
-  switch(x) {
-    case FORWARD: return y;
-    case REDUCING:
-      mem[n] = FORWARD;
-      mem[n + 1] = hp;
-      hp += 2;
-      return mem[n + 1];
-    case _I:
-      mem[n] = REDUCING;
-      y = evac(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = _I;
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
-    default: break;
-  }
-  u z = hp;
-  hp += 2;
-  mem[n] = FORWARD;
-  mem[n + 1] = z;
-  altmem[z] = x;
-  altmem[z + 1] = y;
-  return z;
-}
-
-static void gc() {
-  hp = 128;
-  u di = hp;
-  sp = altmem + TOP - 1;
-  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
-  *sp = evac(*spTop);
-  while (di < hp) {
-    u x = altmem[di] = evac(altmem[di]);
-    di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
-    di++;
-  }
-  spTop = sp;
-  u *tmp = mem;
-  mem = altmem;
-  altmem = tmp;
-}
-
-static inline u app(u f, u x) {
-  mem[hp] = f;
-  mem[hp + 1] = x;
-  hp += 2;
-  return hp - 2;
-}
-
-static inline u arg(u n) { return mem[sp [n] + 1]; }
-static inline u num(u n) { return mem[arg(n) + 1]; }
-static inline void lazy2(u height, u f, u x) {
-  u *p = mem + sp[height];
-  *p = f;
-  *++p = x;
-  sp += height - 1;
-  *sp = f;
-}
-static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
-
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
-|];
-
-runFun = ([r|static void run() {
-  for(;;) {
-    if (mem + hp > sp - 8) gc();
-    u x = *sp;
-    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
-|]++)
-  . foldr (.) id (genComb <$> comdefs)
-  . ([r|
-    }
-  }
-}
-
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
-
-void rts_init() {
-  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
-  hp = 128;
-  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
-  spTop = mem + TOP - 1;
-}
-|]++)
   ;
 
-genArg m a = case a of
-  { V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
-  ; E (StrCon s) -> (s++)
-  ; A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
-  };
-genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as;
-genComb (s, (args, body)) = let
-  { argc = ('(':) . showInt (length args)
-  ; m = zip args $ upFrom 1
-  } in ("case _"++) . (s++) . (':':) . (case body of
-  { A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
-  ; A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-  ; E (StrCon s) -> (s++)
-  }) . ("break;\n"++)
+extendSection (k, s) xs = encodeSection (k + length xs) $ hexy s <> mconcat xs;
+encodeExport s n = encodeString s <> hexy "00" <> leb n;
+encodeString s = let { n = length s} in
+  leb n <> ((s++), n);
+
+wordLE n = (go n 4, 4) where
+  { go n k
+    | k == 0 = id
+    | True = (chr (n % 256):) . go (n / 256) (k - 1)
+  }
+  ;
+
+rootBase = hexy "004180040b";  -- sleb 512 = 8004
+heapBase = hexy "0041fcff3f0b";  -- sleb (1048576 - 4) = fcff3f
+
+-- 0 locals.
+-- i32.const 0; i32.load 512 + 4*n; call 8; end;
+callRoot n = let
+  { (f, fLen) = hexy "0041002802" <> slebPos (512 + 4*n) <> hexy "10080b" }
+  in leb fLen <> (f, fLen);
+
+encodeData addr (s, slen) = addr <> leb slen <> (s, slen);
+encodeSection k s = let { n = leb k } in leb (snd n + snd s) <> n <> s;
+
+leb n
+  | n <= 127 = ((chr n:), 1)
+  | True = ((chr (128 + n % 128):), 1) <> leb (n / 128)
+  ;
+
+slebPos n
+  | n <= 63 = ((chr n:), 1)
+  | True = ((chr (128 + n % 128):), 1) <> slebPos (n / 128)
   ;

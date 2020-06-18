@@ -1,0 +1,15 @@
+#!/usr/bin/env runhaskell
+{-# LANGUAGE TupleSections #-}
+import Control.Arrow
+import qualified Data.ByteString as B
+import Data.ByteString.Builder
+import WasmArmyKnife
+
+main = putStr "rts = "
+  >> (either undefined print =<< go <$> B.getContents)
+  >> putStrLn ";"
+
+-- Filter out globals and custom sections.
+go s = filter ((`notElem` [0, 6]) . fst) <$> readWasm s
+  -- Write in hex.
+  >>= mapM (\(n, s) -> (n,) . second (toLazyByteString . byteStringHex) <$> readSection s)
