@@ -45,7 +45,7 @@ douady.html:douady.txt menu.html;cobble mathbook menu $<
 wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
 wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 wasm/cross.c:wasm/cross.hs virtually;./virtually < $< > $@
-wasm/stringfun.c:wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat stringfun.hs && ./section < env.wasm) | ./cross > stringfun.c
+wasm/stringfun.c:wasm/stringfun.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat stringfun.hs && ./section < env.wasm) | ./cross > stringfun.c
 wasm/stringfun.o:wasm/stringfun.c;$(WCC) $^ -c -o $@
 stringfun.wasm:wasm/stringfun.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 stringfun.html:stringfun.txt wasm/stringfun.pre;cobble mathbook menu $<

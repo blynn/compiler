@@ -1,6 +1,6 @@
 -- Compiler running on browser.
 infixr 9 .;
-infixl 7 * , / , %;
+infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -12,6 +12,9 @@ infixr 0 $;
 
 ffi "putchar" putChar :: Int -> IO ();
 ffi "getchar" getChar :: IO Int;
+ffi "eof" _eof :: IO Int;
+
+isEOF = (0 /=) <$> _eof;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -257,7 +260,7 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
+showInt' n = if 0 == n then id else (showInt' $ n `div` 10) . ((:) (chr $ 48+n`mod`10));
 showInt n = if 0 == n then ('0':) else showInt' n;
 
 mkFFIHelper n t acc = case t of
@@ -590,8 +593,8 @@ prims = let
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
-      , ("/", "DIV")
-      , ("%", "MOD")
+      , ("div", "DIV")
+      , ("mod", "MOD")
       ];
 
 -- Conversion to De Bruijn indices.
@@ -1216,7 +1219,7 @@ hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
 
 replicate n f = if n == 0 then [] else f : replicate (n - 1) f;
 
-getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
+getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \n -> (chr n:) <$> getContents;
 
 go f = getContents >>= putStr . f;
 
@@ -1250,21 +1253,25 @@ hexy s = case s of
   ; (d1:d0:rest) -> (((chr $ hexValue d1 * 16 + hexValue d0):), 1) <> hexy rest
   };
 
+getIOType (Qual [] (TAp (TC "IO") t)) = Just t;
+getIOType _ = Nothing;
+
 compile s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem -> let
+  ; Right ((typed, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem -> let
     { go (n, sec) = leb n <> extendSection sec []
-    ; roots = encodeData rootBase rs00
-    ; rs00 = wordLE (length mem + 128) <> wordLE 0
+    ; roots = encodeData rootBase $ must "main" <> wordLE 0
     ; must s = maybe undefined wordLE $ mlookup s tab
     ; prog = encodeData heapBase hpHeap
-    ; hpHeap = wordLE (length mem + 2) <> mconcat (map wordLE mem) <> must "interact" <> must "fun"
-    } in fst (hexy "0061736d01000000" <> mconcat (map go rts)
+    ; hpHeap = wordLE (length mem) <> mconcat (map wordLE mem)
+    ; mainQT = maybe undefined id $ mlookup "main" typed
+    ; wasm = fst (hexy "0061736d01000000" <> mconcat (map go rts)
 -- Data section:
 --   512 : null-terminated roots array
 --   1048576 - 4: hp
 --   1048576: initial heap contents
       <> leb 11 <> extendSection (0, "") [roots, prog]) ""
+    } in maybe (error "main must be IO type") (const wasm) $ getIOType mainQT
   }
   ;
 
@@ -1276,7 +1283,7 @@ encodeString s = let { n = length s} in
 wordLE n = (go n 4, 4) where
   { go n k
     | k == 0 = id
-    | True = (chr (n % 256):) . go (n / 256) (k - 1)
+    | True = (chr (n `mod` 256):) . go (n `div` 256) (k - 1)
   }
   ;
 
@@ -1294,10 +1301,10 @@ encodeSection k s = let { n = leb k } in leb (snd n + snd s) <> n <> s;
 
 leb n
   | n <= 127 = ((chr n:), 1)
-  | True = ((chr (128 + n % 128):), 1) <> leb (n / 128)
+  | True = ((chr (128 + n `mod` 128):), 1) <> leb (n `div` 128)
   ;
 
 slebPos n
   | n <= 63 = ((chr n:), 1)
-  | True = ((chr (128 + n % 128):), 1) <> slebPos (n / 128)
+  | True = ((chr (128 + n `mod` 128):), 1) <> slebPos (n `div` 128)
   ;

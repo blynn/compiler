@@ -581,8 +581,8 @@ prims = let
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
-      , ("/", "DIV")
-      , ("%", "MOD")
+      , ("div", "DIV")
+      , ("mod", "MOD")
       ];
 
 -- Conversion to De Bruijn indices.

@@ -1,5 +1,5 @@
 infixr 9 .;
-infixl 7 * , / , %;
+infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -9,8 +9,11 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
-ffi "getchar" getChar :: IO Int;
+ffi "putchar" putChar :: Char -> IO ();
+ffi "getchar" getChar :: IO Char;
+ffi "eof" _eof :: IO Int;
+
+isEOF = (0 /=) <$> _eof;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -89,12 +92,14 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
 instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };
 instance Functor IO where { fmap f x = ioPure f <*> x };
-putStr = mapM_ $ putChar . ord;
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess;
+putStr = mapM_ putChar;
+putStrLn s = putStr s >> putChar '\n';
+error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess;
 undefined = error "undefined";
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l;
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
 foldl1 f (h:t) = foldl f h t;
+reverse = foldl (flip (:)) [];
 elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
 (++) = flip (foldr (:));
@@ -113,6 +118,9 @@ zipWith _ [] _ = [];
 zipWith _ _ [] = [];
 zipWith f (x:xt) (y:yt) = f x y : zipWith f xt yt;
 zip = zipWith (,);
+head (h:_) = h;
+tail (_:t) = t;
+repeat x = x : repeat x;
 data State s a = State (s -> (a, s));
 runState (State f) = f;
 instance Functor (State s) where { fmap f = \(State h) -> State (first f . h) };
@@ -212,6 +220,6 @@ foldrWithKey f = let
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 
-getContents = getChar >>= \n -> if n == 4294967295 then pure [] else (chr n:) <$> getContents;
+getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents;
 
-interact f = f <$> getContents >>= mapM_ putChar;
+interact f = f <$> getContents >>= putStr;

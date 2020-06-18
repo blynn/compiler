@@ -29,6 +29,8 @@ charLE :: Char -> Char -> Bool
 charLE = (Prelude.<=)
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
+div = Prelude.div
+mod = Prelude.mod
 #define ffi foreign import ccall
 #define export --
 #include "virtually.hs"

@@ -8,6 +8,7 @@ enum{_UNDEFINED=0,_F,_Y,_Q,_S,_B,_C,_R,_V,_T,_K,_I,_CONS,_NUM,_ADD,_SUB,_MUL,_DI
 #define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 void putchar(int) IMPORT("env", "putchar");
 int getchar(void) IMPORT("env", "getchar");
+int eof(void) IMPORT("env", "eof");
 
 enum {
   ROOT_BASE = 1<<9,
@@ -89,7 +90,7 @@ static inline void lazy2(u height, u f, u x) {
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
 static void foreign(u n) {
   switch(n) {
-case 1: putchar(num(2));lazy2(4, app(arg(4), _K), arg(3)); break;case 0: lazy2(3, app(arg(3), app(_NUM, getchar())), arg(2)); break;
+case 2: putchar(num(2));lazy2(4, app(arg(4), _K), arg(3)); break;case 1: lazy2(3, app(arg(3), app(_NUM, getchar())), arg(2)); break;case 0: lazy2(3, app(arg(3), app(_NUM, eof())), arg(2)); break;
   }
 }
 static void run() {
