@@ -319,7 +319,8 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat (c ==);
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
+sp = many (itemize <$> sat isSpace <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of
@@ -329,6 +330,9 @@ wantWith pred f = Parser \inp -> case parse f inp of
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
+hexdigit = sat \x -> (x <= '9') && ('0' <= x)
+  || (x <= 'F') && ('A' <= x)
+  || (x <= 'f') && ('a' <= x);
 digit = sat \x -> (x <= '9') && ('0' <= x);
 symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
 varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
@@ -343,7 +347,13 @@ op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
 conop = conSym <|> between (spch '`') (spch '`') conId;
 escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
 litOne delim = escChar <|> sat (delim /=);
-litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
+hexValue d
+  | d <= '9' = ord d - ord '0'
+  | d <= 'F' = 10 + ord d - ord 'A'
+  | d <= 'f' = 10 + ord d - ord 'a';
+hexadecimal = char '0' *> char 'x' *> (foldl (\n d -> 16*n + hexValue d) 0 <$> spc (some hexdigit));
+litInt = Const <$> (decimal <|> hexadecimal);
 litChar = ChrCon <$> between (char '\'') (spch '\'') (litOne '\'');
 litStr = between (char '"') (spch '"') $ many (litOne '"');
 lit = StrCon <$> litStr <|> litChar <|> litInt;
@@ -1274,9 +1284,9 @@ combExpr = foldl1 A <$> some
   <|> paren combExpr
   );
 
-comdefs = maybe (error "x") fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
-comEnum s = maybe (error $ s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
-comName i = maybe (error "z") id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
+comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
+comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
+comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
 preamble = "#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));\n"
   ++ [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
 

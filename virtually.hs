@@ -319,7 +319,8 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat (c ==);
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
+sp = many (itemize <$> sat isSpace <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of

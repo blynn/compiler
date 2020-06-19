@@ -10,11 +10,7 @@ infixl 1 >> , >>=;
 infixr 1 =<<;
 infixr 0 $;
 
-ffi "putchar" putChar :: Char -> IO ();
-ffi "getchar" getChar :: IO Char;
-ffi "eof" _eof :: IO Int;
-
-isEOF = (0 /=) <$> _eof;
+isEOF = (0 /=) <$> isEOFInt;
 
 ($) f x = f x;
 id x = x;

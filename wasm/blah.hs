@@ -324,7 +324,8 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat (c ==);
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
+sp = many (itemize <$> sat isSpace <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of
@@ -556,9 +557,9 @@ tops = sepBy
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> ffiDecl
   <|> addDefs . coalesce <$> sepBy1 def (spch ';')
   <|> fixity
+  -- <|> ffiDecl
   -- <|> tok "export" *> (addExport <$> litStr <*> var)
   ) (spch ';');
 program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ insert ":" (5, RAssoc) Tip;
@@ -1067,9 +1068,15 @@ ffiDefine n ffis = case ffis of
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
   };
 
+blahFFI =
+    addFFI "putchar" "putChar" (arr (TC "Char") $ TAp (TC "IO") (TC "()"))
+  . addFFI "getchar" "getChar" (TAp (TC "IO") (TC "Char"))
+  . addFFI "eof" "isEOFInt" (TAp (TC "IO") (TC "Int"))
+  ;
+
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
   { ParseState s _ -> if s == ""
-    then fneat (foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
+    then fneat (foldr ($) (blahFFI $ Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
       case inferDefs ienv fs dcs typed of
         { Left err -> Left err
         ; Right qas -> Right (qas, (ffis, exs))

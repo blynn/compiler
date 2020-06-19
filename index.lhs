@@ -24,12 +24,14 @@ include::wasm/blah.pre[]
 style='box-sizing:border-box;width:100%;'>
 </textarea>
 </p>
-<p>
-<button onclick="go()">Run</button> <span id="msg"></span>
-</p>
 <label for="inp">Input:</label>
 <p>
 <textarea id='inp' rows='2' style='box-sizing:border-box;width:100%;'></textarea>
+</p>
+<p>
+<button onclick="go()">Run</button>
+<button onclick="genlink()">Linkify</button>
+<span id="msg"></span>
 </p>
 <label for="out">Output:</label>
 <p>
@@ -64,7 +66,7 @@ function setup() {
   function eof() { return blahInpCur == blahInpLen; }
   WebAssembly.instantiateStreaming(fetch('blah.wasm'), {
       env:{ getchar:gc, putchar:pc, eof:eof }
-    }).then(obj => { blah = obj.instance; console.log("DONE"); });
+    }).then(obj => { blah = obj.instance; });
 }
 setup();
 
@@ -131,6 +133,18 @@ function downloadWasm() {
   });
 }
 function go() { compile().then(x => { run(); }); }
+
+function genlink() {
+  var s = "https://crypto.stanford.edu/~blynn/compiler/?a=0&p="
+    + encodeURIComponent(program.value)
+    + "&i="
+    + encodeURIComponent(stdin.value);
+  out.value = s;
+}
+
+var params = (new URL(window.location.href)).searchParams;
+function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
+
 </script>
 <script src='index.js'></script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -152,7 +166,7 @@ norm c (d:(e:x))
   | e `mod` c + 10 <= c = d + e  `div` c : e' `mod` c : x'
   | otherwise           = d + e' `div` c : e' `mod` c : x'
   where { (e':x') = norm (c+1) (e:x) };
-convert x = let { x' = norm 2 (0:map (10*) x) } in mkdigit (head x'):convert (tail x');
+convert x = let { (h:t) = norm 2 (0:map (10*) x) } in mkdigit h:convert t;
 edigits = "2." ++ convert (repeat 1);
 main = putStr $ take 1024 edigits;
 ------------------------------------------------------------------------
@@ -245,11 +259,11 @@ onclick='downloadWasm()'>download it!</a>+++], then runs it on the given input.
 
 Many language features are missing, including checking for certain errors. The
 parser is fussy, and the error messages are cryptic. The only primitive type
-is `Int`: signed 32-bit integers.
+is `Int`, which are signed 32-bit integers.
 
-[https://github.com/blynn/compiler[git repo]]
+Source: https://github.com/blynn/compiler[https://github.com/blynn/compiler]
 
-''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+== Best of the worst ==
 
 In 2000, I took the Comprehensive Exams given by the Stanford University
 Computer Science department. In the Compilers exam, I got the top score...of
@@ -279,27 +293,30 @@ another day.)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 \begin{code}
+{-# LANGUAGE OverloadedStrings, LambdaCase #-}
 import Control.Monad (void, when)
 import Data.Char (isSpace)
 import Haste.DOM
 import Haste.Events
+import Haste.Foreign (ffi)
+import Haste.JSString
 
 main :: IO ()
-main = withElems ["prog", "inp"] $ \[pEl, iEl] -> do
+main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   let
     setup button inp = do
       Just b <- elemById button
       Just grandparent <- elemById $ button ++ ".hs"
       Just parent <- getFirstChild grandparent
       Just p <- getFirstChild parent
-      let
-        go = do
-          prog <- getProp p "textContent"
-          prog <- pure $ filter (/= '\r') $ dropWhile isSpace prog
-          setProp pEl "value" prog
-          setProp iEl "value" inp
-      void $ b `onEvent` Click $ const go
-      when (button == "hello") go
+      prog <- dropWhile isSpace
+        <$> getProp p "textContent"
+      void $ b `onEvent` Click $ const $ inscribe prog inp
+      when (button == "hello") $ inscribe prog inp
+    inscribe prog inp = do
+      setProp pEl "value" prog
+      setProp iEl "value" inp
+      setProp oEl "value" ""
 
   setup "hello" ""
   setup "edigits" ""
@@ -307,6 +324,14 @@ main = withElems ["prog", "inp"] $ \[pEl, iEl] -> do
   setup "lindon" "you can cage a swallow can't you"
   setup "sort" "James while John had had had had had had had had had had had a better effect on the teacher"
   setup "hexmaze" ""
+
+  let parm = ffi "parm" :: JSString -> IO JSString
+  parm "a" >>= \case
+    "0" -> do
+      prog <- parm "p"
+      inp <- parm "i"
+      inscribe (unpack prog) (unpack inp)
+    _ -> pure ()
 \end{code}
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
