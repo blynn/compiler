@@ -19,6 +19,7 @@ include::wasm/blah.pre[]
 <button id="sort">&#9035;</button>
 <button id="hexmaze">&#11042;</button>
 </p>
+<p>
 <textarea rows='12' id="prog" name="prog"
 style='box-sizing:border-box;width:100%;'>
 </textarea>
@@ -132,12 +133,19 @@ function downloadWasm() {
 function go() { compile().then(x => { run(); }); }
 </script>
 <script src='index.js'></script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-<div id="hello.hs" style="display:none;">
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div style="display:none;">
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+[id="hello.hs"]
+------------------------------------------------------------------------
 main = putStrLn "Hello, World!\n";
-</div>
+------------------------------------------------------------------------
 
-<div id="edigits.hs" style="display:none;">
+[id="edigits.hs"]
+------------------------------------------------------------------------
 -- Digits of e. See http://miranda.org.uk/examples.
 mkdigit n | n <= 9 = chr (n + ord '0');
 norm c (d:(e:x))
@@ -147,9 +155,10 @@ norm c (d:(e:x))
 convert x = let { x' = norm 2 (0:map (10*) x) } in mkdigit (head x'):convert (tail x');
 edigits = "2." ++ convert (repeat 1);
 main = putStr $ take 1024 edigits;
-</div>
+------------------------------------------------------------------------
 
-<div id="queens.hs" style="display:none;">
+[id="queens.hs"]
+------------------------------------------------------------------------
 -- Eight queens puzzle. See http://miranda.org.uk/examples.
 checks q b i = q==b!!i || abs(q-b!!i)==i+1;
 index x = let
@@ -167,20 +176,23 @@ queens sz = go sz where
 range m n | m <= n = m:range (m+1) n
           | otherwise = [];
 main = print $ queens 8;
-</div>
+------------------------------------------------------------------------
 
-<div id="lindon.hs" style="display:none;">
+[id="lindon.hs"]
+------------------------------------------------------------------------
 -- King, are you glad you are king?
 main = interact $ unwords . reverse . words;
-</div>
+------------------------------------------------------------------------
 
-<div id="sort.hs" style="display:none;">
+[id="sort.hs"]
+------------------------------------------------------------------------
 main = interact $ unwords . sorta . words;
 sorta [] = [];
 sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt);
-</div>
+------------------------------------------------------------------------
 
-<div id="hexmaze.hs" style="display:none;">
+[id="hexmaze.hs"]
+------------------------------------------------------------------------
 -- https://fivethirtyeight.com/features/can-you-escape-this-enchanted-maze/
 nats = iterate (1+) 0;
 maze = fromList $ concat $ zipWith row nats
@@ -222,6 +234,9 @@ bfs moves = case asum $ won <$> moves of
   };
 
 main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""];
+------------------------------------------------------------------------
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -274,7 +289,9 @@ main = withElems ["prog", "inp"] $ \[pEl, iEl] -> do
   let
     setup button inp = do
       Just b <- elemById button
-      Just p <- elemById $ button ++ ".hs"
+      Just grandparent <- elemById $ button ++ ".hs"
+      Just parent <- getFirstChild grandparent
+      Just p <- getFirstChild parent
       let
         go = do
           prog <- getProp p "textContent"
