@@ -248,8 +248,7 @@ print = putStrLn . show;
 class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
 instance Alternative Maybe where
 { empty = Nothing
-; Nothing <|> r = r
-; Just x <|> _ = Just x
+; l <|> r = maybe r Just l
 };
 instance Alternative [] where { empty = [] ; (<|>) = (++) };
 guard False = empty;
@@ -278,15 +277,15 @@ unwords ws = foldr1 (\w s -> w ++ ' ':s) ws;
 
 isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
 span _ [] = ([], []);
-span p (x:xt)
+span p xs@(x:xt)
   | p x       = first (x:) $ span p xt
-  | otherwise = ([],x:xt)
+  | otherwise = ([],xs)
   ;
 break p = span (not . p);
 dropWhile _ [] = [];
-dropWhile p (x:xt)
+dropWhile p xs@(x:xt)
   | p x       = dropWhile p xt
-  | otherwise = x:xt
+  | otherwise = xs
   ;
 words s = case dropWhile isSpace s of
   { "" -> []

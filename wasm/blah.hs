@@ -229,8 +229,10 @@ noQual = Qual [];
 data Neat = Neat
   -- | Instance environment.
   (Map String [(String, Qual)])
-  -- | Either top-level or instance definitions.
-  [Either (String, Ast) (String, (Qual, [(String, Ast)]))]
+  -- | Instance definitions.
+  [(String, (Qual, [(String, Ast)]))]
+  -- | Top-level definitions
+  [(String, Ast)]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   [(String, (Qual, Ast))]
@@ -241,7 +243,6 @@ data Neat = Neat
   -- | Exports.
   [(String, String)]
   ;
-fneat (Neat a b c d e f) z = z a b c d e f;
 
 getPrecs = Parser \st@(ParseState _ precs) -> Just (precs, st);
 putPrecs precs = Parser \(ParseState s _) -> Just ((), ParseState s precs);
@@ -262,7 +263,7 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-showInt' n = if 0 == n then id else (showInt' $ n `div` 10) . ((:) (chr $ 48+n`mod`10));
+showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10));
 showInt n = if 0 == n then ('0':) else showInt' n;
 
 mkFFIHelper n t acc = case t of
@@ -272,23 +273,21 @@ mkFFIHelper n t acc = case t of
   };
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs;
-addAdt t cs (Neat ienv fs typed dcs ffis exs) =
-  Neat ienv fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs;
+addAdt t cs (Neat ienv defs fs typed dcs ffis exs) =
+  Neat ienv defs fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs;
 
-addClass classId v ms (Neat ienv fs typed dcs ffis exs) = let
+addClass classId v ms (Neat ienv idefs fs typed dcs ffis exs) = let
   { vars = zipWith (\_ n -> showInt n "") ms $ upFrom 0
-  } in Neat ienv fs (zipWith (\var (s, t) ->
+  } in Neat ienv idefs fs (zipWith (\var (s, t) ->
     (s, (Qual [Pred classId v] t,
       L "@" $ A (V "@") $ foldr L (V var) vars))) vars ms ++ typed) dcs ffis exs;
 dictName cl (Qual _ t) = '{':cl ++ (' ':showType t "") ++ "}";
-addInst cl q ds (Neat ienv fs typed dcs ffis exs) = let { name = dictName cl q } in
-  Neat (insertWith (++) cl [(name, q)] ienv) (Right (name, (q, ds)):fs) typed dcs ffis exs;
-
-addFFI foreignname ourname t (Neat ienv fs typed dcs ffis exs) =
-  Neat ienv fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
-
-addDefs ds (Neat ienv fs typed dcs ffis exs) = Neat ienv (map Left ds ++ fs) typed dcs ffis exs;
-addExport e f (Neat ienv fs typed dcs ffis exs) = Neat ienv fs typed dcs ffis ((e, f):exs);
+addInst cl q ds (Neat ienv idefs fs typed dcs ffis exs) = let { name = dictName cl q } in
+  Neat (insertWith (++) cl [(name, q)] ienv) ((name, (q, ds)):idefs) fs typed dcs ffis exs;
+addFFI foreignname ourname t (Neat ienv idefs fs typed dcs ffis exs) =
+  Neat ienv idefs fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs;
+addDefs ds (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs (ds ++ fs) typed dcs ffis exs;
+addExport e f (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs fs typed dcs ffis ((e, f):exs);
 
 parse (Parser f) inp = f inp;
 instance Applicative Parser where
@@ -382,7 +381,7 @@ patP n = if n <= 9
   ;
 pat = patP 0;
 
-maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce <$> braceSep def) <|> pure id);
+maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id);
 
 guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   { V "True" -> \_ -> y
@@ -447,12 +446,11 @@ maybeFix s x = if elem s $ fvPro [] x then A (ro "Y") (L s x) else x;
 
 opDef x f y rhs = [(f, onePat [x, y] rhs)];
 
-coalesce = let {
-  go ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-    { f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-    ; f _ _ = error "bad multidef"
-    } in if s == s' then go $ (s, f x x'):t' else h:go t
-  } in go . concat;
+coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
+  { f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+  ; f _ _ = error "bad multidef"
+  } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+  ;
 
 leftyPat p expr = let { pvs = patVars p } in case pvs of
   { [] -> []
@@ -472,14 +470,14 @@ addLets ls x = let
     (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
     (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
   ; components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
-  ; foo names expr = let
+  ; triangle names expr = let
     { tnames = nonemptyTails names
     ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
     ; insLams vs t = foldr L t vs
     } in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
-  } in foldr foo x components;
+  } in foldr triangle x components;
 
-letin = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep def) <*> expr;
+letin = addLets <$> between (tok "let") (tok "in") (coalesce . concat <$> braceSep def) <*> expr;
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> expr) <*> (tok "then" *> expr) <*> (tok "else" *> expr);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
@@ -549,7 +547,7 @@ inst = _type;
 instDecl = tok "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
   (((itemize .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
-    <*> conId <*> inst <*> (tok "where" *> (coalesce <$> braceSep def)));
+    <*> conId <*> inst <*> (tok "where" *> (coalesce . concat <$> braceSep def)));
 
 ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type));
 
@@ -557,10 +555,11 @@ tops = sepBy
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> addDefs . coalesce <$> sepBy1 def (spch ';')
+  <|> ffiDecl
+  <|> addDefs <$> def
   <|> fixity
-  -- <|> ffiDecl
-  -- <|> tok "export" *> (addExport <$> litStr <*> var)
+  <|> tok "export" *> (addExport <$> litStr <*> var)
+  <|> pure id
   ) (spch ';');
 program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ insert ":" (5, RAssoc) Tip;
 
@@ -873,7 +872,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- The 4th argument: e.g. Qual [Eq a] "[a]" for Eq a => Eq [a].
 inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
-  infer dcs typed [] expr ([], 0) >>=
+  infer dcs typed [] (patternCompile dcs expr) ([], 0) >>=
   \(ta, (sub, n)) -> fpair (typeAstSub sub ta) \tx ax -> case mlookup s typed of
     { Nothing -> Left $ "no such method: " ++ s
     -- e.g. qc = Eq a => a -> a -> Bool
@@ -964,7 +963,7 @@ rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip) $ uncurry classif
   acc . genCase dcs tab $ V "fail#";
 
 secondM f (a, b) = (a,) <$> f b;
-rewritePatterns dcs = let {
+patternCompile dcs t = let {
   go t = case t of
     { E _ -> pure t
     ; V _ -> pure t
@@ -973,16 +972,14 @@ rewritePatterns dcs = let {
     ; Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
     ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     }
-  } in \case
-  { Left (s, t) -> Left (s, optiApp' $ evalState (go t) 0)
-  ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp' $ evalState (go t) 0) <$> ds))
-  };
+  } in optiApp' $ evalState (go t) 0;
 
-depGraph typed (s, ast) (vs, es) = (insert s ast vs,
-  foldr (\k ios@(ins, outs) -> case lookup k typed of
+depGraph typed dcs (s, ast) (vs, es) = let
+  { t = patternCompile dcs ast }
+  in (insert s t vs, foldr (\k ios@(ins, outs) -> case lookup k typed of
     { Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
     ; Just _ -> ios
-    }) es $ fv [] ast);
+    }) es $ fv [] t);
 
 depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
   if vertex `elem` visited then st else second (vertex:)
@@ -1014,20 +1011,16 @@ inferDefs' ienv dcs defmap (typeTab, lambF) syms = let
   { add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
   } in add <$> inferno (prove ienv) dcs typeTab defmap syms
   ;
-inferDefs ienv defs dcs typed = let
+inferDefs ienv idefs defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   ; lambs = second snd <$> typed
-  ; plains = rewritePatterns dcs <$> defs
-  ; lrs = foldr (either (\def -> (first (def:) .)) (\i -> (second (i:) .))) id plains ([], [])
-  ; defmapgraph = foldr (depGraph typed) (Tip, (Tip, Tip)) $ fst lrs
-  ; defmap = fst defmapgraph
-  ; graph = snd defmapgraph
+  ; (defmap, graph) = foldr (depGraph typed dcs) (Tip, (Tip, Tip)) defs
   ; ins k = maybe [] id $ mlookup k $ fst graph
   ; outs k = maybe [] id $ mlookup k $ snd graph
   ; mainLambs = foldM (inferDefs' ienv dcs defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
   } in case mainLambs of
   { Left err -> Left err
-  ; Right (tt, lambF) -> (\instLambs -> (tt, lambF . (instLambs++))) <$> mapM (inferInst ienv dcs tt) (snd lrs)
+  ; Right (tt, lambF) -> (\instLambs -> (tt, lambF . (instLambs++))) <$> mapM (inferInst ienv dcs tt) idefs
   };
 
 last' x xt = flst xt x \y yt -> last' y yt;
@@ -1076,11 +1069,13 @@ blahFFI =
 
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
   { ParseState s _ -> if s == ""
-    then fneat (foldr ($) (blahFFI $ Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
-      case inferDefs ienv fs dcs typed of
-        { Left err -> Left err
-        ; Right qas -> Right (qas, (ffis, exs))
-        }
+    then case foldr ($) (blahFFI $ Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
+      { Neat ienv idefs defs typed dcs ffis exs ->
+        case inferDefs ienv idefs (coalesce defs) dcs typed of
+          { Left err -> Left err
+          ; Right qas -> Right (qas, (ffis, exs))
+          }
+      }
     else Left $ "dregs: " ++ s
   };
 

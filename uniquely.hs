@@ -238,7 +238,6 @@ data Neat = Neat
   -- | Exports.
   [(String, String)]
   ;
-fneat (Neat a b c d e f) z = z a b c d e f;
 
 getPrecs = Parser \st@(ParseState _ precs) -> Just (precs, st);
 putPrecs precs = Parser \(ParseState s _) -> Just ((), ParseState s precs);
@@ -457,12 +456,12 @@ addLets ls x = let
     (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
     (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
   ; components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
-  ; foo names expr = let
+  ; triangle names expr = let
     { tnames = nonemptyTails names
     ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
     ; insLams vs t = foldr L t vs
     } in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
-  } in foldr foo x components;
+  } in foldr triangle x components;
 
 letin = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep def) <*> expr;
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
@@ -1050,11 +1049,12 @@ getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else p
 
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
   { ParseState s _ -> if s == ""
-    then fneat (foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog) \ienv fs typed dcs ffis exs ->
-      case inferDefs ienv fs dcs typed of
+    then case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
+      { Neat ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
         { Left err -> Left err
         ; Right qas -> Right (qas, (ffis, exs))
         }
+      }
     else Left $ "dregs: " ++ s
   };
 

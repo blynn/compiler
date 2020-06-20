@@ -18,6 +18,7 @@ include::wasm/blah.pre[]
 <button id="lindon">Lindon</button>
 <button id="sort">&#9035;</button>
 <button id="hexmaze">&#11042;</button>
+<button id="gray">Gray</button>
 </p>
 <p>
 <textarea rows='12' id="prog" name="prog"
@@ -250,6 +251,13 @@ bfs moves = case asum $ won <$> moves of
 main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""];
 ------------------------------------------------------------------------
 
+[id="gray.hs"]
+------------------------------------------------------------------------
+gray 0 = [""];
+gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1));
+main = putStrLn $ unwords $ gray 4;
+------------------------------------------------------------------------
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -324,6 +332,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "lindon" "you can cage a swallow can't you"
   setup "sort" "James while John had had had had had had had had had had had a better effect on the teacher"
   setup "hexmaze" ""
+  setup "gray" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString
   parm "a" >>= \case
