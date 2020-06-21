@@ -1,4 +1,4 @@
--- Bundle VM code with output.
+-- Off-side rule.
 infixr 9 .;
 infixl 7 * , / , %;
 infixl 6 + , -;
@@ -331,9 +331,8 @@ sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
 char c = sat (c ==);
 
 data Token = Reserved String
-  | VarId String | VarSym String
-  | ConId String | ConSym String
-  | TokInt Int | TokChar Char | TokString String;
+  | VarId String | VarSym String | ConId String | ConSym String
+  | Lit Extra;
 
 hexValue d
   | d <= '9' = ord d - ord '0'
@@ -359,7 +358,7 @@ tokOne delim = escape <|> sat (delim /=);
 tokChar = between (char '\'') (char '\'') (tokOne '\'');
 tokStr = between (char '"') (char '"') $ many (tokOne '"');
 integer = decimal <|> char '0' *> (char 'x' <|> char 'X') *> hexadecimal;
-literal = TokInt <$> integer <|> TokChar <$> tokChar <|> TokString <$> tokStr;
+literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr;
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   { ck s = (if elem s
     ["ffi", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
@@ -373,7 +372,7 @@ conSym = fmap ck $ liftA2 (:) (char ':') $ many $ sat isSymbol where
 special = Reserved . (:"") <$> asum (char <$> "(),;[]`{}");
 
 rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> sat (const True) <*> rawBody;
-rawQQ = char '[' *> char 'r' *> char '|' *> (TokString <$> rawBody);
+rawQQ = char '[' *> char 'r' *> char '|' *> (Lit . StrCon <$> rawBody);
 lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
   <|> special <|> literal;
 
@@ -385,38 +384,51 @@ posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace);
 
 -- Layout.
 data Landin = Curly Int | Angle Int | PL ((Int, Int), Token);
+beginLayout rest = case rest of
+  { [] -> [Curly 0]
+  ; ((r', _), Reserved "{"):_ -> landin r' rest
+  ; ((r', c'), _):_ -> Curly c' : landin r' rest
+  };
 landin _ [] = [];
 landin 0 ls@(((r, _), Reserved "{"):_) = landin r ls;
 landin 0 ls@(((r, c), _):_) = Curly c : landin r ls;
-landin r ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] = case rest of
-  { [] -> [PL x, Curly 0]
-  ; ((r', _), Reserved "{"):_ -> PL x : landin r' rest
-  ; ((r', c'), _):_ -> PL x : Curly c' : landin r' rest
-  };
+landin r ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
+  PL x : beginLayout rest;
+landin r ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
+  PL x : PL y : beginLayout rest;
 landin r ls@(((r', c), _):_) | r /= r' = Angle c : landin r' ls;
 landin r (x:rest) = PL x : landin r rest;
 
-ins w = ((0, 0), Reserved w);
-ell (Angle n:ts) (m:ms)
-  | m == n = ins ";" : ell ts (m:ms)
-  | n + 1 <= m = ins "}" : ell (Angle n:ts) ms;
-ell (Angle n:ts) ms = ell ts ms;
-ell (Curly n:ts) (m:ms)
-  | m + 1 <= n = ins "{" : ell ts (n:m:ms);
-ell (Curly n:ts) []
-  | 1 <= n = ins "{" : ell ts [n];
-ell (Curly n:ts) ms = ins "{" : ins "}" : ell (Angle n:ts) ms;
-ell (PL (_, Reserved "}"):ts) (0:ms) = ins "}" : ell ts ms;
-ell (PL (_, Reserved "}"):ts) ms = error "TODO";
-ell (PL (_, Reserved "{"):ts) ms = ins "{" :  ell ts (0:ms);
--- TODO: L (t:ts) (m:ms) = } : (L (t:ts) ms) if m /= 0 and parse-error(t)
-ell (PL t:ts) ms = t : ell ts ms;
-ell [] [] = [];
-ell [] (m:ms) | m /= 0 = ins "}" : ell [] ms;
-ell _ _ = error "TODO";
+data Ell = Ell [Landin] [Int];
+insPos x ts ms = Right (x, Ell ts ms);
+ins w = insPos ((0, 0), Reserved w);
+ell (Ell toks cols) = case (toks, cols) of
+  { (Angle n:ts, m:ms)
+    | m == n -> ins ";" ts (m:ms)
+    | n + 1 <= m -> ins "}" (Angle n:ts) ms
+  ; (Angle n:ts, ms) -> ell $ Ell ts ms
+
+  ; (Curly n:ts, m:ms) | m + 1 <= n -> ins "{" ts (n:m:ms)
+  ; (Curly n:ts, []) | 1 <= n -> ins "{" ts [n]
+  ; (Curly n:ts, ms) -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) ms
+
+  ; (PL (_, Reserved "}"):ts, 0:ms) -> ins "}" ts ms
+  ; (PL (_, Reserved "}"):ts, ms) -> Left "unmatched }"
+  ; (PL x@(_, Reserved "{"):ts, ms) -> insPos x ts (0:ms)
+  ; (PL t:ts, ms) -> insPos t ts ms
+
+  ; ([], []) -> Left "EOF"
+  ; ([], m:ms) | m /= 0 -> ins "}" [] ms
+  ; _ -> Left "missing }"
+  };
+
+parseErrorRule (Ell toks cols) = case (toks, cols) of
+  { (t:ts, m:ms) | m /= 0 -> Right $ Ell (t:ts) ms
+  ; _ -> Left "missing }"
+  };
 
 -- Parser.
-data ParseState = ParseState [Token] (Map String (Int, Assoc));
+data ParseState = ParseState Ell (Map String (Int, Assoc));
 data Parser a = Parser (ParseState -> Either String (a, ParseState));
 getPrecs = Parser \st@(ParseState _ precs) -> Right (precs, st);
 putPrecs precs = Parser \(ParseState s _) -> Right ((), ParseState s precs);
@@ -444,19 +456,29 @@ instance Alternative Parser where
 ; x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
 };
 
-want f = Parser \(ParseState inp precs) -> flst inp (Left "empty") \h t ->
-  (, ParseState t precs) <$> f h;
+want f = Parser \(ParseState inp precs) -> case ell inp of
+  { Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
+  ; Left e -> Left e
+  };
+
+braceYourself = Parser \(ParseState inp precs) -> case ell inp of
+  { Right ((_, Reserved "}"), inp') -> Right ((), ParseState inp' precs)
+  ; _ -> case parseErrorRule inp of
+    { Left e -> Left e
+    ; Right inp' -> Right ((), ParseState inp' precs)
+    }
+  };
 
 res w = want \case
   { Reserved s | s == w -> Right s
   ; _ -> Left $ "want \"" ++ w ++ "\""
   };
 wantInt = want \case
-  { TokInt i -> Right i
+  { Lit (Const i) -> Right i
   ; _ -> Left "want integer"
   };
 wantString = want \case
-  { TokString s -> Right s
+  { Lit (StrCon s) -> Right s
   ; _ -> Left "want string"
   };
 wantConId = want \case
@@ -468,14 +490,12 @@ wantVarId = want \case
   ; _ -> Left "want varid"
   };
 wantLit = want \case
-  { TokString s -> Right $ StrCon s
-  ; TokChar c -> Right $ ChrCon c
-  ; TokInt i -> Right $ Const i
+  { Lit x -> Right x
   ; _ -> Left "want literal"
   };
 
 paren = between (res "(") (res ")");
-braceSep f = between (res "{") (res "}") $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";");
+braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";");
 
 patVars = \case
   { PatLit _ -> []
@@ -723,10 +743,10 @@ topdecls = braceSep
   <|> fixity
   );
 
-offside xs = ell (landin 0 xs) [];
+offside xs = Ell (landin 0 xs) [];
 program s = case lex posLexemes $ LexState s (1, 1) of
   { Left e -> Left e
-  ; Right (xs, LexState [] _) -> parse topdecls $ ParseState (snd <$> offside xs) $ insert ":" (5, RAssoc) Tip;
+  ; Right (xs, LexState [] _) -> parse topdecls $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip;
   ; Right (_, st) -> Left "unlexable"
   };
 -- Primitives.
@@ -1230,7 +1250,7 @@ ffiDefine n ffis = case ffis of
 untangle s = case program s of
   { Left e -> Left $ "parse error: " ++ e
   ; Right (prog, ParseState s _) -> case s of
-    { [] -> case foldr ($) (Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
+    { Ell [] [] -> case foldr ($) (Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
       { Neat ienv idefs defs typed dcs ffis exs ->
         case inferDefs ienv idefs (coalesce defs) dcs typed of
           { Left err -> Left err
@@ -1440,9 +1460,9 @@ comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr));
 combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr);
 
-comdefs = case lex lexemes $ LexState comdefsrc (1, 1) of
+comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
   { Left e -> error e
-  ; Right (xs, _) -> case parse (some comb) $ ParseState xs Tip of
+  ; Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
     { Left e -> error e
     ; Right (cs, _) -> cs
     }
