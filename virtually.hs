@@ -287,9 +287,10 @@ addDefs ds (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs (ds ++ fs) 
 addExport e f (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs fs typed dcs ffis ((e, f):exs);
 
 parse (Parser f) inp = f inp;
+instance Functor Parser where { fmap f (Parser x) = Parser $ fmap (first f) . x };
 instance Applicative Parser where
 { pure x = Parser \inp -> Just (x, inp)
-; (<*>) x y = Parser \inp -> case parse x inp of
+; x <*> y = Parser \inp -> case parse x inp of
   { Nothing -> Nothing
   ; Just (fun, t) -> case parse y t of
     { Nothing -> Nothing
@@ -305,11 +306,9 @@ instance Monad Parser where
   }
 };
 
+x <|> y = Parser \inp -> fmaybe (parse x inp) (parse y inp) Just;
 sat f = Parser \(ParseState inp precs) -> flst inp Nothing \h t ->
   if f h then Just (h, ParseState t precs) else Nothing;
-
-instance Functor Parser where { fmap f x = pure f <*> x };
-(<|>) x y = Parser \inp -> fmaybe (parse x inp) (parse y inp) Just;
 (*>) = liftA2 \x y -> y;
 (<*) = liftA2 \x y -> x;
 many p = liftA2 (:) p (many p) <|> pure [];

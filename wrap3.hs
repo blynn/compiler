@@ -7,7 +7,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
-import Prelude (Bool(..), Char, Int, String, succ, Show, IO)
+import Prelude (Bool(..), Char, Int, String, Show, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
 import qualified Data.Map as Map
@@ -31,6 +31,8 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 div = Prelude.div
 mod = Prelude.mod
+succ :: Int -> Int
+succ = Prelude.succ
 #define ffi foreign import ccall
 #define export --
-#include "virtually.hs"
+#include "marginally.hs"
