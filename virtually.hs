@@ -591,8 +591,8 @@ prims = let
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
-      , ("/", "DIV")
-      , ("%", "MOD")
+      , ("div", "DIV")
+      , ("mod", "MOD")
       ];
 
 -- Conversion to De Bruijn indices.
@@ -1091,17 +1091,16 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
-      ("typedef unsigned u;\n" ++)
+      ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++)
+    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
     . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("};\n" ++)
-    . ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++)
+    . ("0};\n" ++)
     . (preamble++)
     . (concatMap ffiDeclare ffis ++)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
@@ -1292,7 +1291,7 @@ preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibil
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 enum { TOP = 1<<24 };
-u *mem, *altmem, *sp, *spTop, hp;
+static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
   if (!isAddr(n)) return n;
@@ -1340,7 +1339,7 @@ static void gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
-  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
+  for(u *r = root; *r; r++) *r = evac(*r);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
@@ -1354,13 +1353,7 @@ static void gc() {
   altmem = tmp;
 }
 
-static inline u app(u f, u x) {
-  mem[hp] = f;
-  mem[hp + 1] = x;
-  hp += 2;
-  return hp - 2;
-}
-
+static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
 static inline int num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
@@ -1371,7 +1364,6 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
 static int env_argc;
 int getargcount() { return env_argc; }
@@ -1391,16 +1383,16 @@ runFun = ([r|static void run() {
   }
 }
 
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
-
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
+}
+
+void rts_reduce(u n) {
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
 }
 |]++)
   ;

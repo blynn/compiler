@@ -1,6 +1,6 @@
 -- Cross-compiler targeting wasm.
 infixr 9 .;
-infixl 7 * , / , %;
+infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -91,6 +91,8 @@ instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBin
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };
 instance Functor IO where { fmap f x = ioPure f <*> x };
 putStr = mapM_ $ putChar . ord;
+getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure [];
+interact f = getContents >>= putStr . f;
 error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess;
 undefined = error "undefined";
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l;
@@ -100,7 +102,6 @@ elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
 map = flip (foldr . ((:) .)) [];
 instance Functor [] where { fmap = map };
 concatMap = (concat .) . map;
@@ -209,15 +210,23 @@ foldrWithKey f = let
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 
--- Parsing.
+class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
+asum = foldr (<|>) empty;
+(*>) = liftA2 \x y -> y;
+(<*) = liftA2 \x y -> x;
+many p = liftA2 (:) p (many p) <|> pure [];
+some p = liftA2 (:) p (many p);
+sepBy1 p sep = liftA2 (:) p (many (sep *> p));
+sepBy p sep = sepBy1 p sep <|> pure [];
+between x y p = x *> (p <* y);
+
+-- Syntax tree.
 
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | ChrCon Char | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
-data ParseState = ParseState String (Map String (Int, Assoc));
-data Parser a = Parser (ParseState -> Maybe (a, ParseState));
 data Constr = Constr String [Type];
 data Pred = Pred String Type;
 data Qual = Qual [Pred] Type;
@@ -241,9 +250,6 @@ data Neat = Neat
   [(String, String)]
   ;
 
-getPrecs = Parser \st@(ParseState _ precs) -> Just (precs, st);
-putPrecs precs = Parser \(ParseState s _) -> Just ((), ParseState s precs);
-
 ro = E . Basic . comEnum;
 conOf (Constr s _) = s;
 specialCase (h:_) = '|':conOf h;
@@ -260,7 +266,7 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
+showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10));
 showInt n = if 0 == n then ('0':) else showInt' n;
 
 mkFFIHelper n t acc = case t of
@@ -286,116 +292,224 @@ addFFI foreignname ourname t (Neat ienv idefs fs typed dcs ffis exs) =
 addDefs ds (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs (ds ++ fs) typed dcs ffis exs;
 addExport e f (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs fs typed dcs ffis ((e, f):exs);
 
+-- Lexer.
+lex (Lexer f) inp = f inp;
+data LexState = LexState String (Int, Int);
+data Lexer a = Lexer (LexState -> Either String (a, LexState));
+instance Functor Lexer where { fmap f (Lexer x) = Lexer $ fmap (first f) . x };
+instance Applicative Lexer where
+{ pure x = Lexer \inp -> Right (x, inp)
+; f <*> x = Lexer \inp -> case lex f inp of
+  { Left e -> Left e
+  ; Right (fun, t) -> case lex x t of
+    { Left e -> Left e
+    ; Right (arg, u) -> Right (fun arg, u)
+    }
+  }
+};
+instance Monad Lexer where
+{ return = pure
+; x >>= f = Lexer \inp -> case lex x inp of
+  { Left e -> Left e
+  ; Right (a, t) -> lex (f a) t
+  }
+};
+instance Alternative Lexer where
+{ empty = Lexer \_ -> Left ""
+; (<|>) x y = Lexer \inp -> either (const $ lex y inp) Right $ lex x inp
+};
+
+advanceRC x (r, c)
+  | n `elem` [10, 11, 12, 13] = (r + 1, 1)
+  | n == 9 = (r, (c + 8)`mod`8)
+  | True = (r, c + 1)
+  where { n = ord x }
+  ;
+pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp);
+sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
+  if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat";
+char c = sat (c ==);
+
+data Token = Reserved String
+  | VarId String | VarSym String | ConId String | ConSym String
+  | Lit Extra;
+
+hexValue d
+  | d <= '9' = ord d - ord '0'
+  | d <= 'F' = 10 + ord d - ord 'A'
+  | d <= 'f' = 10 + ord d - ord 'a';
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160];
+isNewline c = ord c `elem` [10, 11, 12, 13];
+isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:");
+dashes = char '-' *> some (char '-');
+comment = dashes *> (sat isNewline <|> sat (not . isSymbol) *> many (sat $ not . isNewline) *> sat isNewline);
+small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
+large = sat \x -> (x <= 'Z') && ('A' <= x);
+hexit = sat \x -> (x <= '9') && ('0' <= x)
+  || (x <= 'F') && ('A' <= x)
+  || (x <= 'f') && ('a' <= x);
+digit = sat \x -> (x <= '9') && ('0' <= x);
+decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit;
+hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit;
+
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n');
+tokOne delim = escape <|> sat (delim /=);
+
+tokChar = between (char '\'') (char '\'') (tokOne '\'');
+tokStr = between (char '"') (char '"') $ many (tokOne '"');
+integer = decimal <|> char '0' *> (char 'x' <|> char 'X') *> hexadecimal;
+literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr;
+varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
+  { ck s = (if elem s
+    ["ffi", "export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+    then Reserved else VarId) s };
+varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
+  { ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s };
+
+conId = fmap ConId $ liftA2 (:) large $ many (small <|> large <|> digit <|> char '\'');
+conSym = fmap ck $ liftA2 (:) (char ':') $ many $ sat isSymbol where
+  { ck s = (if elem s [":", "::"] then Reserved else ConSym) s };
+special = Reserved . (:"") <$> asum (char <$> "(),;[]`{}");
+
+rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> sat (const True) <*> rawBody;
+rawQQ = char '[' *> char 'r' *> char '|' *> (Lit . StrCon <$> rawBody);
+lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
+  <|> special <|> literal;
+
+whitespace = many (sat isSpace <|> comment);
+lexemes = whitespace *> many (lexeme <* whitespace);
+
+getPos = Lexer \st@(LexState _ rc) -> Right (rc, st);
+posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace);
+
+-- Layout.
+data Landin = Curly Int | Angle Int | PL ((Int, Int), Token);
+beginLayout xs = case xs of
+  { [] -> [Curly 0]
+  ; ((r', _), Reserved "{"):_ -> margin r' xs
+  ; ((r', c'), _):_ -> Curly c' : margin r' xs
+  };
+
+landin ls@(((r, _), Reserved "{"):_) = margin r ls;
+landin ls@(((r, c), _):_) = Curly c : margin r ls;
+landin [] = [];
+
+margin r ls@(((r', c), _):_) | r /= r' = Angle c : embrace ls;
+margin r ls = embrace ls;
+
+embrace ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
+  PL x : beginLayout rest;
+embrace ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
+  PL x : PL y : beginLayout rest;
+embrace (x@((r,_),_):xt) = PL x : margin r xt;
+embrace [] = [];
+
+data Ell = Ell [Landin] [Int];
+insPos x ts ms = Right (x, Ell ts ms);
+ins w = insPos ((0, 0), Reserved w);
+
+ell (Ell toks cols) = case toks of
+  { t:ts -> case t of
+    { Angle n -> case cols of
+      { m:ms | m == n -> ins ";" ts (m:ms)
+             | n + 1 <= m -> ins "}" (Angle n:ts) ms
+      ; _ -> ell $ Ell ts cols
+      }
+    ; Curly n -> case cols of
+      { m:ms | m + 1 <= n -> ins "{" ts (n:m:ms)
+      ; [] | 1 <= n -> ins "{" ts [n]
+      ; _ -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) cols
+      }
+    ; PL x -> case snd x of
+      { Reserved "}" -> case cols of
+        { 0:ms -> ins "}" ts ms
+        ; _ -> Left "unmatched }"
+        }
+      ; Reserved "{" -> insPos x ts (0:cols)
+      ; _ -> insPos x ts cols
+      }
+    }
+  ; [] -> case cols of
+    { [] -> Left "EOF"
+    ; m:ms | m /= 0 -> ins "}" [] ms
+    ; _ -> Left "missing }"
+    }
+  };
+
+parseErrorRule (Ell toks cols) = case cols of
+  { m:ms | m /= 0 -> Right $ Ell toks ms
+  ; _ -> Left "missing }"
+  };
+
+-- Parser.
+data ParseState = ParseState Ell (Map String (Int, Assoc));
+data Parser a = Parser (ParseState -> Either String (a, ParseState));
+getPrecs = Parser \st@(ParseState _ precs) -> Right (precs, st);
+putPrecs precs = Parser \(ParseState s _) -> Right ((), ParseState s precs);
 parse (Parser f) inp = f inp;
-instance Functor Parser where { fmap f (Parser x) = Parser $ fmap (first f) . x };
 instance Applicative Parser where
-{ pure x = Parser \inp -> Just (x, inp)
+{ pure x = Parser \inp -> Right (x, inp)
 ; x <*> y = Parser \inp -> case parse x inp of
-  { Nothing -> Nothing
-  ; Just (fun, t) -> case parse y t of
-    { Nothing -> Nothing
-    ; Just (arg, u) -> Just (fun arg, u)
+  { Left e -> Left e
+  ; Right (fun, t) -> case parse y t of
+    { Left e -> Left e
+    ; Right (arg, u) -> Right (fun arg, u)
     }
   }
 };
 instance Monad Parser where
 { return = pure
 ; (>>=) x f = Parser \inp -> case parse x inp of
-  { Nothing -> Nothing
-  ; Just (a, t) -> parse (f a) t
+  { Left e -> Left e
+  ; Right (a, t) -> parse (f a) t
   }
 };
+instance Functor Parser where { fmap f x = pure f <*> x };
+instance Alternative Parser where
+{ empty = Parser \_ -> Left ""
+; x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
+};
 
-x <|> y = Parser \inp -> fmaybe (parse x inp) (parse y inp) Just;
-sat f = Parser \(ParseState inp precs) -> flst inp Nothing \h t ->
-  if f h then Just (h, ParseState t precs) else Nothing;
-(*>) = liftA2 \x y -> y;
-(<*) = liftA2 \x y -> x;
-many p = liftA2 (:) p (many p) <|> pure [];
-some p = liftA2 (:) p (many p);
-sepBy1 p sep = liftA2 (:) p (many (sep *> p));
-sepBy p sep = sepBy1 p sep <|> pure [];
-
-char c = sat (c ==);
-between x y p = x *> (p <* y);
-com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
-sp = many (itemize <$> sat isSpace <|> com);
-spc f = f <* sp;
-spch = spc . char;
-wantWith pred f = Parser \inp -> case parse f inp of
-  { Nothing -> Nothing
-  ; Just at -> if pred $ fst at then Just at else Nothing
+want f = Parser \(ParseState inp precs) -> case ell inp of
+  { Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
+  ; Left e -> Left e
   };
-paren = between (spch '(') (spch ')');
-small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
-large = sat \x -> (x <= 'Z') && ('A' <= x);
-hexdigit = sat \x -> (x <= '9') && ('0' <= x)
-  || (x <= 'F') && ('A' <= x)
-  || (x <= 'f') && ('a' <= x);
-digit = sat \x -> (x <= '9') && ('0' <= x);
-symbo = sat \c -> elem c "!#$%&*+./<=>?@\\^|-~";
-varLex = liftA2 (:) small (many (small <|> large <|> digit <|> char '\''));
-conId = spc (liftA2 (:) large (many (small <|> large <|> digit <|> char '\'')));
-varId = spc $ wantWith (\s -> not $ elem s ["class", "data", "instance", "of", "where", "if", "then", "else"]) varLex;
-opTail = many $ char ':' <|> symbo;
-conSym = spc $ liftA2 (:) (char ':') opTail;
-varSym = spc $ wantWith (not . (`elem` ["@", "=", "|", "->", "=>"])) $ liftA2 (:) symbo opTail;
-con = conId <|> paren conSym;
-var = varId <|> paren varSym;
-op = varSym <|> conSym <|> between (spch '`') (spch '`') (conId <|> varId);
-conop = conSym <|> between (spch '`') (spch '`') conId;
-escChar = char '\\' *> ((sat \c -> elem c "'\"\\") <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = escChar <|> sat (delim /=);
-decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
-hexValue d
-  | d <= '9' = ord d - ord '0'
-  | d <= 'F' = 10 + ord d - ord 'A'
-  | d <= 'f' = 10 + ord d - ord 'a';
-hexadecimal = char '0' *> char 'x' *> (foldl (\n d -> 16*n + hexValue d) 0 <$> spc (some hexdigit));
-litInt = Const <$> (decimal <|> hexadecimal);
-litChar = ChrCon <$> between (char '\'') (spch '\'') (litOne '\'');
-litStr = between (char '"') (spch '"') $ many (litOne '"');
-lit = StrCon <$> litStr <|> litChar <|> litInt;
-sqList r = between (spch '[') (spch ']') $ sepBy r (spch ',');
-want f s = wantWith (s ==) f;
-tok s = spc $ want (some (char '_' <|> symbo) <|> varLex) s;
 
-gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
+braceYourself = Parser \(ParseState inp precs) -> case ell inp of
+  { Right ((_, Reserved "}"), inp') -> Right ((), ParseState inp' precs)
+  ; _ -> case parseErrorRule inp of
+    { Left e -> Left e
+    ; Right inp' -> Right ((), ParseState inp' precs)
+    }
+  };
 
-apat = PatVar <$> var <*> (tok "@" *> (Just <$> apat) <|> pure Nothing)
-  <|> flip PatCon [] <$> gcon
-  <|> PatLit <$> lit
-  <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" []) <$> sqList pat
-  <|> paren ((&) <$> pat <*> ((spch ',' *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
-  ;
-withPrec precTab n = wantWith (\s -> n == precOf s precTab);
-binPat f x y = PatCon f [x, y];
-patP n = if n <= 9
-  then getPrecs >>= \precTab -> (liftA2 (opFold precTab binPat) (patP $ succ n) $ many $ liftA2 (,) (withPrec precTab n conop) $ patP $ succ n) >>= either (const fail) pure
-  else PatCon <$> gcon <*> many apat <|> apat
-  ;
-pat = patP 0;
+res w = want \case
+  { Reserved s | s == w -> Right s
+  ; _ -> Left $ "want \"" ++ w ++ "\""
+  };
+wantInt = want \case
+  { Lit (Const i) -> Right i
+  ; _ -> Left "want integer"
+  };
+wantString = want \case
+  { Lit (StrCon s) -> Right s
+  ; _ -> Left "want string"
+  };
+wantConId = want \case
+  { ConId s -> Right s
+  ; _ -> Left "want conid"
+  };
+wantVarId = want \case
+  { VarId s -> Right s
+  ; _ -> Left "want varid"
+  };
+wantLit = want \case
+  { Lit x -> Right x
+  ; _ -> Left "want literal"
+  };
 
-maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id);
-
-guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
-  { V "True" -> \_ -> y
-  ; _ -> A (A (A (V "if") x) y)
-  }) <$> (spch '|' *> expr) <*> (tok s *> expr));
-alt = (,) <$> pat <*> guards "->";
-braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
-alts = braceSep alt;
-cas = Ca <$> between (tok "case") (tok "of") expr <*> alts;
-lamCase = tok "case" *> (L "\\case" . Ca (V "\\case") <$> alts);
-onePat vs x = Pa [(vs, x)];
-lam = spch '\\' *> (lamCase <|> liftA2 onePat (some apat) (tok "->" *> expr));
-
-flipPairize y x = A (A (V ",") x) y;
-thenComma = spch ',' *> ((flipPairize <$> expr) <|> pure (A (V ",")));
-parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id);
-rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> expr;
-section = spch '(' *> (parenExpr <* spch ')' <|> rightSect <* spch ')' <|> spch ')' *> pure (V "()"));
+paren = between (res "(") (res ")");
+braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";");
 
 patVars = \case
   { PatLit _ -> []
@@ -440,22 +554,11 @@ beta s t x = overFree s (const t) x;
 
 maybeFix s x = if elem s $ fvPro [] x then A (ro "Y") (L s x) else x;
 
-opDef x f y rhs = [(f, onePat [x, y] rhs)];
-
 coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
   { f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
   ; f _ _ = error "bad multidef"
   } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
   ;
-
-leftyPat p expr = let { pvs = patVars p } in case pvs of
-  { [] -> []
-  ; (h:t) -> let { gen = '@':h } in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
-  };
-
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
 
 nonemptyTails [] = [];
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
@@ -473,16 +576,6 @@ addLets ls x = let
     } in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
   } in foldr triangle x components;
 
-letin = addLets <$> between (tok "let") (tok "in") (coalesce . concat <$> braceSep def) <*> expr;
-ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
-  (tok "if" *> expr) <*> (tok "then" *> expr) <*> (tok "else" *> expr);
-listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
-anyChar = sat \_ -> True;
-rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
-rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
-atom = ifthenelse <|> letin <|> rawQQ <|> listify <$> sqList expr <|> section <|> cas <|> lam <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
-aexp = foldl1 A <$> some atom;
-
 data Assoc = NAssoc | LAssoc | RAssoc;
 instance Eq Assoc where
 { NAssoc == NAssoc = True
@@ -493,72 +586,193 @@ instance Eq Assoc where
 precOf s precTab = fmaybe (mlookup s precTab) 5 fst;
 assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd;
 
+parseErr s = Parser $ const $ Left s;
+
 opFold precTab f x xs = case xs of
-  { [] -> Right x
+  { [] -> pure x
   ; (op, y):xt -> case find (\(op', _) -> assocOf op precTab /= assocOf op' precTab) xt of
     { Nothing -> case assocOf op precTab of
       { NAssoc -> case xt of
-        { [] -> Right $ f op x y
-        ; y:yt -> Left "NAssoc repeat"
+        { [] -> pure $ f op x y
+        ; y:yt -> parseErr "NAssoc repeat"
         }
-      ; LAssoc -> Right $ foldl (\a (op, y) -> f op a y) x xs
-      ; RAssoc -> Right $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
+      ; LAssoc -> pure $ foldl (\a (op, y) -> f op a y) x xs
+      ; RAssoc -> pure $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
       }
-    ; Just y -> Left "Assoc clash"
+    ; Just y -> parseErr "Assoc clash"
     }
   };
-exprP n = if n <= 9
-  then getPrecs >>= \precTab -> liftA2 (opFold precTab \op x y -> A (A (V op) x) y) (exprP $ succ n)
-    (many (liftA2 (,) (withPrec precTab n op) (exprP $ succ n))) >>= either (const fail) pure
-  else aexp;
-expr = exprP 0;
-fail = Parser $ const Nothing;
 
+qconop = want f <|> between (res "`") (res "`") (want g) where
+  { f (ConSym s) = Right s
+  ; f (Reserved ":") = Right ":"
+  ; f _ = Left ""
+  ; g (ConId s) = Right s
+  ; g _ = Left "want qconop"
+  };
+
+wantVarSym = want \case
+  { VarSym s -> Right s
+  ; _ -> Left "want VarSym"
+  };
+
+wantqconsym = want \case
+  { ConSym s -> Right s
+  ; Reserved ":" -> Right ":"
+  ; _ -> Left "want qconsym"
+  };
+
+op = wantqconsym <|> want f <|> between (res "`") (res "`") (want g) where
+  { f (VarSym s) = Right s
+  ; f _ = Left ""
+  ; g (VarId s) = Right s
+  ; g (ConId s) = Right s
+  ; g _ = Left "want op"
+  };
+
+con = wantConId <|> paren wantqconsym;
+var = wantVarId <|> paren wantVarSym;
+
+tycon = want \case
+  { ConId s -> Right $ if s == "String" then TAp (TC "[]") (TC "Char") else TC s
+  ; _ -> Left "want type constructor"
+  };
+
+aType =
+  res "(" *>
+    (   res ")" *> pure (TC "()")
+    <|> ((&) <$> _type <*> ((res "," *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type)) <|> pure id)
+    ) <* res ")")
+  <|> tycon
+  <|> TV <$> wantVarId
+  <|> (res "[" *> (res "]" *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* res "]")));
 bType = foldl1 TAp <$> some aType;
-_type = foldr1 arr <$> sepBy bType (spc (tok "->"));
-typeConst = (\s -> if s == "String" then TAp (TC "[]") (TC "Char") else TC s) <$> conId;
-aType = spch '(' *> (spch ')' *> pure (TC "()") <|> ((&) <$> _type <*> ((spch ',' *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type)) <|> pure id)) <* spch ')') <|>
-  typeConst <|> (TV <$> varId) <|>
-  (spch '[' *> (spch ']' *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* spch ']')));
+_type = foldr1 arr <$> sepBy bType (res "->");
 
-simpleType c vs = foldl TAp (TC c) (map TV vs);
-
-constr = (\x c y -> Constr c [x, y]) <$> aType <*> conSym <*> aType
-  <|> Constr <$> conId <*> many aType;
-
-adt = addAdt <$> between (tok "data") (spch '=') (simpleType <$> conId <*> many varId) <*> sepBy constr (spch '|');
-
-fixityList a =
-  (\c -> ord c - ord '0') <$> spc digit >>= \n ->
-  sepBy op (spch ',') >>= \os ->
+fixityList a = wantInt >>= \n -> sepBy op (res ",") >>= \os ->
   getPrecs >>= \precs -> putPrecs (foldr (\o m -> insert o (n, a) m) precs os) >>
   pure id;
-fixityDecl kw a = tok kw *> fixityList a;
+
+fixityDecl w a = res w *> fixityList a;
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-genDecl = (,) <$> var <*> (char ':' *> spch ':' *> _type);
-classDecl = tok "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (tok "where" *> braceSep genDecl));
+genDecl = (,) <$> var <*> (res "::" *> _type);
 
-inst = _type;
-instDecl = tok "instance" *>
+classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> braceSep genDecl));
+
+simpleClass = Pred <$> wantConId <*> _type;
+scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",");
+
+instDecl = res "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
-    <*> conId <*> inst <*> (tok "where" *> (coalesce . concat <$> braceSep def)));
+  (scontext <* res "=>" <|> pure [])
+    <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)));
 
-ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type));
+letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr;
+ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
+  (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr);
+listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 
-tops = sepBy
+alts = braceSep $ (,) <$> pat <*> guards "->";
+cas = Ca <$> between (res "case") (res "of") expr <*> alts;
+lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts);
+lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr));
+
+flipPairize y x = A (A (V ",") x) y;
+thenComma = res "," *> ((flipPairize <$> expr) <|> pure (A (V ",")));
+parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id);
+rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> res ",")) <*> expr;
+section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" *> pure (V "()"));
+
+maybePureUnit = maybe (V "pure" `A` V "()") id;
+stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
+  <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def));
+doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt);
+
+atom = ifthenelse <|> doblock <|> letin <|> listify <$> sqList expr <|> section
+  <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
+  <|> fmap V (con <|> var) <|> E <$> wantLit;
+
+aexp = foldl1 A <$> some atom;
+
+withPrec precTab n p = p >>= \s ->
+  if n == precOf s precTab then pure s else Parser $ const $ Left "";
+
+exprP n = if n <= 9
+  then getPrecs >>= \precTab
+    -> exprP (succ n) >>= \a
+    -> many ((,) <$> withPrec precTab n op <*> exprP (succ n)) >>= \as
+    -> opFold precTab (\op x y -> A (A (V op) x) y) a as
+  else aexp;
+expr = exprP 0;
+
+sqList r = between (res "[") (res "]") $ sepBy r (res ",");
+
+gcon = wantConId <|> paren (wantqconsym <|> res ",") <|> ((++) <$> res "[" <*> (res "]"));
+
+apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
+  <|> flip PatVar Nothing <$> (res "_" *> pure "_")
+  <|> flip PatCon [] <$> gcon
+  <|> PatLit <$> wantLit
+  <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" []) <$> sqList pat
+  <|> paren ((&) <$> pat <*> ((res "," *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
+  ;
+
+binPat f x y = PatCon f [x, y];
+patP n = if n <= 9
+  then getPrecs >>= \precTab
+    -> patP (succ n) >>= \a
+    -> many ((,) <$> withPrec precTab n qconop <*> patP (succ n)) >>= \as
+    -> opFold precTab binPat a as
+  else PatCon <$> gcon <*> many apat <|> apat
+  ;
+pat = patP 0;
+
+maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id);
+
+guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+  { V "True" -> \_ -> y
+  ; _ -> A (A (A (V "if") x) y)
+  }) <$> (res "|" *> expr) <*> (res s *> expr));
+
+onePat vs x = Pa [(vs, x)];
+opDef x f y rhs = [(f, onePat [x, y] rhs)];
+leftyPat p expr = let { pvs = patVars p } in case pvs of
+  { [] -> []
+  ; (h:t) -> let { gen = '@':h } in
+    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
+  };
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
+
+simpleType c vs = foldl TAp (TC c) (map TV vs);
+conop = want f <|> between (res "`") (res "`") (want g) where
+  { f (ConSym s) = Right s
+  ; f _ = Left ""
+  ; g (ConId s) = Right s
+  ; g _ = Left "want qconop"
+  };
+constr = (\x c y -> Constr c [x, y]) <$> aType <*> conop <*> aType
+  <|> Constr <$> wantConId <*> many aType;
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|");
+
+topdecls = braceSep
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> ffiDecl
+  <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
+  <|> res "export" *> (addExport <$> wantString <*> var)
   <|> addDefs <$> def
   <|> fixity
-  <|> tok "export" *> (addExport <$> litStr <*> var)
-  <|> pure id
-  ) (spch ';');
-program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ insert ":" (5, RAssoc) Tip;
+  );
 
+offside xs = Ell (landin xs) [];
+program s = case lex posLexemes $ LexState s (1, 1) of
+  { Left e -> Left e
+  ; Right (xs, LexState [] _) -> parse topdecls $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip;
+  ; Right (_, st) -> Left "unlexable"
+  };
 -- Primitives.
 
 primAdts =
@@ -1057,18 +1271,21 @@ ffiDefine n ffis = case ffis of
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
   };
 
-getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure [];
-
-untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
-  { ParseState s _ -> if s == ""
-    then case foldr ($) (Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
+untangle s = case program s of
+  { Left e -> Left $ "parse error: " ++ e
+  ; Right (prog, ParseState s _) -> case s of
+    { Ell [] [] -> case foldr ($) (Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
       { Neat ienv idefs defs typed dcs ffis exs ->
         case inferDefs ienv idefs (coalesce defs) dcs typed of
           { Left err -> Left err
           ; Right qas -> Right (qas, (ffis, exs))
           }
       }
-    else Left $ "dregs: " ++ s
+    ; _ -> Left $ "parse error: " ++ case ell s of
+      { Left e -> e
+      ; Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      }
+    }
   };
 
 optiComb' (subs, combs) (s, lamb) = let
@@ -1086,6 +1303,7 @@ optiComb' (subs, combs) (s, lamb) = let
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
+-- Code generation.
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
@@ -1234,14 +1452,7 @@ hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
 getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
 getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
 
-interact f = getContents >>= putStr . f;
-main = getArgs >>= \case
-  { "comb":_ -> interact dumpCombs
-  ; "lamb":_ -> interact dumpLambs
-  ; "type":_ -> interact dumpTypes
-  ; _ -> interact compile
-  };
-
+-- Main VM loop.
 comdefsrc = [r|
 F x = "foreign(arg(1));"
 Y x = x "sp[1]"
@@ -1269,23 +1480,23 @@ WRITEREF x y z w = w "((mem[arg(1) + 1] = arg(2)), _K)" z
 END = "return;"
 |];
 
-comb = (,)
-  <$> spc (some $ large)
-  <*> ((,)
-    <$> many (spc $ (:"") <$> small)
-    <*> (spch '=' *> combExpr));
+comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr));
 combExpr = foldl1 A <$> some
-  (   V . (:"") <$> spc small
-  <|> E . StrCon <$> litStr
-  <|> paren combExpr
-  );
+  (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr);
 
-comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Tip);
+comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
+  { Left e -> error e
+  ; Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
+    { Left e -> error e
+    ; Right (cs, _) -> cs
+    }
+  };
+
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
+
 preamble = "#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));\n"
   ++ [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-
 extern u __heap_base;
 void* malloc(unsigned long n) {
   static u bump = (u) &__heap_base;
@@ -1366,12 +1577,12 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
+
 extern int getchar(void);
 extern void putchar(int c);
 |];
 
-runFun = ([r|
-static void run() {
+runFun = ([r|static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -1389,6 +1600,7 @@ void rts_init() {
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
+
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
@@ -1412,3 +1624,10 @@ genComb (s, (args, body)) = let
   ; E (StrCon s) -> (s++)
   }) . ("break;\n"++)
   ;
+
+main = getArgs >>= \case
+  { "comb":_ -> interact dumpCombs
+  ; "lamb":_ -> interact dumpLambs
+  ; "type":_ -> interact dumpTypes
+  ; _ -> interact compile
+  };

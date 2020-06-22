@@ -1,298 +1,259 @@
-infixr 9 . , !! , !;
-infixl 7 * , `div` , `mod`;
-infixl 6 + , -;
-infixr 5 ++;
-infixl 4 <*> , <$> , <* , *>;
-infix 4 == , /= , <= , >= , < , >;
-infixl 3 && , <|>;
-infixl 2 ||;
-infixl 1 >> , >>=;
-infixr 1 =<<;
-infixr 0 $;
+infixr 9 . , !! , !
+infixl 7 * , `div` , `mod`
+infixl 6 + , -
+infixr 5 ++
+infixl 4 <*> , <$> , <* , *>
+infix 4 == , /= , <= , >= , < , >
+infixl 3 && , <|>
+infixl 2 ||
+infixl 1 >> , >>=
+infixr 1 =<<
+infixr 0 $
 
-isEOF = (0 /=) <$> isEOFInt;
+isEOF = (0 /=) <$> isEOFInt
 
-($) f x = f x;
-id x = x;
-const x y = x;
-flip f x y = f y x;
-(&) x f = f x;
-class Functor f where { fmap :: (a -> b) -> f a -> f b };
+($) f x = f x
+id x = x
+const x y = x
+flip f x y = f y x
+(&) x f = f x
+class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
-{ pure :: a -> f a
-; (<*>) :: f (a -> b) -> f a -> f b
-};
+  pure :: a -> f a
+  (<*>) :: f (a -> b) -> f a -> f b
 class Monad m where
-{ return :: a -> m a
-; (>>=) :: m a -> (a -> m b) -> m b
-};
-(<$>) = fmap;
-liftA2 f x y = f <$> x <*> y;
-(*>) = liftA2 \x y -> y;
-(<*) = liftA2 \x y -> x;
-(>>) f g = f >>= \_ -> g;
-(=<<) = flip (>>=);
-class Eq a where { (==) :: a -> a -> Bool };
-instance Eq Int where { (==) = intEq };
-instance Eq Char where { (==) = charEq };
-class Ord a where { (<=) :: a -> a -> Bool };
-instance Ord Int where { (<=) = intLE };
-instance Ord Char where { (<=) = charLE };
-data Ordering = LT | GT | EQ;
-compare x y = if x <= y then if y <= x then EQ else LT else GT;
-instance Ord a => Ord [a] where {
-  (<=) xs ys = case xs of
-    { [] -> True
-    ; x:xt -> case ys of
-      { [] -> False
-      ; y:yt -> case compare x y of
-        { LT -> True
-        ; GT -> False
-        ; EQ -> xt <= yt
-        }
-      }
-    }
-};
--- Add `Ord a, Ord b => Ord (a, b)` (and similar for `Eq`)
--- after supporting multiple predicates.
-instance Ord (Int, Int) where {
-  (x1, y1) <= (x2, y2)
-    | x1 == x2 = y1 <= y2
-    | otherwise = x1 <= x2
-};
-instance Eq (Int, Int) where {
+  return :: a -> m a
+  (>>=) :: m a -> (a -> m b) -> m b
+(<$>) = fmap
+liftA2 f x y = f <$> x <*> y
+(*>) = liftA2 \x y -> y
+(<*) = liftA2 \x y -> x
+(>>) f g = f >>= \_ -> g
+(=<<) = flip (>>=)
+class Eq a where (==) :: a -> a -> Bool
+instance Eq Int where (==) = intEq
+instance Eq Char where (==) = charEq
+class Ord a where (<=) :: a -> a -> Bool
+instance Ord Int where (<=) = intLE
+instance Ord Char where (<=) = charLE
+data Ordering = LT | GT | EQ
+compare x y = if x <= y then if y <= x then EQ else LT else GT
+instance Ord a => Ord [a] where
+  xs <= ys = case xs of
+    [] -> True
+    x:xt -> case ys of
+      [] -> False
+      y:yt -> case compare x y of
+        LT -> True
+        GT -> False
+        EQ -> xt <= yt
+instance (Eq a, Eq b) => Eq (a, b) where
   (x1, y1) == (x2, y2) = x1 == x2 && y1 == y2
-};
-(>=) = flip (<=);
-x > y = y <= x && y /= x;
-x < y = x <= y && x /= y;
-data Maybe a = Nothing | Just a;
-data Either a b = Left a | Right b;
-fst (x, y) = x;
-snd (x, y) = y;
-uncurry f (x, y) = f x y;
-first f (x, y) = (f x, y);
-second f (x, y) = (x, f y);
-not a = if a then False else True;
-x /= y = not $ x == y;
-(.) f g x = f (g x);
-(||) f g = if f then True else g;
-(&&) f g = if f then g else False;
-flst xs n c = case xs of { [] -> n; h:t -> c h t };
-instance Eq a => Eq [a] where { (==) xs ys = case xs of
-  { [] -> case ys of
-    { [] -> True
-    ; _ -> False
-    }
-  ; x:xt -> case ys of
-    { [] -> False
-    ; y:yt -> x == y && xt == yt
-    }
-  }};
-take 0 xs = [];
-take _ [] = [];
-take n (h:t) = h : take (n - 1) t;
-maybe n j m = case m of { Nothing -> n; Just x -> j x };
-instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
-instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
-instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
-foldr c n l = case l of { [] -> n ; h:t -> c h (foldr c n t)};
-mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
-mapM_ f = foldr ((>>) . f) (pure ());
-foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
-instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
-instance Monad IO where { return = ioPure ; (>>=) = ioBind };
-instance Functor IO where { fmap f x = ioPure f <*> x };
-putStr = mapM_ putChar;
-putStrLn s = putStr s >> putChar '\n';
-error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess;
-undefined = error "undefined";
-foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l;
-foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a;
-foldl1 f (h:t) = foldl f h t;
-reverse = foldl (flip (:)) [];
-elem k xs = foldr (\x t -> x == k || t) False xs;
-find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
-(++) = flip (foldr (:));
-concat = foldr (++) [];
-map = flip (foldr . ((:) .)) [];
-concatMap = (concat .) . map;
-and = foldr (&&) True;
-or = foldr (||) False;
-all f = and . map f;
-any f = or . map f;
-(x:xt) !! n = if n == 0 then x else xt !! (n - 1);
-instance Functor [] where { fmap = map };
-instance Applicative [] where { pure = (:[]); f <*> x = concatMap (<$> x) f };
-instance Monad [] where { return = (:[]); (>>=) = flip concatMap };
-lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing;
-iterate f x = x : iterate f (f x);
-zipWith _ [] _ = [];
-zipWith _ _ [] = [];
-zipWith f (x:xt) (y:yt) = f x y : zipWith f xt yt;
-zip = zipWith (,);
-head (h:_) = h;
-tail (_:t) = t;
-repeat x = x : repeat x;
-cycle = concat . repeat;
-data State s a = State (s -> (a, s));
-runState (State f) = f;
-instance Functor (State s) where { fmap f = \(State h) -> State (first f . h) };
+instance (Ord a, Ord b) => Ord (a, b) where
+  (x1, y1) <= (x2, y2) = if x1 <= x2
+    then if x2 <= x1 then y1 <= y2 else True
+    else False
+(>=) = flip (<=)
+x > y = y <= x && y /= x
+x < y = x <= y && x /= y
+data Maybe a = Nothing | Just a
+data Either a b = Left a | Right b
+fst (x, y) = x
+snd (x, y) = y
+uncurry f (x, y) = f x y
+first f (x, y) = (f x, y)
+second f (x, y) = (x, f y)
+not a = if a then False else True
+x /= y = not $ x == y
+(.) f g x = f (g x)
+(||) f g = if f then True else g
+(&&) f g = if f then g else False
+instance Eq a => Eq [a] where
+  xs == ys = case xs of
+    [] -> case ys of
+      [] -> True
+      _ -> False
+    x:xt -> case ys of
+      [] -> False
+      y:yt -> x == y && xt == yt
+take 0 xs = []
+take _ [] = []
+take n (h:t) = h : take (n - 1) t
+maybe n j m = case m of Nothing -> n; Just x -> j x
+instance Functor Maybe where fmap f = maybe Nothing (Just . f)
+instance Applicative Maybe where
+  pure = Just
+  mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
+instance Monad Maybe where
+  return = Just
+  mf >>= mg = maybe Nothing mg mf
+foldr c n l = case l of
+  [] -> n
+  h:t -> c h (foldr c n t)
+mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
+mapM_ f = foldr ((>>) . f) (pure ())
+foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
+instance Functor IO where fmap f x = ioPure f <*> x
+instance Applicative IO where
+  pure = ioPure
+  f <*> x = ioBind f \g -> ioBind x \y -> ioPure (g y)
+instance Monad IO where return = ioPure ; (>>=) = ioBind
+putStr = mapM_ putChar
+putStrLn s = putStr s >> putChar '\n'
+error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
+undefined = error "undefined"
+foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
+foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
+foldl1 f (h:t) = foldl f h t
+reverse = foldl (flip (:)) []
+elem k xs = foldr (\x t -> x == k || t) False xs
+find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
+(++) = flip (foldr (:))
+concat = foldr (++) []
+map = flip (foldr . ((:) .)) []
+concatMap = (concat .) . map
+and = foldr (&&) True
+or = foldr (||) False
+all f = and . map f
+any f = or . map f
+(x:xt) !! n = if n == 0 then x else xt !! (n - 1)
+instance Functor [] where fmap = map
+instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
+instance Monad [] where return = (:[]); (>>=) = flip concatMap
+lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
+iterate f x = x : iterate f (f x)
+zipWith _ [] _ = []
+zipWith _ _ [] = []
+zipWith f (x:xt) (y:yt) = f x y : zipWith f xt yt
+zip = zipWith (,)
+head (h:_) = h
+tail (_:t) = t
+repeat x = x : repeat x
+cycle = concat . repeat
+data State s a = State (s -> (a, s))
+runState (State f) = f
+instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
 instance Applicative (State s) where
-{ pure a = State (a,)
-; (State f) <*> (State x) = State \s -> flip uncurry (f s) \g s' -> first g $ x s'
-};
+  pure a = State (a,)
+  (State f) <*> (State x) = State \s -> flip uncurry (f s) \g s' -> first g $ x s'
 instance Monad (State s) where
-{ return a = State (a,)
-; (State h) >>= f = State $ uncurry (runState . f) . h
-};
-evalState m s = fst $ runState m s;
-get = State \s -> (s, s);
-put n = State \s -> ((), n);
-either l r e = case e of { Left x -> l x; Right x -> r x };
-instance Functor (Either a) where { fmap f e = case e of
-  { Left x -> Left x
-  ; Right x -> Right $ f x
-  }
-};
-instance Applicative (Either a) where { pure = Right ; ef <*> ex = case ef of
-  { Left s -> Left s
-  ; Right f -> case ex of
-    { Left s -> Left s
-    ; Right x -> Right $ f x
-    }
-  }
-};
-instance Monad (Either a) where { return = Right ; ex >>= f = case ex of
-  { Left s -> Left s
-  ; Right x -> f x
-  }
-};
+  return a = State (a,)
+  (State h) >>= f = State $ uncurry (runState . f) . h
+evalState m s = fst $ runState m s
+get = State \s -> (s, s)
+put n = State \s -> ((), n)
+either l r e = case e of Left x -> l x; Right x -> r x
+instance Functor (Either a) where fmap f e = either Left (Right . f) e
+instance Applicative (Either a) where
+  pure = Right
+  ef <*> ex = case ef of
+    Left s -> Left s
+    Right f -> either Left (Right . f) ex
+instance Monad (Either a) where
+  return = Right
+  ex >>= f = either Left f ex
 
 -- Map.
-
-data Map k a = Tip | Bin Int k a (Map k a) (Map k a);
-size m = case m of { Tip -> 0 ; Bin sz _ _ _ _ -> sz };
-node k x l r = Bin (1 + size l + size r) k x l r;
-singleton k x = Bin 1 k x Tip Tip;
-singleL k x l (Bin _ rk rkx rl rr) = node rk rkx (node k x l rl) rr;
+data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
+size m = case m of Tip -> 0 ; Bin sz _ _ _ _ -> sz
+node k x l r = Bin (1 + size l + size r) k x l r
+singleton k x = Bin 1 k x Tip Tip
+singleL k x l (Bin _ rk rkx rl rr) = node rk rkx (node k x l rl) rr
 doubleL k x l (Bin _ rk rkx (Bin _ rlk rlkx rll rlr) rr) =
-  node rlk rlkx (node k x l rll) (node rk rkx rlr rr);
-singleR k x (Bin _ lk lkx ll lr) r = node lk lkx ll (node k x lr r);
+  node rlk rlkx (node k x l rll) (node rk rkx rlr rr)
+singleR k x (Bin _ lk lkx ll lr) r = node lk lkx ll (node k x lr r)
 doubleR k x (Bin _ lk lkx ll (Bin _ lrk lrkx lrl lrr)) r =
-  node lrk lrkx (node lk lkx ll lrl) (node k x lrr r);
-balance k x l r = (if size l + size r <= 1
-  then node
-  else if 5 * size l + 3 <= 2 * size r
-    then case r of
-      { Tip -> node
-      ; Bin sz _ _ rl rr -> if 2 * size rl + 1 <= 3 * size rr
+  node lrk lrkx (node lk lkx ll lrl) (node k x lrr r)
+balance k x l r = f k x l r where
+  f | size l + size r <= 1 = node
+    | 5 * size l + 3 <= 2 * size r = case r of
+      Tip -> node
+      Bin sz _ _ rl rr -> if 2 * size rl + 1 <= 3 * size rr
         then singleL
         else doubleL
-      }
-    else if 5 * size r + 3 <= 2 * size l
-      then case l of
-        { Tip -> node
-        ; Bin sz _ _ ll lr -> if 2 * size lr + 1 <= 3 * size ll
-          then singleR
-          else doubleR
-        }
-      else node
-  ) k x l r;
+    | 5 * size r + 3 <= 2 * size l = case l of
+      Tip -> node
+      Bin sz _ _ ll lr -> if 2 * size lr + 1 <= 3 * size ll
+        then singleR
+        else doubleR
+    | True = node
 insert kx x t = case t of
-  { Tip -> singleton kx x
-  ; Bin sz ky y l r -> case compare kx ky of
-    { LT -> balance ky y (insert kx x l) r
-    ; GT -> balance ky y l (insert kx x r)
-    ; EQ -> Bin sz kx x l r
-    }
-  };
+  Tip -> singleton kx x
+  Bin sz ky y l r -> case compare kx ky of
+    LT -> balance ky y (insert kx x l) r
+    GT -> balance ky y l (insert kx x r)
+    EQ -> Bin sz kx x l r
 insertWith f kx x t = case t of
-  { Tip -> singleton kx x
-  ; Bin sy ky y l r -> case compare kx ky of
-    { LT -> balance ky y (insertWith f kx x l) r
-    ; GT -> balance ky y l (insertWith f kx x r)
-    ; EQ -> Bin sy kx (f x y) l r
-    }
-  };
+  Tip -> singleton kx x
+  Bin sy ky y l r -> case compare kx ky of
+    LT -> balance ky y (insertWith f kx x l) r
+    GT -> balance ky y l (insertWith f kx x r)
+    EQ -> Bin sy kx (f x y) l r
 mlookup kx t = case t of
-  { Tip -> Nothing
-  ; Bin _ ky y l r -> case compare kx ky of
-    { LT -> mlookup kx l
-    ; GT -> mlookup kx r
-    ; EQ -> Just y
-    }
-  };
-fromList = foldl (\t (k, x) -> insert k x t) Tip;
-member k t = maybe False (const True) $ mlookup k t;
-t!k = maybe undefined id $ mlookup k t;
+  Tip -> Nothing
+  Bin _ ky y l r -> case compare kx ky of
+    LT -> mlookup kx l
+    GT -> mlookup kx r
+    EQ -> Just y
+fromList = foldl (\t (k, x) -> insert k x t) Tip
+member k t = maybe False (const True) $ mlookup k t
+t!k = maybe undefined id $ mlookup k t
 
-foldrWithKey f = let
-  { go z t = case t of
-    { Tip -> z
-    ; Bin _ kx x l r -> go (f kx x (go z r)) l
-    }
-  } in go;
+foldrWithKey f = go where
+  go z t = case t of
+    Tip -> z
+    Bin _ kx x l r -> go (f kx x (go z r)) l
 
-toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
+toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 
-getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents;
+getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 
-interact f = f <$> getContents >>= putStr;
+interact f = f <$> getContents >>= putStr
 
-abs x = if 0 <= x then x else 0 - x;
+abs x = if 0 <= x then x else 0 - x
 
-show = flip shows "";
-print = putStrLn . show;
+show = flip shows ""
+print = putStrLn . show
 
-class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
-instance Alternative Maybe where
-{ empty = Nothing
-; l <|> r = maybe r Just l
-};
-instance Alternative [] where { empty = [] ; (<|>) = (++) };
-guard False = empty;
-guard True = pure ();
-asum = foldr (<|>) empty;
+class Alternative f where empty :: f a ; (<|>) :: f a -> f a -> f a
+instance Alternative Maybe where empty = Nothing ; l <|> r = maybe r Just l
+instance Alternative [] where empty = [] ; (<|>) = (++)
+guard False = empty
+guard True = pure ()
+asum = foldr (<|>) empty
 
 -- I'll fix `Shows` after supporting default methods in typeclasses.
-class Shows a where { shows :: a -> String -> String };
+class Shows a where shows :: a -> String -> String
 showInt' n
   | 0 == n = id
   | True = showInt' (n`div`10) . (chr (48+n`mod`10):)
-  ;
-instance Shows Int where {
+instance Shows Int where
   shows n
     | 0 == n = ('0':)
     | 1 <= n = showInt' n
     | True = ('-':) . showInt' (0 - n)  -- Fails for INT_MIN.
-};
-intersperse _ [] = [];
-intersperse x (a:at) = a : foldr (\h t -> [x, h] ++ t) [] at;
-instance Shows a => Shows [a] where { shows xs = ('[':) . foldr (.) id (intersperse (',':) $ map shows xs) . (']':) };
-otherwise = True;
+intersperse _ [] = []
+intersperse x (a:at) = a : foldr (\h t -> [x, h] ++ t) [] at
+instance Shows a => Shows [a] where shows xs = ('[':) . foldr (.) id (intersperse (',':) $ map shows xs) . (']':)
+otherwise = True
 
-unwords [] = "";
-unwords ws = foldr1 (\w s -> w ++ ' ':s) ws;
+unwords [] = ""
+unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
 
-isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
-span _ [] = ([], []);
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13]
+span _ [] = ([], [])
 span p xs@(x:xt)
   | p x       = first (x:) $ span p xt
   | otherwise = ([],xs)
-  ;
-break p = span (not . p);
-dropWhile _ [] = [];
+break p = span (not . p)
+dropWhile _ [] = []
 dropWhile p xs@(x:xt)
   | p x       = dropWhile p xt
   | otherwise = xs
-  ;
 words s = case dropWhile isSpace s of
-  { "" -> []
-  ; s' -> w : words s'' where { (w, s'') = break isSpace s' }
-  };
-filter _ [] = [];
+  "" -> []
+  s' -> w : words s'' where (w, s'') = break isSpace s'
+filter _ [] = []
 filter p (x:xt)
   | p x       = x : filter p xt
   | otherwise = filter p xt
-  ;

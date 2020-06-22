@@ -1,6 +1,6 @@
 -- Off-side rule.
 infixr 9 .;
-infixl 7 * , / , %;
+infixl 7 * , `div` , `mod`;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
@@ -266,7 +266,7 @@ scottConstr t cs c = case c of { Constr s ts -> (s,
   , scottEncode (map conOf cs) s $ mkStrs ts)) };
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs;
 
-showInt' n = if 0 == n then id else (showInt' $ n/10) . ((:) (chr $ 48+n%10));
+showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10));
 showInt n = if 0 == n then ('0':) else showInt' n;
 
 mkFFIHelper n t acc = case t of
@@ -321,7 +321,7 @@ instance Alternative Lexer where
 
 advanceRC x (r, c)
   | n `elem` [10, 11, 12, 13] = (r + 1, 1)
-  | n == 9 = (r, (c + 8)%8)
+  | n == 9 = (r, (c + 8)`mod`8)
   | True = (r, c + 1)
   where { n = ord x }
   ;
@@ -361,7 +361,7 @@ integer = decimal <|> char '0' *> (char 'x' <|> char 'X') *> hexadecimal;
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr;
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   { ck s = (if elem s
-    ["ffi", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+    ["ffi", "export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
     then Reserved else VarId) s };
 varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
   { ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s };
@@ -384,46 +384,60 @@ posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace);
 
 -- Layout.
 data Landin = Curly Int | Angle Int | PL ((Int, Int), Token);
-beginLayout rest = case rest of
+beginLayout xs = case xs of
   { [] -> [Curly 0]
-  ; ((r', _), Reserved "{"):_ -> landin r' rest
-  ; ((r', c'), _):_ -> Curly c' : landin r' rest
+  ; ((r', _), Reserved "{"):_ -> margin r' xs
+  ; ((r', c'), _):_ -> Curly c' : margin r' xs
   };
-landin _ [] = [];
-landin 0 ls@(((r, _), Reserved "{"):_) = landin r ls;
-landin 0 ls@(((r, c), _):_) = Curly c : landin r ls;
-landin r ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
+
+landin ls@(((r, _), Reserved "{"):_) = margin r ls;
+landin ls@(((r, c), _):_) = Curly c : margin r ls;
+landin [] = [];
+
+margin r ls@(((r', c), _):_) | r /= r' = Angle c : embrace ls;
+margin r ls = embrace ls;
+
+embrace ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
   PL x : beginLayout rest;
-landin r ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
+embrace ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
   PL x : PL y : beginLayout rest;
-landin r ls@(((r', c), _):_) | r /= r' = Angle c : landin r' ls;
-landin r (x:rest) = PL x : landin r rest;
+embrace (x@((r,_),_):xt) = PL x : margin r xt;
+embrace [] = [];
 
 data Ell = Ell [Landin] [Int];
 insPos x ts ms = Right (x, Ell ts ms);
 ins w = insPos ((0, 0), Reserved w);
-ell (Ell toks cols) = case (toks, cols) of
-  { (Angle n:ts, m:ms)
-    | m == n -> ins ";" ts (m:ms)
-    | n + 1 <= m -> ins "}" (Angle n:ts) ms
-  ; (Angle n:ts, ms) -> ell $ Ell ts ms
 
-  ; (Curly n:ts, m:ms) | m + 1 <= n -> ins "{" ts (n:m:ms)
-  ; (Curly n:ts, []) | 1 <= n -> ins "{" ts [n]
-  ; (Curly n:ts, ms) -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) ms
-
-  ; (PL (_, Reserved "}"):ts, 0:ms) -> ins "}" ts ms
-  ; (PL (_, Reserved "}"):ts, ms) -> Left "unmatched }"
-  ; (PL x@(_, Reserved "{"):ts, ms) -> insPos x ts (0:ms)
-  ; (PL t:ts, ms) -> insPos t ts ms
-
-  ; ([], []) -> Left "EOF"
-  ; ([], m:ms) | m /= 0 -> ins "}" [] ms
-  ; _ -> Left "missing }"
+ell (Ell toks cols) = case toks of
+  { t:ts -> case t of
+    { Angle n -> case cols of
+      { m:ms | m == n -> ins ";" ts (m:ms)
+             | n + 1 <= m -> ins "}" (Angle n:ts) ms
+      ; _ -> ell $ Ell ts cols
+      }
+    ; Curly n -> case cols of
+      { m:ms | m + 1 <= n -> ins "{" ts (n:m:ms)
+      ; [] | 1 <= n -> ins "{" ts [n]
+      ; _ -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) cols
+      }
+    ; PL x -> case snd x of
+      { Reserved "}" -> case cols of
+        { 0:ms -> ins "}" ts ms
+        ; _ -> Left "unmatched }"
+        }
+      ; Reserved "{" -> insPos x ts (0:cols)
+      ; _ -> insPos x ts cols
+      }
+    }
+  ; [] -> case cols of
+    { [] -> Left "EOF"
+    ; m:ms | m /= 0 -> ins "}" [] ms
+    ; _ -> Left "missing }"
+    }
   };
 
-parseErrorRule (Ell toks cols) = case (toks, cols) of
-  { (t:ts, m:ms) | m /= 0 -> Right $ Ell (t:ts) ms
+parseErrorRule (Ell toks cols) = case cols of
+  { m:ms | m /= 0 -> Right $ Ell toks ms
   ; _ -> Left "missing }"
   };
 
@@ -646,9 +660,12 @@ genDecl = (,) <$> var <*> (res "::" *> _type);
 
 classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> braceSep genDecl));
 
+simpleClass = Pred <$> wantConId <*> _type;
+scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",");
+
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
-  ((((:[]) .) . Pred <$> wantConId <*> (_type <* res "=>")) <|> pure [])
+  (scontext <* res "=>" <|> pure [])
     <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)));
 
 letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr;
@@ -666,7 +683,14 @@ thenComma = res "," *> ((flipPairize <$> expr) <|> pure (A (V ",")));
 parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id);
 rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> res ",")) <*> expr;
 section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" *> pure (V "()"));
-atom = ifthenelse <|> letin <|> listify <$> sqList expr <|> section
+
+maybePureUnit = maybe (V "pure" `A` V "()") id;
+stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
+  <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def));
+doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt);
+
+atom = ifthenelse <|> doblock <|> letin <|> listify <$> sqList expr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
   <|> fmap V (con <|> var) <|> E <$> wantLit;
 
@@ -743,7 +767,7 @@ topdecls = braceSep
   <|> fixity
   );
 
-offside xs = Ell (landin 0 xs) [];
+offside xs = Ell (landin xs) [];
 program s = case lex posLexemes $ LexState s (1, 1) of
   { Left e -> Left e
   ; Right (xs, LexState [] _) -> parse topdecls $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip;
@@ -781,8 +805,8 @@ prims = let
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
-      , ("/", "DIV")
-      , ("%", "MOD")
+      , ("div", "DIV")
+      , ("mod", "MOD")
       ];
 
 -- Conversion to De Bruijn indices.
@@ -1257,7 +1281,10 @@ untangle s = case program s of
           ; Right qas -> Right (qas, (ffis, exs))
           }
       }
-    ; _ -> Left "parse error: TODO"
+    ; _ -> Left $ "parse error: " ++ case ell s of
+      { Left e -> e
+      ; Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      }
     }
   };
 
@@ -1282,17 +1309,16 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
-      ("typedef unsigned u;\n" ++)
+      ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++)
+    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
     . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("};\n" ++)
-    . ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++)
+    . ("0};\n" ++)
     . (preamble++)
     . (concatMap ffiDeclare ffis ++)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
@@ -1475,7 +1501,7 @@ preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibil
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 enum { TOP = 1<<24 };
-u *mem, *altmem, *sp, *spTop, hp;
+static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
   if (!isAddr(n)) return n;
@@ -1523,7 +1549,7 @@ static void gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
-  for(u i = 0; i < root_size; i++) root[i] = evac(root[i]);
+  for(u *r = root; *r; r++) *r = evac(*r);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
@@ -1537,13 +1563,7 @@ static void gc() {
   altmem = tmp;
 }
 
-static inline u app(u f, u x) {
-  mem[hp] = f;
-  mem[hp + 1] = x;
-  hp += 2;
-  return hp - 2;
-}
-
+static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
 static inline int num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
@@ -1554,7 +1574,6 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-static inline u apparg(u i, u j) { return app(arg(i), arg(j)); }
 
 static int env_argc;
 int getargcount() { return env_argc; }
@@ -1574,16 +1593,16 @@ runFun = ([r|static void run() {
   }
 }
 
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
-
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
+}
+
+void rts_reduce(u n) {
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
 }
 |]++)
   ;

@@ -156,60 +156,63 @@ function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
 
 [id="hello.hs"]
 ------------------------------------------------------------------------
-main = putStrLn "Hello, World!\n";
+main = putStrLn "Hello, World!\n"
 ------------------------------------------------------------------------
 
 [id="edigits.hs"]
 ------------------------------------------------------------------------
 -- Digits of e. See http://miranda.org.uk/examples.
-mkdigit n | n <= 9 = chr (n + ord '0');
+mkdigit n | n <= 9 = chr (n + ord '0')
 norm c (d:(e:x))
   | e `mod` c + 10 <= c = d + e  `div` c : e' `mod` c : x'
   | otherwise           = d + e' `div` c : e' `mod` c : x'
-  where { (e':x') = norm (c+1) (e:x) };
-convert x = let { (h:t) = norm 2 (0:map (10*) x) } in mkdigit h:convert t;
-edigits = "2." ++ convert (repeat 1);
-main = putStr $ take 1024 edigits;
+  where (e':x') = norm (c+1) (e:x)
+convert x = mkdigit h:convert t
+  where (h:t) = norm 2 (0:map (10*) x)
+edigits = "2." ++ convert (repeat 1)
+main = putStr $ take 1024 edigits
 ------------------------------------------------------------------------
 
 [id="queens.hs"]
 ------------------------------------------------------------------------
 -- Eight queens puzzle. See http://miranda.org.uk/examples.
-checks q b i = q==b!!i || abs(q-b!!i)==i+1;
-index x = let
-  { f n [] = []
-  ; f n (a:x) = n:f(n+1)x
-  } in f 0 x;
-safe q b = and $ map (not . checks q b) $ index b;
+checks q b i = q==b!!i || abs(q-b!!i)==i+1
+index x = f 0 x where
+  f n [] = []
+  f n (a:x) = n:f(n+1)x
+safe q b = and $ map (not . checks q b) $ index b
 
 -- List comprehensions and ranges are on the to-do list.
 -- For now, desugar [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
 queens sz = go sz where
-  { go 0 = [[]]
-  ; go n = go (n - 1) >>= \b -> range 1 sz >>= \q -> guard (safe q b) >> [q:b]
-  };
+  go 0 = [[]]
+  go n = do
+    b <- go (n - 1)
+    q <- range 1 sz
+    guard (safe q b)
+    pure $ q:b
 range m n | m <= n = m:range (m+1) n
-          | otherwise = [];
-main = print $ queens 8;
+          | otherwise = []
+main = print $ queens 8
 ------------------------------------------------------------------------
 
 [id="lindon.hs"]
 ------------------------------------------------------------------------
 -- King, are you glad you are king?
-main = interact $ unwords . reverse . words;
+main = interact $ unwords . reverse . words
 ------------------------------------------------------------------------
 
 [id="sort.hs"]
 ------------------------------------------------------------------------
-main = interact $ unwords . sorta . words;
-sorta [] = [];
-sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt);
+main = interact $ unwords . sorta . words
+sorta [] = []
+sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt)
 ------------------------------------------------------------------------
 
 [id="hexmaze.hs"]
 ------------------------------------------------------------------------
 -- https://fivethirtyeight.com/features/can-you-escape-this-enchanted-maze/
-nats = iterate (1+) 0;
+nats = iterate (1+) 0
 maze = fromList $ concat $ zipWith row nats
   [ "."
   , "IF"
@@ -222,40 +225,37 @@ maze = fromList $ concat $ zipWith row nats
   , "     O"
   ]
   where
-  { row r s = concat $ zipWith (cell r) nats s
-  ; cell r c x | x /= ' '  = [((r, c), x)]
-               | otherwise = []
-  }
-  ;
-dirs = [(1, 0), (0, 0-1), (0-1, 0-1), (0-1, 0), (0, 1), (1, 1)];
-turn f x = take 2 $ tail $ dropWhile (/= x) $ cycle $ f dirs;
-data Hex = Hex (Int, Int) (Int, Int) String;
-step (Hex (x, y) (xd, yd) path) =
-  next (xd, yd) >>= \(xd', yd') -> let
-  { pos' = (x + xd', y + yd')
-  } in guard (member pos' maze) >> [Hex pos' (xd', yd') (c:path)]
+  row r s = concat $ zipWith (cell r) nats s
+  cell r c x | x /= ' '  = [((r, c), x)]
+             | otherwise = []
+dirs = [(1, 0), (0, 0-1), (0-1, 0-1), (0-1, 0), (0, 1), (1, 1)]
+turn f x = take 2 $ tail $ dropWhile (/= x) $ cycle $ f dirs
+data Hex = Hex (Int, Int) (Int, Int) String
+step (Hex (x, y) (xd, yd) path) = do
+  (xd', yd') <- next (xd, yd)
+  let pos' = (x + xd', y + yd')
+  guard (member pos' maze)
+  pure $ Hex pos' (xd', yd') (c:path)
   where
-  { c = maze!(x, y)
-  ; next = turn $ if elem c "AEIOUY" then id else reverse
-  };
+  c = maze!(x, y)
+  next = turn $ if elem c "AEIOUY" then id else reverse
 
 bfs moves = case asum $ won <$> moves of
-  { Nothing -> bfs $ step =<< moves
-  ; Just soln -> reverse soln
-  } where
-  { won (Hex pos _ path)
+  Nothing -> bfs $ step =<< moves
+  Just soln -> reverse soln
+  where
+  won (Hex pos _ path)
     | maze!pos == '.' && elem 'M' path = Just path
     | otherwise = Nothing
-  };
 
-main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""];
+main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""]
 ------------------------------------------------------------------------
 
 [id="gray.hs"]
 ------------------------------------------------------------------------
-gray 0 = [""];
-gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1));
-main = putStrLn $ unwords $ gray 4;
+gray 0 = [""]
+gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1))
+main = putStrLn $ unwords $ gray 4
 ------------------------------------------------------------------------
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
