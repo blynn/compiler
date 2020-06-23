@@ -212,7 +212,6 @@ interact f = f <$> getContents >>= putStr
 
 abs x = if 0 <= x then x else 0 - x
 
-show = flip shows ""
 print = putStrLn . show
 
 class Alternative f where empty :: f a ; (<|>) :: f a -> f a -> f a
@@ -222,19 +221,8 @@ guard False = empty
 guard True = pure ()
 asum = foldr (<|>) empty
 
--- I'll fix `Shows` after supporting default methods in typeclasses.
-class Shows a where shows :: a -> String -> String
-showInt' n
-  | 0 == n = id
-  | True = showInt' (n`div`10) . (chr (48+n`mod`10):)
-instance Shows Int where
-  shows n
-    | 0 == n = ('0':)
-    | 1 <= n = showInt' n
-    | True = ('-':) . showInt' (0 - n)  -- Fails for INT_MIN.
 intersperse _ [] = []
 intersperse x (a:at) = a : foldr (\h t -> [x, h] ++ t) [] at
-instance Shows a => Shows [a] where shows xs = ('[':) . foldr (.) id (intersperse (',':) $ map shows xs) . (']':)
 otherwise = True
 
 unwords [] = ""
@@ -257,3 +245,33 @@ filter _ [] = []
 filter p (x:xt)
   | p x       = x : filter p xt
   | otherwise = filter p xt
+
+class Show a where
+  showsPrec :: Int -> a -> String -> String
+  showsPrec _ x = (show x++)
+  show :: a -> String
+  show x = shows x ""
+  showList :: [a] -> String -> String
+  showList = showList__ shows
+shows = showsPrec 0
+showList__ _     []     s = "[]" ++ s
+showList__ showx (x:xs) s = '[' : showx x (showl xs)
+  where
+    showl []     = ']' : s
+    showl (y:ys) = ',' : showx y (showl ys)
+showInt_ n
+  | 0 == n = id
+  | True = showInt_ (n`div`10) . (chr (48+n`mod`10):)
+instance Show a => Show [a] where showsPrec _ = showList
+instance Show Int where
+  showsPrec _ n
+    | 0 == n = ('0':)
+    | 1 <= n = showInt_ n
+    | True = ('-':) . showInt_ (0 - n)  -- Fails for INT_MIN.
+instance Show Char where
+  showsPrec _ '\'' = ("'\\''"++)
+  showsPrec _ c = ('\'':) . showLitChar c . ('\'':)
+  showList s = ('"':) . foldr (.) id (map showLitChar s) . ('"':)
+
+showLitChar '\n' = ("\\n"++)
+showLitChar c = (c:)

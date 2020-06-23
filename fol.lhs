@@ -1174,7 +1174,7 @@ but we can accomplish a lot without looking at them, such as determining that
 two literals cannot unify because the outermost function names differ.
 
 We can push further and memoize more. Here's an obvious way to filter out
-candidates could never unify:
+candidates that could never unify:
 
 \begin{code}
 couldMatchTerms = \case

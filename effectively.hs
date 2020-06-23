@@ -662,11 +662,9 @@ inferMethod ienv typed qi def = fpair def \s expr ->
                 ; Just subx -> snd $ prove' ienv (subx @@ sub) (dictVars ps2 0) ax
               }}}}}}}}};
 
-genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
-
 inferInst ienv typed inst = fpair inst \cl qds -> fpair qds \q ds ->
   case q of { Qual ps t -> let { s = showPred $ Pred cl t } in
-  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (foldl A (genProduct $ map fst ds) (map (inferMethod ienv typed q) ds)) (map snd $ fst $ dictVars ps 0))
+  (s, (,) (noQual $ TC "DICT") $ maybeFix s $ foldr L (L "@" $ foldl A (V "@") (map (inferMethod ienv typed q) ds)) (map snd $ fst $ dictVars ps 0))
   };
 
 reverse = foldl (flip (:)) [];
@@ -684,16 +682,8 @@ mkCase t cs = (concatMap (('|':) . conOf) cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
   , ro 'I'));
 mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('@':s, s : l))) ("@", []);
-index n s ss = case ss of
-  { [] -> undefined
-  ; (:) t ts -> ife (s == t) n $ index (n + 1) s ts
-  };
-length = foldr (\_ n -> n + 1) 0;
+length = foldr (\_ n -> succ n) 0;
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
--- scottConstr t cs c = case c of { Constr s ts -> (s,
---   ( noQual $ foldr arr t ts
---   , Pick (index 0 s $ map conOf cs) (length ts) (length cs - 1)))
---   };
 scottConstr t cs c = case c of { Constr s ts -> (s,
   ( noQual $ foldr arr t ts
   , scottEncode (map conOf cs) s $ mkStrs ts)) };

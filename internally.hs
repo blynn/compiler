@@ -84,6 +84,7 @@ instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
 instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
 instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
+length = foldr (\_ n -> n + 1) 0;
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
 mapM_ f = foldr ((>>) . f) (pure ());
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
@@ -270,8 +271,6 @@ mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro 'I'));
 mkStrs = snd . foldl (\(s, l) u -> (s + 2, s:l)) (1, []);
-index n s (t:ts) = if s == t then n else index (n + 1) s ts;
-length = foldr (\_ n -> n + 1) 0;
 scottEncode vs s ts
   | s == strCode ":" = ro ':'
   | True = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);

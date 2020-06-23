@@ -49,7 +49,7 @@ function hideshow(s) {
     xt.innerHTML = "[-] Hide"
   } else {
     x.style.display = "none";
-    xt.innerHTML = "[-] Show"
+    xt.innerHTML = "[+] Show"
   }
 }
 
@@ -253,6 +253,7 @@ main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""]
 
 [id="gray.hs"]
 ------------------------------------------------------------------------
+-- Gray code.
 gray 0 = [""]
 gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1))
 main = putStrLn $ unwords $ gray 4

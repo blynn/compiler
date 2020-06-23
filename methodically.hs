@@ -1,4 +1,5 @@
--- Cross-compiler targeting wasm.
+-- Default class methods.
+-- Accept instance methods in any order.
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -1185,6 +1186,8 @@ ffiDefine n ffis = case ffis of
       then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
 
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+
 compile s = case untangle s of
   Left err -> err
   Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
@@ -1205,7 +1208,7 @@ compile s = case untangle s of
     . ("\n  }\n}\n" ++)
     . runFun
     . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
-    $ ""
+    $ maybe "" genMain (mlookup "main" tab)
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
@@ -1353,15 +1356,10 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1)
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
 
-preamble = "#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));\n"
-  ++ [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-extern u __heap_base;
-void* malloc(unsigned long n) {
-  static u bump = (u) &__heap_base;
-  return (void *) ((bump += n) - n);
-}
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<22 };
+enum { TOP = 1<<24 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
@@ -1436,8 +1434,10 @@ static inline void lazy2(u height, u f, u x) {
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
 
-extern int getchar(void);
-extern void putchar(int c);
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
 |]
 
 runFun = ([r|static void run() {
@@ -1460,7 +1460,6 @@ void rts_init() {
 }
 
 void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
   run();
 }

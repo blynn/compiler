@@ -84,6 +84,7 @@ instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
 instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
 instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
+length = foldr (\_ n -> n + 1) 0;
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
 mapM_ f = foldr ((>>) . f) (pure ());
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
@@ -251,8 +252,6 @@ mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro "I"));
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", []);
-index n s (t:ts) = if s == t then n else index (n + 1) s ts;
-length = foldr (\_ n -> n + 1) 0;
 scottEncode _ ":" _ = ro "CONS";
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
@@ -448,7 +447,7 @@ coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
   } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
   ;
 
-leftyPat p expr = let { pvs = patVars p } in case pvs of
+leftyPat p expr = case patVars p of
   { [] -> []
   ; (h:t) -> let { gen = '@':h } in
     (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
@@ -747,7 +746,6 @@ mgu t u = case t of
 
 unify a b s = (@@ s) <$> mgu (apply s a) (apply s b);
 
---instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
   { TC s -> ((t, n), tab)
   ; TV s -> case lookup s tab of
@@ -762,7 +760,6 @@ instantiate' t n tab = case t of
 
 instantiatePred (Pred s t) ((out, n), tab) = first (first ((:out) . Pred s)) (instantiate' t n tab);
 
---instantiate :: Qual -> Int -> (Qual, Int)
 instantiate (Qual ps t) n =
   fpair (foldr instantiatePred (([], n), []) ps) \(ps1, n1) tab ->
   first (Qual ps1) (fst (instantiate' t n1 tab));
@@ -776,7 +773,7 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a);
 
-infer dcs typed loc ast csn = fpair csn \cs n ->
+infer typed loc ast csn = fpair csn \cs n ->
   let
     { va = TV (showInt n "")
     ; insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
@@ -791,11 +788,11 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
   ; V s -> fmaybe (lookup s loc)
     (fmaybe (mlookup s typed) (error $ "depGraph bug! " ++ s) $ Right . insta)
     \t -> Right ((t, ast), csn)
-  ; A x y -> infer dcs typed loc x (cs, n + 1) >>=
-    \((tx, ax), csn1) -> infer dcs typed loc y csn1 >>=
+  ; A x y -> infer typed loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
-  ; L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer dcs typed ((s, va):loc) x (cs, n + 1)
+  ; L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   };
 
 instance Eq Type where
@@ -868,7 +865,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- The 4th argument: e.g. Qual [Eq a] "[a]" for Eq a => Eq [a].
 inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
-  infer dcs typed [] (patternCompile dcs expr) ([], 0) >>=
+  infer typed [] (patternCompile dcs expr) ([], 0) >>=
   \(ta, (sub, n)) -> fpair (typeAstSub sub ta) \tx ax -> case mlookup s typed of
     { Nothing -> Left $ "no such method: " ++ s
     -- e.g. qc = Eq a => a -> a -> Bool
@@ -885,11 +882,8 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
             ; Just subx -> snd <$> prove' ienv (dictVars ps2 0) (proofApply subx ax)
           }}};
 
-genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
-
 inferInst ienv dcs typed (name, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
-  (name,) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
-    <$> mapM (inferMethod ienv dcs typed q) ds;
+  (name,) . flip (foldr L) dvs . L "@" . foldl A (V "@") <$> mapM (inferMethod ienv dcs typed q) ds;
 
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
@@ -990,11 +984,11 @@ scc ins outs = let
   ; spanning   = snd . spanningSearch   ins  ([], [])
   } in spanning . depthFirst;
 
-inferno prove dcs typed defmap syms = let
+inferno prove typed defmap syms = let
   { loc = zip syms $ TV . (' ':) <$> syms
   } in foldM (\(acc, (subs, n)) s ->
       maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
-      \expr -> infer dcs typed loc expr (subs, n) >>=
+      \expr -> infer typed loc expr (subs, n) >>=
       \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
       \cs -> Right ((s, (t, a)):acc, (cs, n1))
     ) ([], ([], 0)) syms >>=
@@ -1003,21 +997,18 @@ inferno prove dcs typed defmap syms = let
 prove ienv s (t, a) = flip fmap (prove' ienv ([], 0) a) \((ps, _), x) ->
   let { applyDicts expr = foldl A expr $ map (V . snd) ps }
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps));
-inferDefs' ienv dcs defmap (typeTab, lambF) syms = let
+inferDefs' ienv defmap (typeTab, lambF) syms = let
   { add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  } in add <$> inferno (prove ienv) dcs typeTab defmap syms
+  } in add <$> inferno (prove ienv) typeTab defmap syms
   ;
-inferDefs ienv idefs defs dcs typed = let
+inferDefs ienv defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   ; lambs = second snd <$> typed
   ; (defmap, graph) = foldr (depGraph typed dcs) (Tip, (Tip, Tip)) defs
   ; ins k = maybe [] id $ mlookup k $ fst graph
   ; outs k = maybe [] id $ mlookup k $ snd graph
-  ; mainLambs = foldM (inferDefs' ienv dcs defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
-  } in case mainLambs of
-  { Left err -> Left err
-  ; Right (tt, lambF) -> (\instLambs -> (tt, lambF . (instLambs++))) <$> mapM (inferInst ienv dcs tt) idefs
-  };
+  } in foldM (inferDefs' ienv defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
+  ;
 
 last' x xt = flst xt x \y yt -> last' y yt;
 last xs = flst xs undefined last';
@@ -1062,11 +1053,10 @@ getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else p
 untangle s = fmaybe (program s) (Left "parse error") \(prog, rest) -> case rest of
   { ParseState s _ -> if s == ""
     then case foldr ($) (Neat Tip [] [] prims Tip [] []) $ primAdts ++ prog of
-      { Neat ienv idefs defs typed dcs ffis exs ->
-        case inferDefs ienv idefs (coalesce defs) dcs typed of
-          { Left err -> Left err
-          ; Right qas -> Right (qas, (ffis, exs))
-          }
+      { Neat ienv idefs defs typed dcs ffis exs
+        -> inferDefs ienv (coalesce defs) dcs typed >>= \(qas, lambF)
+        -> mapM (inferInst ienv dcs qas) idefs >>= \lambs
+        -> pure ((qas, lambF lambs), (ffis, exs))
       }
     else Left $ "dregs: " ++ s
   };
@@ -1090,7 +1080,7 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 
 compile s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
+  ; Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
       ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
@@ -1144,13 +1134,13 @@ disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++);
 
 dumpCombs s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambF), _) -> foldr ($) [] $ map disasm $ optiComb $ lambF []
+  ; Right ((_, lambs), _) -> foldr ($) [] $ map disasm $ optiComb lambs
   };
 
 dumpLambs s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambF), _) -> foldr ($) [] $
-    (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambF []
+  ; Right ((_, lambs), _) -> foldr ($) [] $
+    (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambs
   };
 
 showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t;

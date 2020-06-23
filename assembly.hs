@@ -84,6 +84,7 @@ instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
 instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
 instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
+length = foldr (\_ n -> n + 1) 0;
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
 mapM_ f = foldr ((>>) . f) (pure ());
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
@@ -246,8 +247,6 @@ mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro 'I'));
 mkStrs = snd . foldl (\(s, l) u -> ('*':s, s:l)) ("*", []);
-index n s (t:ts) = if s == t then n else index (n + 1) s ts;
-length = foldr (\_ n -> n + 1) 0;
 scottEncode _ ":" _ = ro ':';
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
@@ -845,11 +844,9 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
             ; Just subx -> snd <$> prove' ienv (dictVars ps2 0) (proofApply subx ax)
           }}};
 
-genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
-
 inferInst ienv dcs typed (cl, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
-  (dictVarize cl t,) . (noQual (TC "DICT"),) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
-    <$> mapM (inferMethod ienv dcs typed q) ds;
+  (dictVarize cl t,) . (noQual (TC "DICT"),) . flip (foldr L) dvs
+  . L "@" . foldl A (V "@") <$> mapM (inferMethod ienv dcs typed q) ds;
 
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->

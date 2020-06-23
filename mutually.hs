@@ -84,6 +84,7 @@ instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
 instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
 instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
+length = foldr (\_ n -> n + 1) 0;
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure []);
 mapM_ f = foldr ((>>) . f) (pure ());
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0;
@@ -246,8 +247,6 @@ mkCase t cs = (specialCase cs,
   ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro 'I'));
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", []);
-index n s (t:ts) = if s == t then n else index (n + 1) s ts;
-length = foldr (\_ n -> n + 1) 0;
 scottEncode _ ":" _ = ro ':';
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
@@ -717,7 +716,7 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a);
 
-infer dcs typed loc ast csn = fpair csn \cs n ->
+infer typed loc ast csn = fpair csn \cs n ->
   let
     { va = TV (showInt n "")
     ; insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
@@ -732,11 +731,11 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
   ; V s -> fmaybe (lookup s loc)
     (fmaybe (mlookup s typed) (error $ "depGraph bug! " ++ s) $ Right . insta)
     \t -> Right ((t, ast), csn)
-  ; A x y -> infer dcs typed loc x (cs, n + 1) >>=
-    \((tx, ax), csn1) -> infer dcs typed loc y csn1 >>=
+  ; A x y -> infer typed loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
-  ; L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer dcs typed ((s, va):loc) x (cs, n + 1)
+  ; L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   };
 
 instance Eq Type where
@@ -810,7 +809,7 @@ dictVars ps n = flst ps ([], n) \p pt -> first ((p, '*':showInt n ""):) (dictVar
 
 -- The 4th argument: e.g. Qual [Eq a] "[a]" for Eq a => Eq [a].
 inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
-  infer dcs typed [] expr ([], 0) >>=
+  infer typed [] expr ([], 0) >>=
   \(ta, (sub, n)) -> fpair (typeAstSub sub ta) \tx ax -> case mlookup s typed of
     { Nothing -> Left $ "no such method: " ++ s
     -- e.g. qc = Eq a => a -> a -> Bool
@@ -827,11 +826,9 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
             ; Just subx -> snd <$> prove' ienv (dictVars ps2 0) (proofApply subx ax)
           }}};
 
-genProduct ds = foldr L (L "@" $ foldl A (V "@") $ map V ds) ds;
-
 inferInst ienv dcs typed (cl, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
-  (dictVarize cl t,) . flip (foldr L) dvs . foldl A (genProduct $ map fst ds)
-    <$> mapM (inferMethod ienv dcs typed q) ds;
+  (dictVarize cl t,) . flip (foldr L) dvs
+  . L "@" . foldl A (V "@") <$> mapM (inferMethod ienv dcs typed q) ds;
 
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
@@ -942,11 +939,11 @@ scc ins outs = let
   ; spanning   = snd . spanningSearch   ins  ([], [])
   } in spanning . depthFirst;
 
-inferno prove dcs typed defmap syms = let
+inferno prove typed defmap syms = let
   { loc = zip syms $ TV . (' ':) <$> syms
   } in foldM (\(acc, (subs, n)) s ->
       maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
-      \expr -> infer dcs typed loc expr (subs, n) >>=
+      \expr -> infer typed loc expr (subs, n) >>=
       \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
       \cs -> Right ((s, (t, a)):acc, (cs, n1))
     ) ([], ([], 0)) syms >>=
@@ -955,9 +952,9 @@ inferno prove dcs typed defmap syms = let
 prove ienv s (t, a) = flip fmap (prove' ienv ([], 0) a) \((ps, _), x) ->
   let { applyDicts expr = foldl A expr $ map (V . snd) ps }
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps));
-inferDefs' ienv dcs defmap (typeTab, lambF) syms = let
+inferDefs' ienv defmap (typeTab, lambF) syms = let
   { add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  } in add <$> inferno (prove ienv) dcs typeTab defmap syms
+  } in add <$> inferno (prove ienv) typeTab defmap syms
   ;
 inferDefs ienv defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
@@ -969,7 +966,7 @@ inferDefs ienv defs dcs typed = let
   ; graph = snd defmapgraph
   ; ins k = maybe [] id $ mlookup k $ fst graph
   ; outs k = maybe [] id $ mlookup k $ snd graph
-  ; mainLambs = foldM (inferDefs' ienv dcs defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
+  ; mainLambs = foldM (inferDefs' ienv defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
   } in case mainLambs of
   { Left err -> Left err
   ; Right (tt, lambF) -> (\instLambs -> (tt, lambF . (instLambs++))) <$> mapM (inferInst ienv dcs tt) (snd lrs)
