@@ -76,6 +76,8 @@ instance Eq a => Eq [a] where
     x:xt -> case ys of
       [] -> False
       y:yt -> x == y && xt == yt
+null [] = True
+null _  = False
 take 0 xs = []
 take _ [] = []
 take n (h:t) = h : take (n - 1) t
@@ -275,3 +277,4 @@ instance Show Char where
 
 showLitChar '\n' = ("\\n"++)
 showLitChar c = (c:)
+showParen b f = if b then ('(':) . f . (')':) else f

@@ -19,6 +19,7 @@ include::wasm/blah.pre[]
 <button id="sort">&#9035;</button>
 <button id="hexmaze">&#11042;</button>
 <button id="gray">Gray</button>
+<button id="hilbert">Hilbert</button>
 </p>
 <p>
 <textarea rows='12' id="prog" name="prog"
@@ -259,6 +260,13 @@ gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1))
 main = putStrLn $ unwords $ gray 4
 ------------------------------------------------------------------------
 
+[id="hilbert.hs"]
+------------------------------------------------------------------------
+-- Theorem prover based on a Hilbert system.
+-- https://crypto.stanford.edu/~blynn/compiler/hilsys.html
+include::hilsys.inc[]
+------------------------------------------------------------------------
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -334,6 +342,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "sort" "James while John had had had had had had had had had had had a better effect on the teacher"
   setup "hexmaze" ""
   setup "gray" ""
+  setup "hilbert" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString
   parm "a" >>= \case

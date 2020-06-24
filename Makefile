@@ -32,7 +32,7 @@ $(call rtsup,virtually,uniquely)
 marginally.c:marginally.hs virtually;./virtually < $< > $@
 methodically.c:methodically.hs marginally;./marginally < $< > $@
 
-hilsys.c:guardedly hilsys.lhs rts.c;(cat rts.c && sed '/\\begin{code}/,/\\end{code}/!d;//d' hilsys.lhs | ./guardedly) > $@
+hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
 
@@ -53,7 +53,8 @@ wasm/cross.c:wasm/cross.hs methodically;./methodically < $< > $@
 wasm/blah.c:wasm/blah.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ./cross > blah.c
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-index.html:index.lhs wasm/blah.pre blah.wasm;cobble mathbook menu $<
+index.html:index.lhs wasm/blah.pre blah.wasm hilsys.inc;cobble mathbook menu $<
+hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)
 

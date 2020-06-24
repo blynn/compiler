@@ -41,6 +41,7 @@ instance Prelude.Functor (Either a) where fmap = fmap
 instance Prelude.Applicative (Either a) where pure = pure ; (<*>) = (<*>)
 instance Prelude.Monad (Either a) where return = return ; (>>=) = (>>=)
 
--- instance Prelude.Show Type where show = (`showType` "")
--- instance Prelude.Show Ast where show t = showAst False t ""
--- instance Prelude.Show Qual where show t = showQual t ""
+-- instance Prelude.Show Pred where showsPrec _ = showPred
+-- instance Prelude.Show Type where showsPrec _ = showType
+-- instance Prelude.Show Ast where showsPrec _ = showAst False
+-- instance Prelude.Show Qual where showsPrec _ = showQual

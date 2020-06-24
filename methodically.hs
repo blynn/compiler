@@ -1021,7 +1021,7 @@ infer typed loc ast csn = fpair csn \cs n ->
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
     V s -> fmaybe (lookup s loc)
-      (fmaybe (mlookup s typed) (error $ "depGraph bug! " ++ s) $ Right . insta)
+      (fmaybe (mlookup s typed) (Left $ "undefined: " ++ s) $ Right . insta)
       \t -> Right ((t, ast), csn)
     A x y -> infer typed loc x (cs, n + 1) >>=
       \((tx, ax), csn1) -> infer typed loc y csn1 >>=
@@ -1127,7 +1127,11 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
               (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
             case match tx t2 of
               Nothing -> Left "class/instance type conflict"
-              Just subx -> snd <$> prove' tycl (dictVars ps2 0) (proofApply subx ax)
+              Just subx -> do
+                ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
+                if length ps2 /= length ps3
+                  then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                  else pure tr
         ms <- mapM perMethod sigs
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts

@@ -317,6 +317,10 @@ The refactoring makes it easy to dump the output of bracket abstraction on the
 source code, which is somewhat analogous to a typical compiler printing the
 assembly it generates.
 
+We add support for quasiquoted raw strings; see
+http://hackage.haskell.org/package/raw-strings-qq/docs/Text-RawString-QQ.html[the
+raw-strings-qq package].
+
 ++++++++++
 <p><a onclick='hideshow("assembly");'>&#9654; Toggle `assembly.hs`</a></p>
 <div id='assembly' style='display:none'>
