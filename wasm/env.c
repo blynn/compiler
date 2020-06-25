@@ -118,9 +118,9 @@ case _DIV:lazy2(2,_NUM,num(1) / num(2));break;
 case _MOD:lazy2(2,_NUM,num(1) % num(2));break;
 case _EQ:num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);break;
 case _LE:num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);break;
-case _NEWREF:lazy3(3,arg(3),app(_UNDEFINED,arg(1)),arg(2));break;
+case _NEWREF:lazy2(2,arg(2),sp[1]);break;
 case _READREF:lazy3(3,arg(3),num(1),arg(2));break;
-case _WRITEREF:lazy3(4,arg(4),((mem[arg(1) + 1] = arg(2)), _K),arg(3));break;
+case _WRITEREF:lazy3(4,arg(4),((mem[arg(2) + 1] = arg(1)), _K),arg(3));break;
 case _END:return;break;
     }
   }

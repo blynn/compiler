@@ -104,9 +104,6 @@ syntactic rewrites).
 unsafePerformIO = C (T ?) K;
 exitSuccess = .;
 fail# = unsafePerformIO .;
-writeIORef = w;
-readIORef = r;
-newIORef = n;
 ioPure = B C T;
 ioBind = C;
 succ = T (1 +);

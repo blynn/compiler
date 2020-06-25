@@ -6,7 +6,7 @@ link:ioccc.html[An award-winning Haskell compiler], browser edition.
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> Prelude</span></p>
 <p>
-<textarea readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
+<textarea spellcheck='false' readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
 include::wasm/blah.pre[]
 </textarea>
 </p>
@@ -22,13 +22,13 @@ include::wasm/blah.pre[]
 <button id="hilbert">Hilbert</button>
 </p>
 <p>
-<textarea rows='12' id="prog" name="prog"
+<textarea spellcheck='false' rows='12' id="prog" name="prog"
 style='box-sizing:border-box;width:100%;'>
 </textarea>
 </p>
 <label for="inp">Input:</label>
 <p>
-<textarea id='inp' rows='2' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea spellcheck='false' id='inp' rows='2' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 <p>
 <button onclick="go()">Run</button>
@@ -37,7 +37,7 @@ style='box-sizing:border-box;width:100%;'>
 </p>
 <label for="out">Output:</label>
 <p>
-<textarea readonly id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea spellcheck='false' readonly id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 
 <script>

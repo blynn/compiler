@@ -18,14 +18,6 @@ where `y` is some value of type `a`. In normal operation, `w` is the real-world
 token `?`, and the continuation `c` should expect two arguments but never
 reduce the second one.
 
-We add three combinators `n` `r` `w` for `newIORef` `readIOref` `writeIORef`.
-An IORef holding a value `x` of type `a` is represented as `?x` where `?` is
-again a combinator that should never be reduced. We store it as `?x` instead of
-a plain `x` so it takes one app-cell in our VM. This adds a layer of
-indirection: the address of this app-cell may be freely copied, yet
-`writeIORef` need only change a single entry to update all these copies at
-once.
-
 We add a crude syntax for FFI, with crude code for generating the requisite C
 wrappers. An `F` combinator invokes these foreign functions.
 

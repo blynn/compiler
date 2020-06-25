@@ -757,9 +757,12 @@ prims = let
     , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "ADD"))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
-    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro "NEWREF"))
-    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")), ro "READREF"))
-    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))), ro "WRITEREF"))
+    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
+      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "NEWREF"))))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
+      A (ro "T") (ro "READREF")))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))),
+      A (A (ro "R") (ro "WRITEREF")) (ro "B")))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
@@ -1341,9 +1344,9 @@ DIV x y = "_NUM" "num(1) / num(2)"
 MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-NEWREF x y z = z ("_UNDEFINED" x) y
+NEWREF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(1) + 1] = arg(2)), _K)" z
+WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"
 |]
 comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))

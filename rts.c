@@ -122,16 +122,6 @@ static void run() {
       case '%': lazy(2, '#', num(1) % num(2)); break;
       case '+': lazy(2, '#', num(1) + num(2)); break;
       case '-': lazy(2, '#', num(1) - num(2)); break;
-      case 'n':  // newIORef
-        lazy3(3, arg(3), app('?', arg(1)), arg(2));
-        break;
-      case 'r':  // readIORef
-        lazy3(3, arg(3), mem[arg(1) + 1], arg(2));
-        break;
-      case 'w':  // writeIORef
-        mem[arg(1) + 1] = arg(2);
-        lazy3(4, arg(4), 'K', arg(3));
-        break;
       case '.': return;
       case FORWARD: return;  // die("stray forwarding pointer");
       default: return;  // printf("?%u\n", x); die("unknown combinator");
