@@ -760,7 +760,7 @@ prims = let
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
-      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "NEWREF"))))
+      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
       A (ro "T") (ro "READREF")))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))),
@@ -1291,7 +1291,7 @@ goComb = go dumpCombs
 export "lamb" goLamb
 goLamb = go dumpLambs
 
-comdefs = words "F Y Q S B C R V T K I CONS NUM ADD SUB MUL DIV MOD EQ LE NEWREF READREF WRITEREF END"
+comdefs = words "F Y Q S B C R V T K I CONS NUM ADD SUB MUL DIV MOD EQ LE REF READREF WRITEREF END"
 comEnum s = maybe (error $ s) id $ lookup s $ zip comdefs (upFrom 1)
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) comdefs
 
@@ -1304,7 +1304,7 @@ hexy s = case s of
   (d1:d0:rest) -> (((chr $ hexValue d1 * 16 + hexValue d0):), 1) <> hexy rest
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-getIOType q = Left q
+getIOType q = Left $ "main : " ++ showQual q ""
 
 compile s = case untangle s of
   Left err -> err
@@ -1315,14 +1315,14 @@ compile s = case untangle s of
     must s = maybe undefined wordLE $ mlookup s tab
     prog = encodeData heapBase hpHeap
     hpHeap = wordLE (length mem) <> mconcat (map wordLE mem)
-    mainQT = maybe undefined id $ mlookup "main" typed
+    mainQT = maybe (Left "no main") Right $ mlookup "main" typed
     wasm = fst (hexy "0061736d01000000" <> mconcat (map go rts)
 -- Data section:
 --   512 : null-terminated roots array
 --   1048576 - 4: hp
 --   1048576: initial heap contents
       <> leb 11 <> extendSection (0, "") [roots, prog]) ""
-    in either (error . ("main :: "++) . flip showQual "") (const wasm) $ getIOType mainQT
+    in either error (const wasm) $ mainQT >>= getIOType
 
 extendSection (k, s) xs = encodeSection (k + length xs) $ hexy s <> mconcat xs
 encodeExport s n = encodeString s <> hexy "00" <> leb n

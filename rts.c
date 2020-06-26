@@ -143,17 +143,6 @@ void rts_init() {
   spTop = mem + TOP - 1;
 }
 
-static u pro_offset;
-
-void rts_pro_init() __attribute__((visibility("default")));
-void rts_pro_init() { pro_offset = hp - 128; }
-
-void rts_pro(u) __attribute__((visibility("default")));
-void rts_pro(u n) { mem[hp++] = n < 128 ? n : n + pro_offset; }
-
-void rts_pro_end(u) __attribute__((visibility("default")));
-void rts_pro_end(u n) { rts_reduce(n < 128 ? n : n + pro_offset); }
-
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;

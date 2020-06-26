@@ -1,5 +1,7 @@
 = Hilbert Systems =
 
+(link:index.html?a=1&p=hilbert[Try this prover online]!)
+
 Most
 https://en.wikipedia.org/wiki/Computer-assisted_proof#Philosophical_objections[objections
 to computer-assisted proofs] are themselves objectionable. However, one
@@ -31,7 +33,7 @@ tree. No matter how we call the exported functions, these invariants always hold
 
 == Prelude ==
 
-We write a theorem prover that can be built with our bootstrapped compiler.
+We write a theorem prover that our bootstrapped compiler can build.
 
 We start with definitions that are normally at our fingertips thanks to `Prelude`:
 

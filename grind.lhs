@@ -5,6 +5,8 @@ grinding levels in a computer role-playing game. There is even a skill tree of
 sorts. Do we want to add language features? Or optimize the generated code? Or
 improve error reporting? And so on.
 
+There is also link:miranda.html[an upcoming boss battle] and we must prepare.
+
 == Stringy ==
 
 Algorithm 4.1 of Kiselyov's paper; strings and character constants.

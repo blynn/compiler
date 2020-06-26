@@ -311,7 +311,7 @@ another day.)
 
 \begin{code}
 {-# LANGUAGE OverloadedStrings, LambdaCase #-}
-import Control.Monad (void, when)
+import Control.Monad (void)
 import Data.Char (isSpace)
 import Haste.DOM
 import Haste.Events
@@ -323,13 +323,13 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   let
     setup button inp = do
       Just b <- elemById button
+      void $ b `onEvent` Click $ const $ go button inp
+    go button inp = do
       Just grandparent <- elemById $ button ++ ".hs"
       Just parent <- getFirstChild grandparent
       Just p <- getFirstChild parent
-      prog <- dropWhile isSpace
-        <$> getProp p "textContent"
-      void $ b `onEvent` Click $ const $ inscribe prog inp
-      when (button == "hello") $ inscribe prog inp
+      prog <- dropWhile isSpace <$> getProp p "textContent"
+      inscribe prog inp
     inscribe prog inp = do
       setProp pEl "value" prog
       setProp iEl "value" inp
@@ -343,6 +343,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "hexmaze" ""
   setup "gray" ""
   setup "hilbert" ""
+  go "hello" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString
   parm "a" >>= \case
@@ -350,6 +351,10 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
       prog <- parm "p"
       inp <- parm "i"
       inscribe (unpack prog) (unpack inp)
+    "1" -> do
+      preset <- parm "p"
+      inp <- parm "i"
+      go (unpack preset) (unpack inp)
     _ -> pure ()
 \end{code}
 

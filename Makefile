@@ -2,11 +2,11 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp web
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
 
-%.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^; closure-compiler $@ > $@.clo; mv $@.clo $@
+%.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
 menu.html: menu; cobble menu menu
 
@@ -53,7 +53,7 @@ wasm/cross.c:wasm/cross.hs methodically;./methodically < $< > $@
 wasm/blah.c:wasm/blah.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ./cross > blah.c
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-index.html:index.lhs wasm/blah.pre blah.wasm hilsys.inc;cobble mathbook menu $<
+index.html:index.lhs wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)

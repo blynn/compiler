@@ -8,12 +8,14 @@ quest,Compiler Quest
 sing,The Singularity
 sem,Semantically
 grind,Level Grinding
-golf,Golf
+golf,SKI Golf
 ioccc,IOCCC
 type,Types
 c,Let me C
 pattern,Patterns | Guards
 miranda,Miranda
+mvp,Minimum Viable
+web,WebCompiler
 eq,Equality
 para,Parametricity
 logic,Logic Programming
