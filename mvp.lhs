@@ -67,6 +67,9 @@ experiment with hash consing. We reduce heap usage my maximizing sharing.
 However, it's not necessary a good idea, as this iteration of our compiler is
 appreciably slower!
 
+The code relies on `optiComb` ensuring each definition node has two children,
+or is a basic combinator.
+
 We clean up top-level definitions as mutual recursion is now possible.
 
 We add support for definitions appearing in any order in a let block. This

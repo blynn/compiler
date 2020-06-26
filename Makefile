@@ -29,8 +29,8 @@ $(call rtsup,assembly,guardedly)
 $(call rtsup,mutually,assembly)
 $(call rtsup,uniquely,mutually)
 $(call rtsup,virtually,uniquely)
-marginally.c:marginally.hs virtually;./virtually < $< > $@
-methodically.c:methodically.hs marginally;./marginally < $< > $@
+marginally.c:marginally.hs virtually;time ./virtually < $< > $@
+methodically.c:methodically.hs marginally;time ./marginally < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@

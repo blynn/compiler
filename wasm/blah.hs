@@ -960,14 +960,16 @@ varBind s t = case t of
   TV v -> Right $ if v == s then [] else [(s, t)]
   TAp a b -> if occurs s t then Left "occurs check" else Right [(s, t)]
 
+ufail t u = Left $ ("unify fail: "++) . showType t . (" vs "++) . showType u $ ""
+
 mgu t u = case t of
   TC a -> case u of
-    TC b -> if a == b then Right [] else Left "TC-TC clash"
+    TC b -> if a == b then Right [] else ufail t u
     TV b -> varBind b t
-    TAp a b -> Left "TC-TAp clash"
+    TAp a b -> ufail t u
   TV a -> varBind a u
   TAp a b -> case u of
-    TC b -> Left "TAp-TC clash"
+    TC b -> ufail t u
     TV b -> varBind b t
     TAp c d -> mgu a c >>= unify b d
 
@@ -1216,7 +1218,6 @@ dumpTypes s = case untangle s of
   Right ((typed, _), _) -> ($ "") $ foldr (.) id $
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
-data MemKey = VarKey String | NdKey (Either Int Int) (Either Int Int)
 instance (Eq a, Eq b) => Eq (Either a b) where
   (Left a) == (Left b) = a == b
   (Right a) == (Right b) = a == b
@@ -1230,50 +1231,30 @@ instance (Ord a, Ord b) => Ord (Either a b) where
       Left _ -> False
       Right b -> a <= b
 
-instance Eq MemKey where
-  (VarKey a) == (VarKey b) = a == b
-  (NdKey a1 b1) == (NdKey a2 b2) = a1 == a2 && b1 == b2
-  _ == _ = False
+instance (Eq a, Eq b) => Eq (a, b) where
+  (a1, b1) == (a2, b2) = a1 == a2 && b1 == b2
+instance (Ord a, Ord b) => Ord (a, b) where
+  (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)
 
-instance Ord MemKey where
-  x <= y = case x of
-    VarKey a -> case y of
-      VarKey b -> a <= b
-      NdKey _ _ -> True
-    NdKey a1 b1 -> case y of
-      VarKey _ -> False
-      NdKey a2 b2 | a1 <= a2 -> if a1 == a2 then b1 <= b2 else True
-                  | True -> False
-
-memget k = get >>=
-  \((n, tab), (hp, f)) -> case mlookup k tab of
-    Nothing -> case k of
-      NdKey a b -> put ((n, insert k hp tab), (hp + 2, f . (a:) . (b:))) >> pure hp
-      VarKey v -> put ((n + 2, insert k n tab), (hp, f)) >> pure n
-    Just v -> pure v
+memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
+  Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
+  Just v -> pure v
 
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Right c
-    Const c -> Right <$> memget (NdKey (Right $ comEnum "NUM") (Right c))
+    Const c -> Right <$> memget (Right $ comEnum "NUM", Right c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-  LfVar s -> Left <$> memget (VarKey s)
-  Nd x y ->
-    enc x >>=
-    \hx -> enc y >>=
-    \hy -> Right <$> memget (NdKey hx hy)
+  LfVar s -> pure $ Left s
+  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (hx, hy)
 
 asm combs = foldM
-  (\(symtab, ntab) (s, t) -> memget (VarKey s) >>=
-    \n -> enc t >>=
-    \ea -> let
-      a = either (maybe undefined id . (`mlookup` ntab)) id ea
-      in pure (insert s a symtab, insert n a ntab))
-  (Tip, Tip) combs
+  (\symtab (s, t) -> either (const symtab) (flip (insert s) symtab) <$> enc t)
+  Tip combs
 
-hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
-  \(symtab, ntab) (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` ntab)) id <$> f []
+hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
+  \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
 
 dropWhile p xs = flst xs [] \x xt -> if p x then dropWhile p xt else xs
 break p xs = flst xs ([], []) \x xt -> if p x then ([], xs) else first (x:) $ break p xt

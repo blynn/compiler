@@ -1154,13 +1154,13 @@ dumpTypes s = case untangle s of
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
 
-data MemKey = VarKey String | NdKey (Either Int Int) (Either Int Int);
-instance Eq (Either Int Int) where
+data NdKey = NdKey (Either String Int) (Either String Int);
+instance Eq (Either String Int) where
 { (Left a) == (Left b) = a == b
 ; (Right a) == (Right b) = a == b
 ; _ == _ = False
 };
-instance Ord (Either Int Int) where
+instance Ord (Either String Int) where
 { x <= y = case x of
   { Left a -> case y of
     { Left b -> a <= b
@@ -1172,32 +1172,15 @@ instance Ord (Either Int Int) where
     }
   }
 };
-
-instance Eq MemKey where
-{ (VarKey a) == (VarKey b) = a == b
-; (NdKey a1 b1) == (NdKey a2 b2) = a1 == a2 && b1 == b2
-; _ == _ = False
+instance Eq NdKey where
+{ (NdKey a1 b1) == (NdKey a2 b2) = a1 == a2 && b1 == b2
 };
-instance Ord MemKey where
-{ x <= y = case x of
-  { VarKey a -> case y of
-    { VarKey b -> a <= b
-    ; NdKey _ _ -> True
-    }
-  ; NdKey a1 b1 -> case y of
-    { VarKey _ -> False
-    ; NdKey a2 b2 | a1 <= a2 -> if a1 == a2 then b1 <= b2 else True
-                  | True -> False
-    }
-  }
+instance Ord NdKey where
+{ (NdKey a1 b1) <= (NdKey a2 b2) = a1 <= a2 && (a1 /= a2 || b1 <= b2)
 };
 
-memget k = get >>=
-  \((n, tab), (hp, f)) -> case mlookup k tab of
-  { Nothing -> case k of
-    { NdKey a b -> put ((n, insert k hp tab), (hp + 2, f . (a:) . (b:))) >> pure hp
-    ; VarKey v -> put ((n + 2, insert k n tab), (hp, f)) >> pure n
-    }
+memget k@(NdKey a b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
+  { Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
   ; Just v -> pure v
   };
 
@@ -1208,23 +1191,16 @@ enc t = case t of
     ; ChrCon c -> enc $ Lf $ Const $ ord c
     ; StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
     }
-  ; LfVar s -> Left <$> memget (VarKey s)
-  ; Nd x y ->
-    enc x >>=
-    \hx -> enc y >>=
-    \hy -> Right <$> memget (NdKey hx hy)
+  ; LfVar s -> pure $ Left s
+  ; Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (NdKey hx hy)
   };
 
 asm combs = foldM
-  (\(symtab, ntab) (s, t) -> memget (VarKey s) >>=
-    \n -> enc t >>=
-    \ea -> let
-      { a = either (maybe undefined id . (`mlookup` ntab)) id ea
-      } in pure (insert s a symtab, insert n a ntab))
-  (Tip, Tip) combs;
+  (\symtab (s, t) -> either (const symtab) (flip (insert s) symtab) <$> enc t)
+  Tip combs;
 
-hashcons combs = fpair (runState (asm combs) ((129, Tip), (128, id)))
-  \(symtab, ntab) (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` ntab)) id <$> f [];
+hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
+  \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f [];
 
 getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
 getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);
