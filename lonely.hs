@@ -95,7 +95,7 @@ elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
@@ -302,7 +302,7 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat \x -> x == c;
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 
@@ -338,7 +338,7 @@ litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
 lit = E . StrCon <$> litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
 
-gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
+gcon = conId <|> paren (conSym <|> (wrap <$> spch ',')) <|> ((:) <$> spch '[' <*> (wrap <$> spch ']'));
 
 pat = (,) <$> gcon <*> many varId <|> (\x c y -> (c, [x, y])) <$> varId <*> conop <*> varId;
 
@@ -355,7 +355,7 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (wrap <$> spch ','))) <*> r;
 section r = spch '(' *> (parenExpr r <* spch ')' <|> rightSect r <* spch ')' <|> spch ')' *> pure (V "()"));
 
 isFree v expr = case expr of
@@ -431,7 +431,7 @@ classDecl = keyword "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (keywo
 inst = _type aType;
 instDecl r = keyword "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
+  (((wrap .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 ffiDecl = keyword "ffi" *>
@@ -468,7 +468,7 @@ prims = let
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
-    ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
+    ] ++ map (\s -> (wrap s, (iii, bin s))) "+-*/%";
 
 -- Conversion to De Bruijn indices.
 

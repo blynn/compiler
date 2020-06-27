@@ -72,7 +72,7 @@ elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
@@ -191,7 +191,7 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat \x -> x == c;
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f inp = bind (sat' pred) (f inp);
@@ -217,7 +217,7 @@ litStr = between (char '"') (spch '"') $ E . StrCon <$> many (litOne '"');
 litChar = E . Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
 lit = litStr <|> litChar <|> litInt;
 sqLst r = between (spch '[') (spch ']') $ listify <$> sepBy r (spch ',');
-alt r = (,) <$> (conId <|> (itemize <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
+alt r = (,) <$> (conId <|> (wrap <$> paren (spch ':' <|> spch ',')) <|> ((:) <$> spch '[' <*> (wrap <$> spch ']'))) <*> (flip (foldr L) <$> many varId <*> (want op "->" *> r));
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas' x as = foldl A (V (concatMap (('|':) . fst) as)) (x:map snd as);
@@ -227,7 +227,7 @@ lam r = spch '\\' *> (lamCase r <|> liftA2 (flip (foldr L)) (some varId) (char '
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (wrap <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
@@ -304,7 +304,7 @@ classDecl = keyword "class" *> (Class <$> conId <*> (TV <$> varId) <*> (keyword 
 inst = _type aType;
 instDecl r = keyword "instance" *>
   ((\ps cl ty defs -> Inst cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* want op "=>")) <|> pure [])
+  (((wrap .) . Pred <$> conId <*> (inst <* want op "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
 tops precTab = sepBy
@@ -333,7 +333,7 @@ prims = let
     , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (A (ro 'F') (ro $ chr 1))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
-    ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
+    ] ++ map (\s -> (wrap s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));

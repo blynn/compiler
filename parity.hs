@@ -24,7 +24,7 @@ foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 data Pair x y = Pair x y;
 fpair p = \f -> case p of { Pair x y -> f x y };
 fst p = case p of { Pair x y -> x };
@@ -62,7 +62,7 @@ data Ast = R String | V String | A Ast Ast | L String Ast;
 
 char c = sat \x -> x == c;
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f inp = bind (satHelper pred) (f inp);
@@ -79,7 +79,7 @@ var = varId <|> paren (spc opLex);
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (\c -> R ('#':(itemize c))) (escChar <|> sat (\c -> not (c == delim)));
+litOne delim = fmap (\c -> R ('#':(wrap c))) (escChar <|> sat (\c -> not (c == delim)));
 litInt = R . ('(':) . (++ ")") <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
@@ -92,7 +92,7 @@ cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (wrap <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 atom r = sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V var <|> lit;
@@ -114,7 +114,7 @@ dataDefs cs = map (\cas -> fpair cas (\c as -> Pair c (foldr L (foldl (\a b -> A
 
 dataArgs = (snd . foldl (\p u -> fpair p (\s l -> Pair ('x':s) (s : l))) (Pair "x" [])) <$> many aType;
 adt = between (keyword "data") (spch '=') (some var) *> (dataDefs <$> (sepBy (Pair <$> var <*> dataArgs) (spch '|')));
-program = sp *> (concat <$> sepBy (adt <|> (itemize <$> def)) (spch ';'));
+program = sp *> (concat <$> sepBy (adt <|> (wrap <$> def)) (spch ';'));
 
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;
 

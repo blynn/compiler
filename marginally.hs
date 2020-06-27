@@ -79,7 +79,6 @@ instance Eq a => Eq [a] where { (==) xs ys = case xs of
   }};
 take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t;
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
-fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 instance Functor Maybe where { fmap f = maybe Nothing (Just . f) };
 instance Applicative Maybe where { pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf };
 instance Monad Maybe where { return = Just ; mf >>= mg = maybe Nothing mg mf };
@@ -582,8 +581,8 @@ instance Eq Assoc where
 ; RAssoc == RAssoc = True
 ; _ == _ = False
 };
-precOf s precTab = fmaybe (mlookup s precTab) 5 fst;
-assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd;
+precOf s precTab = maybe 5 fst $ mlookup s precTab;
+assocOf s precTab = maybe LAssoc snd $ mlookup s precTab;
 
 parseErr s = Parser $ const $ Left s;
 
@@ -1002,9 +1001,10 @@ infer typed loc ast csn = fpair csn \cs n ->
     ; ChrCon _ -> ((TC "Char",  ast), csn)
     ; StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
     }
-  ; V s -> fmaybe (lookup s loc)
-    (fmaybe (mlookup s typed) (error $ "depGraph bug! " ++ s) $ Right . insta)
-    \t -> Right ((t, ast), csn)
+  ; V s -> maybe
+    (maybe (error $ "depGraph bug! " ++ s) (Right . insta) $ mlookup s typed)
+    (\t -> Right ((t, ast), csn))
+    $ lookup s loc
   ; A x y -> infer typed loc x (cs, n + 1) >>=
     \((tx, ax), csn1) -> infer typed loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
@@ -1022,7 +1022,7 @@ instance Eq Type where
 instance Eq Pred where { (Pred s a) == (Pred t b) = s == t && a == b };
 
 filter f = foldr (\x xs -> if f x then x:xs else xs) [];
-intersect xs ys = filter (\x -> fmaybe (find (x ==) ys) False (\_ -> True)) xs;
+intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs;
 
 merge s1 s2 = if all (\v -> apply s1 (TV v) == apply s2 (TV v))
   $ map fst s1 `intersect` map fst s2 then Just $ s1 ++ s2 else Nothing;

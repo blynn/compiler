@@ -81,6 +81,8 @@ null _  = False
 take 0 xs = []
 take _ [] = []
 take n (h:t) = h : take (n - 1) t
+unlines [] = []
+unlines (l:ls) = l ++ '\n' : unlines ls
 maybe n j m = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where

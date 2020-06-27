@@ -101,7 +101,7 @@ elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 map = flip (foldr . ((:) .)) [];
 instance Functor [] where { fmap = map };
 concatMap = (concat .) . map;
@@ -319,7 +319,7 @@ char c = sat (c ==);
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
 isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13];
-sp = many (itemize <$> sat isSpace <|> com);
+sp = many (wrap <$> sat isSpace <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of
@@ -360,7 +360,7 @@ sqList r = between (spch '[') (spch ']') $ sepBy r (spch ',');
 want f s = wantWith (s ==) f;
 tok s = spc $ want (some (char '_' <|> symbo) <|> varLex) s;
 
-gcon = conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']'));
+gcon = conId <|> paren (conSym <|> (wrap <$> spch ',')) <|> ((:) <$> spch '[' <*> (wrap <$> spch ']'));
 
 apat = PatVar <$> var <*> (tok "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatCon [] <$> gcon
@@ -393,7 +393,7 @@ lam = spch '\\' *> (lamCase <|> liftA2 onePat (some apat) (tok "->" *> expr));
 flipPairize y x = A (A (V ",") x) y;
 thenComma = spch ',' *> ((flipPairize <$> expr) <|> pure (A (V ",")));
 parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id);
-rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (itemize <$> spch ','))) <*> expr;
+rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (wrap <$> spch ','))) <*> expr;
 section = spch '(' *> (parenExpr <* spch ')' <|> rightSect <* spch ')' <|> spch ')' *> pure (V "()"));
 
 patVars = \case
@@ -541,7 +541,7 @@ classDecl = tok "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (tok "wher
 inst = _type;
 instDecl = tok "instance" *>
   ((\ps cl ty defs -> addInst cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
+  (((wrap .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
     <*> conId <*> inst <*> (tok "where" *> (coalesce . concat <$> braceSep def)));
 
 ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type));
@@ -1316,10 +1316,10 @@ static void gc() {
     if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
-  spTop = sp;
-  u *tmp = mem;
+  spTop = mem;
   mem = altmem;
-  altmem = tmp;
+  altmem = spTop;
+  spTop = sp;
 }
 
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }

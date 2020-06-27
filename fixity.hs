@@ -28,7 +28,7 @@ elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
@@ -63,7 +63,7 @@ sat f inp = flst inp Nothing (satHelper f);
 
 char c = sat \x -> x == c;
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f inp = bind (satHelper pred) (f inp);
@@ -85,7 +85,7 @@ data Ast = R String | V String | A Ast Ast | L String Ast;
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (\c -> R ('#':(itemize c))) (escChar <|> sat (\c -> not (c == delim)));
+litOne delim = fmap (\c -> R ('#':(wrap c))) (escChar <|> sat (\c -> not (c == delim)));
 litInt = R . ('(':) . (++ ")") <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
@@ -99,7 +99,7 @@ cas r = altize <$> between (keyword "case") (keyword "of") r <*> alts r;
 
 thenComma r = spch ',' *> (((\x y -> A (A (V ",") y) x) <$> r) <|> pure (A (V ",")));
 parenExpr r = (&) <$> r <*> (((\v a -> A (V v) a) <$> op) <|> thenComma r <|> pure id);
-rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (itemize <$> spch ','))) <*> r;
+rightSect r = ((\v a -> A (A (R "C") (V v)) a) <$> (op <|> (wrap <$> spch ','))) <*> r;
 section r = paren (parenExpr r <|> rightSect r);
 
 isFree v expr = case expr of
@@ -155,7 +155,7 @@ fixityList a n os = map (\o -> (o, (n, a))) os;
 fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
-funs precTab = concat <$> sepBy (adt <|> (itemize <$> def (expr precTab 0))) (spch ';');
+funs precTab = concat <$> sepBy (adt <|> (wrap <$> def (expr precTab 0))) (spch ';');
 program = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= funs;
 
 data LC = Ze | Su LC | Pass Ast | La LC | App LC LC;

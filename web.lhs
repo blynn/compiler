@@ -20,23 +20,23 @@ and output strings, that is, the only impure functions at our disposal are
 
 == Cross-compiler ==
 
-We modify our compiler to produce C that targets WebAssembly:
+We add an option to our compiler to produce C that targets WebAssembly:
 
-  * We define an `IMPORT` macro so we can later tell `wasm-ld` which symbols
-  correspond to wasm imports.
+  * We add a minimal `malloc` implementation.
 
-  * We remove the generation of the `main` function.
+  * We add a check in `rts_reduce` to call `rts_init` the first time it is
+  invoked.
 
-  * Since we no longer have `main`, we add a check in `rts_reduce` to call
-  `rts_init` the first time it is invoked.
+This compiler also supports top-level type annotations, though only partially
+checks the predicates if a context is supplied.
 
 ++++++++++
-<p><a onclick='hideshow("cross");'>&#9654; Toggle `cross.hs`</a></p>
-<div id='cross' style='display:none'>
+<p><a onclick='hideshow("crossly");'>&#9654; Toggle `crossly.hs`</a></p>
+<div id='crossly' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::wasm/cross.hs[]
+include::crossly.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++

@@ -16,6 +16,13 @@ ffi "getchar" getChar :: IO Int
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
 
+libc = [r|
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+|]
+
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
   pure :: a -> f a
@@ -72,7 +79,6 @@ instance Eq a => Eq [a] where
       y:yt -> x == y && xt == yt
 take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t
 maybe n j m = case m of Nothing -> n; Just x -> j x
-fmaybe m n j = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
 instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
@@ -559,8 +565,8 @@ instance Eq Assoc where
   LAssoc == LAssoc = True
   RAssoc == RAssoc = True
   _ == _ = False
-precOf s precTab = fmaybe (mlookup s precTab) 5 fst
-assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd
+precOf s precTab = maybe 5 fst $ mlookup s precTab
+assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
 parseErr s = Parser $ const $ Left s
 
@@ -1025,9 +1031,9 @@ infer typed loc ast csn = fpair csn \cs n ->
       Const _ -> ((TC "Int",  ast), csn)
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
-    V s -> fmaybe (lookup s loc)
-      (fmaybe (mlookup s typed) (Left $ "undefined: " ++ s) $ Right . insta)
-      \t -> Right ((t, ast), csn)
+    V s -> maybe (Left $ "undefined: " ++ s) Right
+      $ insta <$> mlookup s typed
+      <|> (\t -> ((t, ast), csn)) <$> lookup s loc
     A x y -> infer typed loc x (cs, n + 1) >>=
       \((tx, ax), csn1) -> infer typed loc y csn1 >>=
       \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
@@ -1166,59 +1172,6 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
--- Code generation.
-argList t = case t of
-  TC s -> [TC s]
-  TV s -> [TV s]
-  TAp (TC "IO") (TC u) -> [TC u]
-  TAp (TAp (TC "->") x) y -> x : argList y
-
-cTypeName (TC "()") = "void"
-cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
-
-ffiDeclare (name, t) = let tys = argList t in concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
-
-ffiArgs n t = case t of
-  TC s -> ("", ((True, s), n))
-  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
-
-ffiDefine n ffis = case ffis of
-  [] -> id
-  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-    longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
-
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
-
-compile s = case untangle s of
-  Left err -> err
-  Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      ("typedef unsigned u;\n"++)
-    . ("enum{_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
-    . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("0};\n" ++)
-    . (preamble++)
-    . (concatMap ffiDeclare ffis ++)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . ffiDefine (length ffis - 1) ffis
-    . ("\n  }\n}\n" ++)
-    . runFun
-    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
-    $ maybe "" genMain (mlookup "main" tab)
-
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
@@ -1265,6 +1218,7 @@ dumpTypes s = case untangle s of
   Right ((typed, _), _) -> ($ "") $ foldr (.) id $
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
+-- Hash consing.
 instance (Eq a, Eq b) => Eq (Either a b) where
   (Left a) == (Left b) = a == b
   (Right a) == (Right b) = a == b
@@ -1303,8 +1257,59 @@ asm combs = foldM
 hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
   \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
 
-getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
+-- Code generation.
+argList t = case t of
+  TC s -> [TC s]
+  TV s -> [TV s]
+  TAp (TC "IO") (TC u) -> [TC u]
+  TAp (TAp (TC "->") x) y -> x : argList y
+
+cTypeName (TC "()") = "void"
+cTypeName (TC "Int") = "int"
+cTypeName (TC "Char") = "char"
+
+ffiDeclare (name, t) = let tys = argList t in concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
+
+ffiArgs n t = case t of
+  TC s -> ("", ((True, s), n))
+  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+
+ffiDefine n ffis = case ffis of
+  [] -> id
+  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
+    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
+    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
+    longDistanceCall = name ++ "(" ++ args ++ ")"
+    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
+      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+
+compile s = case untangle s of
+  Left err -> err
+  Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
+      ("typedef unsigned u;\n"++)
+    . ("enum{_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
+    . ("static const u prog[]={" ++)
+    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
+    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
+    . ("static u root[]={" ++)
+    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
+    . ("0};\n" ++)
+    . (libc++)
+    . (preamble++)
+    . (concatMap ffiDeclare ffis ++)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . ffiDefine (length ffis - 1) ffis
+    . ("\n  }\n}\n" ++)
+    . runFun
+    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
+    $ maybe "" genMain (mlookup "main" tab)
 
 -- Main VM loop.
 comdefsrc = [r|
@@ -1421,11 +1426,6 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
 |]
 
 runFun = ([r|static void run() {
@@ -1472,3 +1472,6 @@ main = getArgs >>= \case
   "lamb":_ -> interact dumpLambs
   "type":_ -> interact dumpTypes
   _ -> interact compile
+  where
+  getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
+  getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)

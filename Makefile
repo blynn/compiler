@@ -31,6 +31,7 @@ $(call rtsup,uniquely,mutually)
 $(call rtsup,virtually,uniquely)
 marginally.c:marginally.hs virtually;time ./virtually < $< > $@
 methodically.c:methodically.hs marginally;time ./marginally < $< > $@
+crossly.c:crossly.hs methodically;time ./methodically < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
@@ -49,8 +50,10 @@ douady.html:douady.txt menu.html;cobble mathbook menu $<
 
 wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
 wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-wasm/cross.c:wasm/cross.hs methodically;./methodically < $< > $@
-wasm/blah.c:wasm/blah.hs wasm/cross wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ./cross > blah.c
+
+# wasm/cross.c:wasm/cross.hs methodically;./methodically < $< > $@
+
+wasm/blah.c:wasm/blah.hs crossly wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ../crossly wasm > blah.c
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 index.html:index.lhs wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<

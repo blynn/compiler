@@ -20,6 +20,7 @@ include::wasm/blah.pre[]
 <button id="hexmaze">&#11042;</button>
 <button id="gray">Gray</button>
 <button id="hilbert">Hilbert</button>
+<button id="douady">Douady</button>
 </p>
 <p>
 <textarea spellcheck='false' rows='12' id="prog" name="prog"
@@ -267,6 +268,22 @@ main = putStrLn $ unwords $ gray 4
 include::hilsys.inc[]
 ------------------------------------------------------------------------
 
+[id="douady.hs"]
+------------------------------------------------------------------------
+-- Based on https://sametwice.com/4_line_mandelbrot.
+prec = 16384
+sh z = div z prec
+sqAdd (x, y) (a, b) = (sh (a*a - b*b) + x, sh (2*a*b) + y)
+norm (x, y) = sh (x*x + y*y)
+douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0)
+nats = iterate (1+) 0
+main = putStr $ unlines $ do
+  y <- take 24 nats
+  pure $ do
+    x <- take 80 nats
+    pure $ if douady (616*x - 2*prec, 1502*y - 18022) then '*' else ' '
+------------------------------------------------------------------------
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -343,6 +360,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "hexmaze" ""
   setup "gray" ""
   setup "hilbert" ""
+  setup "douady" ""
   go "hello" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString

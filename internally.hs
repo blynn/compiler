@@ -101,7 +101,7 @@ elem k xs = foldr (\x t -> x == k || t) False xs;
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
-itemize c = c:[];
+wrap c = c:[];
 map = flip (foldr . ((:) .)) [];
 instance Functor [] where { fmap = map };
 concatMap = (concat .) . map;
@@ -338,7 +338,7 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 char c = sat (c ==);
 between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-sp = many ((itemize <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of
@@ -370,7 +370,7 @@ sqList r = between (spch '[') (spch ']') $ sepBy r (spch ',');
 want f s = wantWith (s ==) f;
 tok s = spc $ want (some (char '_' <|> symbo) <|> varLex) s;
 
-gcon = (conId <|> paren (conSym <|> (itemize <$> spch ',')) <|> ((:) <$> spch '[' <*> (itemize <$> spch ']')))
+gcon = (conId <|> paren (conSym <|> (wrap <$> spch ',')) <|> ((:) <$> spch '[' <*> (wrap <$> spch ']')))
   >>= internParse;
 
 apat = PatVar <$> var <*> (tok "@" *> (Just <$> apat) <|> pure Nothing)
@@ -401,7 +401,7 @@ lam = spch '\\' *> (lamCase <|> liftA2 onePat (some apat) (tok "->" *> expr));
 flipPairize y x = A (A (V $ strCode ",") x) y;
 thenComma = spch ',' *> ((flipPairize <$> expr) <|> pure (A (V $ strCode ",")));
 parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id);
-rightSect = ((\v a -> L 1 $ A (A (V v) $ V 1) a) <$> (op <|> (strCode . itemize <$> spch ','))) <*> expr;
+rightSect = ((\v a -> L 1 $ A (A (V v) $ V 1) a) <$> (op <|> (strCode . wrap <$> spch ','))) <*> expr;
 section = spch '(' *> (parenExpr <* spch ')' <|> rightSect <* spch ')' <|> spch ')' *> pure (V $ strCode "()"));
 
 isFreePat v = \case
@@ -506,7 +506,7 @@ dictName cl t = '{':cl ++ (' ':showType t "") ++ "}";
 inst = _type;
 instDecl = tok "instance" *>
   ((\ps cl ty defs -> internParse (dictName cl ty) >>= \name -> pure $ addInst name cl (Qual ps ty) defs) <$>
-  (((itemize .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
+  (((wrap .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
     <*> conId <*> inst <*> (tok "where" *> (coalesce <$> braceSep def)) >>= id);
 
 ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type));
@@ -547,7 +547,7 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     , ("fail#", (TV "a", A (V $ strCode "unsafePerformIO") (V $ strCode "exitSuccess")))
-    ] ++ map (\s -> (itemize s, (iii, bin s))) "+-*/%";
+    ] ++ map (\s -> (wrap s, (iii, bin s))) "+-*/%";
 
 -- Conversion to De Bruijn indices.
 

@@ -1,4 +1,5 @@
--- Cross-compiler targeting wasm.
+-- Can target wasm.
+-- Top-level type annotations.
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -14,6 +15,14 @@ ffi "putchar" putChar :: Int -> IO Int
 ffi "getchar" getChar :: IO Int
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
+
+libc = [r|#define RTS_INIT_CHECK
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+void *malloc(unsigned long);
+|]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -71,7 +80,6 @@ instance Eq a => Eq [a] where
       y:yt -> x == y && xt == yt
 take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t
 maybe n j m = case m of Nothing -> n; Just x -> j x
-fmaybe m n j = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
 instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
@@ -238,8 +246,8 @@ data Tycl = Tycl
 
 data Neat = Neat
   (Map String Tycl)
-  -- | Top-level definitions
-  [(String, Ast)]
+  -- | Top-level definitions. Top-level type annotations.
+  ([(String, Ast)], [(String, Qual)])
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   [(String, (Qual, Ast))]
@@ -477,7 +485,7 @@ addAdt t cs (Neat tycl fs typed dcs ffis exs) =
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs) = let
   vars = take (size sigs) $ (`showInt` "") <$> upFrom 0
-  selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
+  selectors = zipWith (\var (s, Qual ps t) -> (s, (Qual (Pred classId v:ps) t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
   Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
@@ -492,7 +500,9 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) =
   Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs
-addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (ds ++ fs) typed dcs ffis exs
+addTopDecl decl (Neat tycl (fs, decls) typed dcs ffis exs) =
+  Neat tycl (fs, decl:decls) typed dcs ffis exs
+addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (first (ds++) fs) typed dcs ffis exs
 addExport e f (Neat tycl fs typed dcs ffis exs) = Neat tycl fs typed dcs ffis ((e, f):exs)
 
 want f = Parser \(ParseState inp precs) -> case ell inp of
@@ -558,8 +568,8 @@ instance Eq Assoc where
   LAssoc == LAssoc = True
   RAssoc == RAssoc = True
   _ == _ = False
-precOf s precTab = fmaybe (mlookup s precTab) 5 fst
-assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd
+precOf s precTab = maybe 5 fst $ mlookup s precTab
+assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
 parseErr s = Parser $ const $ Left s
 
@@ -622,7 +632,7 @@ fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl
 cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
 cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
 
-genDecl = (,) <$> var <*> (res "::" *> _type)
+genDecl = (,) <$> var <* res "::" <*> (Qual <$> (scontext <* res "=>" <|> pure []) <*> _type)
 
 classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> cDecls))
 
@@ -722,6 +732,7 @@ adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> ma
 topdecls = braceSep
   (   adt
   <|> classDecl
+  <|> addTopDecl <$> genDecl
   <|> instDecl
   <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
   <|> res "export" *> (addExport <$> wantString <*> var)
@@ -1024,9 +1035,9 @@ infer typed loc ast csn = fpair csn \cs n ->
       Const _ -> ((TC "Int",  ast), csn)
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
-    V s -> fmaybe (lookup s loc)
-      (fmaybe (mlookup s typed) (Left $ "undefined: " ++ s) $ Right . insta)
-      \t -> Right ((t, ast), csn)
+    V s -> maybe (Left $ "undefined: " ++ s) Right
+      $ insta <$> mlookup s typed
+      <|> (\t -> ((t, ast), csn)) <$> lookup s loc
     A x y -> infer typed loc x (cs, n + 1) >>=
       \((tx, ax), csn1) -> infer typed loc y csn1 >>=
       \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
@@ -1071,7 +1082,7 @@ scc ins outs = spanning . depthFirst where
   spanning   = snd . spanningSearch   ins  ([], [])
 
 inferno prove typed defmap syms = let
-  loc = zip syms $ TV . (' ':) <$> syms
+  loc = zip syms (TV . (' ':) <$> syms)
   in foldM (\(acc, (subs, n)) s ->
     maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
     \expr -> infer typed loc expr (subs, n) >>=
@@ -1080,19 +1091,27 @@ inferno prove typed defmap syms = let
   ) ([], ([], 0)) syms >>=
   \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove s $ typeAstSub soln ta) <$> stas
 
+insertList xs m = foldr (uncurry insert) m xs
+
 prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
-inferDefs' tycl defmap (typeTab, lambF) syms = let
-  add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  in add <$> inferno (prove tycl) typeTab defmap syms
-inferDefs tycl defs typed = let
+inferDefs' tycl decls defmap (typeTab, lambF) syms = let
+  add (tt, f) (s, (q@(Qual ps t), cs)) = do
+    q <- case lookup s decls of
+      Nothing -> pure q
+      Just q0@(Qual ps0 t0) -> case match t t0 of
+        Nothing -> Left $ "type mismatch, expected: " ++ showQual q0 "" ++ ", actual: " ++ showQual q ""
+        Just sub -> pure q0  -- SHould check predicates.
+    pure (insert s q tt, f . ((s, cs):))
+  in inferno (prove tycl) (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
+inferDefs tycl decls defs typed = let
   typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   lambs = second snd <$> typed
   (defmap, graph) = foldr (depGraph typed) (Tip, (Tip, Tip)) defs
   ins k = maybe [] id $ mlookup k $ fst graph
   outs k = maybe [] id $ mlookup k $ snd graph
-  in foldM (inferDefs' tycl defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
+  in foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") $ upFrom n, n + length ps)
 
@@ -1143,9 +1162,9 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
 untangle s = case program s of
   Left e -> Left $ "parse error: " ++ e
   Right (prog, ParseState s _) -> case s of
-    Ell [] [] -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
-      Neat tycl defs typed dcs ffis exs -> do
-        (qas, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> coalesce defs) typed
+    Ell [] [] -> case foldr ($) (Neat Tip ([], []) prims Tip [] []) $ primAdts ++ prog of
+      Neat tycl (defs, decls) typed dcs ffis exs -> do
+        (qas, lambF) <- inferDefs tycl decls (second (patternCompile dcs) <$> coalesce defs) typed
         mets <- inferTypeclasses tycl qas dcs
         pure ((qas, lambF mets), (ffis, exs))
     _ -> Left $ "parse error: " ++ case ell s of
@@ -1164,57 +1183,6 @@ optiComb' (subs, combs) (s, lamb) = let
     LfVar v -> if v == s then (subs, combs . ((s, Nd (lf "Y") (lf "I")):)) else ((s, gosub c):subs, combs')
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
-
--- Code generation.
-argList t = case t of
-  TC s -> [TC s]
-  TV s -> [TV s]
-  TAp (TC "IO") (TC u) -> [TC u]
-  TAp (TAp (TC "->") x) y -> x : argList y
-
-cTypeName (TC "()") = "void"
-cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
-
-ffiDeclare (name, t) = let tys = argList t in concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
-
-ffiArgs n t = case t of
-  TC s -> ("", ((True, s), n))
-  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
-
-ffiDefine n ffis = case ffis of
-  [] -> id
-  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-    longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
-
-compile s = case untangle s of
-  Left err -> err
-  Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      ("typedef unsigned u;\n"++)
-    . ("enum{_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
-    . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("0};\n" ++)
-    . (preamble++)
-    . (concatMap ffiDeclare ffis ++)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . ffiDefine (length ffis - 1) ffis
-    . ("\n  }\n}\n" ++)
-    . runFun
-    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
-    $ ""
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
@@ -1262,6 +1230,7 @@ dumpTypes s = case untangle s of
   Right ((typed, _), _) -> ($ "") $ foldr (.) id $
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
+-- Hash consing.
 instance (Eq a, Eq b) => Eq (Either a b) where
   (Left a) == (Left b) = a == b
   (Right a) == (Right b) = a == b
@@ -1300,8 +1269,76 @@ asm combs = foldM
 hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
   \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
 
-getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
+-- Code generation.
+argList t = case t of
+  TC s -> [TC s]
+  TV s -> [TV s]
+  TAp (TC "IO") (TC u) -> [TC u]
+  TAp (TAp (TC "->") x) y -> x : argList y
+
+cTypeName (TC "()") = "void"
+cTypeName (TC "Int") = "int"
+cTypeName (TC "Char") = "char"
+
+ffiDeclare (name, t) = let tys = argList t in concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
+
+ffiArgs n t = case t of
+  TC s -> ("", ((True, s), n))
+  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+
+ffiDefine n ffis = case ffis of
+  [] -> id
+  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
+    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
+    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
+    longDistanceCall = name ++ "(" ++ args ++ ")"
+    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
+      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+
+data Target = Host | Wasm
+
+targetFuns Host = (libc++)
+targetFuns Wasm = (wasmc++)
+
+wasmc = [r|#define RTS_INIT_CHECK static u ready;if (!ready){ready=1;rts_init();}
+extern u __heap_base;
+void* malloc(unsigned long n) {
+  static u bump = (u) &__heap_base;
+  return (void *) ((bump += n) - n);
+}
+|]
+
+enumTop Host = ("enum{TOP=1<<24};"++)
+enumTop Wasm = ("enum{TOP=1<<22};"++)
+
+compile tgt s = case untangle s of
+  Left err -> err
+  Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
+      enumTop tgt
+    . ("typedef unsigned u;\n"++)
+    . ("enum{_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
+    . ("static const u prog[]={" ++)
+    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
+    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
+    . ("static u root[]={" ++)
+    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
+    . ("0};\n" ++)
+    . targetFuns tgt
+    . (preamble++)
+    . (concatMap ffiDeclare ffis ++)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . ffiDefine (length ffis - 1) ffis
+    . ("\n  }\n}\n" ++)
+    . runFun
+    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
+    $ maybe "" genMain (mlookup "main" tab)
 
 -- Main VM loop.
 comdefsrc = [r|
@@ -1341,15 +1378,8 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1)
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
 
-preamble = "#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));\n"
-  ++ [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-extern u __heap_base;
-void* malloc(unsigned long n) {
-  static u bump = (u) &__heap_base;
-  return (void *) ((bump += n) - n);
-}
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
 enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<22 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
@@ -1445,7 +1475,7 @@ void rts_init() {
 }
 
 void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
+  RTS_INIT_CHECK
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
   run();
 }
@@ -1469,4 +1499,8 @@ main = getArgs >>= \case
   "comb":_ -> interact dumpCombs
   "lamb":_ -> interact dumpLambs
   "type":_ -> interact dumpTypes
-  _ -> interact compile
+  "wasm":_ -> interact $ compile Wasm
+  _ -> interact $ compile Host
+  where
+  getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
+  getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
