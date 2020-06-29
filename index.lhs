@@ -158,7 +158,7 @@ function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
 
 [id="hello.hs"]
 ------------------------------------------------------------------------
-main = putStrLn "Hello, World!\n"
+main = putStrLn "Hello, World!"
 ------------------------------------------------------------------------
 
 [id="edigits.hs"]

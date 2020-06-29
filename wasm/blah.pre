@@ -78,9 +78,18 @@ instance Eq a => Eq [a] where
       y:yt -> x == y && xt == yt
 null [] = True
 null _  = False
+init [x]    = []
+init (x:xs) = x : init xs
+last [x]    = x
+last (_:xs) = last xs
 take 0 xs = []
 take _ [] = []
 take n (h:t) = h : take (n - 1) t
+drop n xs     | n <= 0 =  xs
+drop _ []              =  []
+drop n (_:xs)          =  drop (n-1) xs
+length = foldr (\_ n -> n + 1) 0
+splitAt n xs = (take n xs, drop n xs)
 unlines [] = []
 unlines (l:ls) = l ++ '\n' : unlines ls
 maybe n j m = case m of Nothing -> n; Just x -> j x

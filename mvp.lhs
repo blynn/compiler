@@ -100,8 +100,9 @@ include::uniquely.hs[]
 Concatenating the runtime system with the compiler output is tiresome.  Our
 next compiler also generates the source for the virtual machine.
 
-We rename `(/)` and `(%)` to match Haskell's `div` and `mod`, and change `Int`
-from unsigned to signed.
+We change `Int` from unsigned to signed.
+We rename `(/)` and `(%)` to match Haskell's `div` and `mod`, though they
+really should be `quot` and `rem`; we'll fix this later.
 
 We add support for `newIORef`, `readIOref`, and `writeIORef`.
 An IORef holding a value `x` of type `a` is represented as `REF x` where `REF`

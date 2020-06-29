@@ -23,6 +23,7 @@ $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
 $(call rtsup,internally,uniquely)
+
 $(call rtsup,patty,lonely)
 $(call rtsup,guardedly,patty)
 $(call rtsup,assembly,guardedly)
@@ -48,15 +49,17 @@ wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
 
+wasm/env.c:crossly;./$< blah > $@
 wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
 wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 
-# wasm/cross.c:wasm/cross.hs methodically;./methodically < $< > $@
-
-wasm/blah.c:wasm/blah.hs crossly wasm/env.wasm wasm/section;cd wasm && (cat blah.hs && ./section < env.wasm) | ../crossly wasm > blah.c
+wasm/tmp.hs:wasm/blah.hs crossly wasm/env.wasm wasm/section; \
+	(sed -n '/infix/,/Code generation/p' crossly.hs | sed '/^getContents =/d' \
+	&& ./crossly coms && cd wasm && cat blah.hs && ./section < env.wasm) > $@
+wasm/blah.c:wasm/tmp.hs crossly; ./crossly wasm < $< > $@
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-index.html:index.lhs wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<
+index.html:index.lhs index.js wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)

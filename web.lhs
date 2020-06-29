@@ -30,6 +30,13 @@ We add an option to our compiler to produce C that targets WebAssembly:
 This compiler also supports top-level type annotations, though only partially
 checks the predicates if a context is supplied.
 
+We rename `div` and `mod` to `quot` and `rem`, then introduce wrappers for
+`div` and `mod`. Now our divisions behave correctly, though it is sad that
+`div` and `mod` need more instructions. (FORTRAN set an unfortunate precedent
+of truncating division to zero, ultimately
+https://github.com/WebAssembly/design/issues/250[forcing languages like C and
+WebAssembly and even hardware to conform].)
+
 ++++++++++
 <p><a onclick='hideshow("crossly");'>&#9654; Toggle `crossly.hs`</a></p>
 <div id='crossly' style='display:none'>
@@ -64,12 +71,17 @@ include::wasm/WasmArmyKnife.hs[]
 </div>
 ++++++++++
 
-As its name suggests, our WasmArmyKnife is no substitute for a dedicated tool but
-it's handy for quick and dirty jobs.
+As its name suggests, our WasmArmyKnife is no substitute for a dedicated tool
+but it's handy for quick and dirty jobs.
 
 == Browser-based compiler ==
 
-We tweak the RTS from our previous compilers:
+When given the `demo` command, our `crossly` compiler generates a specialized
+RTS:
+
+------------------------------------------------------------------------
+$ ./crossly demo
+------------------------------------------------------------------------
 
   * We remove all mallocs and hardcode particular memory addresses for various
   arrays.
@@ -85,24 +97,9 @@ We tweak the RTS from our previous compilers:
     if at the end of input, this should indicate the end of input before
     any attempt to read past the end (which would throw).
 
-++++++++++
-<p><a onclick='hideshow("env");'>&#9654; Toggle `env.c`</a></p>
-<div id='env' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::wasm/env.c[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-We have reduced compilation to augmenting an RTS wasm binary with a data section
-that describes the initial heap contents.
-
-After building the wasm binary, we use the WasmArmyKnife to extract the relevant
-sections to embed in our client-side compiler.
+After compiling to wasm, it remains to add a data section describing the
+initial heap contents. Our WasmArmyKnife extracts the relevant sections to
+embed in our client-side compiler.
 
 ++++++++++
 <p><a onclick='hideshow("section");'>&#9654; Toggle `section`</a></p>
@@ -117,7 +114,7 @@ include::wasm/section[]
 </div>
 ++++++++++
 
-We append the output of the script to a variant of our compiler with a few changes:
+We append the output of this script to a variant of our compiler with a few changes:
 
   * We switch out the C code generator with some code that pastes together wasm
   sections and inserts a data section describing the heap contents.
@@ -130,6 +127,9 @@ We append the output of the script to a variant of our compiler with a few chang
 
   * We also pre-declare `putChar`, `getChar`, and `isEOFInt` so our input
   programs have no need to declare any foreign imports.
+
+A `sed` script in the `Makefile` extracts the parts of `crossly.hs` we need
+and appends the following.
 
 ++++++++++
 <p><a onclick='hideshow("blah");'>&#9654; Toggle `blah.hs`</a></p>

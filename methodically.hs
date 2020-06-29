@@ -186,7 +186,7 @@ mlookup kx t = case t of
     EQ -> Just y
 fromList = foldl (\t (k, x) -> insert k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
-t!k = maybe undefined id $ mlookup k t
+t ! k = maybe undefined id $ mlookup k t
 
 foldrWithKey f = go where
   go z t = case t of

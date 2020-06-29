@@ -1,5 +1,11 @@
 -- Can target wasm.
 -- Top-level type annotations.
+
+ffi "putchar" putChar :: Int -> IO Int
+ffi "getchar" getChar :: IO Int
+ffi "getargcount" getArgCount :: IO Int
+ffi "getargchar" getArgChar :: Int -> Int -> IO Char
+
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -10,19 +16,6 @@ infixl 3 && , <|>
 infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
-
-ffi "putchar" putChar :: Int -> IO Int
-ffi "getchar" getChar :: IO Int
-ffi "getargcount" getArgCount :: IO Int
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char
-
-libc = [r|#define RTS_INIT_CHECK
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
-void *malloc(unsigned long);
-|]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -187,7 +180,7 @@ mlookup kx t = case t of
     EQ -> Just y
 fromList = foldl (\t (k, x) -> insert k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
-t!k = maybe undefined id $ mlookup k t
+t ! k = maybe undefined id $ mlookup k t
 
 foldrWithKey f = go where
   go z t = case t of
@@ -777,10 +770,17 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("word64Add", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMOD")))
     ] ++ map (\(s, v) -> (s, (iii, bin v)))
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
+      , ("quot", "QUOT")
+      , ("rem", "REM")
       , ("div", "DIV")
       , ("mod", "MOD")
       ]
@@ -1162,7 +1162,7 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
 untangle s = case program s of
   Left e -> Left $ "parse error: " ++ e
   Right (prog, ParseState s _) -> case s of
-    Ell [] [] -> case foldr ($) (Neat Tip ([], []) prims Tip [] []) $ primAdts ++ prog of
+    Ell [] [] -> case foldr ($) (customMods $ Neat Tip ([], []) prims Tip [] []) $ primAdts ++ prog of
       Neat tycl (defs, decls) typed dcs ffis exs -> do
         (qas, lambF) <- inferDefs tycl decls (second (patternCompile dcs) <$> coalesce defs) typed
         mets <- inferTypeclasses tycl qas dcs
@@ -1270,6 +1270,16 @@ hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
   \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
 
 -- Code generation.
+customMods = id
+
+libc = ([r|
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+void *malloc(unsigned long);
+|]++)
+
 argList t = case t of
   TC s -> [TC s]
   TV s -> [TV s]
@@ -1302,28 +1312,29 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 
 data Target = Host | Wasm
 
-targetFuns Host = (libc++)
-targetFuns Wasm = (wasmc++)
+targetFuns Host = libc
+targetFuns Wasm = wasmc
 
-wasmc = [r|#define RTS_INIT_CHECK static u ready;if (!ready){ready=1;rts_init();}
+wasmc = ([r|
 extern u __heap_base;
 void* malloc(unsigned long n) {
   static u bump = (u) &__heap_base;
   return (void *) ((bump += n) - n);
 }
-|]
+|]++)
 
 enumTop Host = ("enum{TOP=1<<24};"++)
 enumTop Wasm = ("enum{TOP=1<<22};"++)
+enumComs = ("typedef unsigned u;\n"++)
+  . ("enum{_UNDEFINED=0,"++)
+  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+  . ("};\n"++)
 
 compile tgt s = case untangle s of
   Left err -> err
   Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
       enumTop tgt
-    . ("typedef unsigned u;\n"++)
-    . ("enum{_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
+    . enumComs
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
     . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
@@ -1331,12 +1342,13 @@ compile tgt s = case untangle s of
     . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
     . ("0};\n" ++)
     . targetFuns tgt
-    . (preamble++)
+    . preamble
     . (concatMap ffiDeclare ffis ++)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . ffiDefine (length ffis - 1) ffis
-    . ("\n  }\n}\n" ++)
+    . foreignFun ffis
     . runFun
+    . rtsInit
+    . rtsReduce tgt
+    . ("#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility(\"default\"))); void f(){rts_reduce(root[n]);}\n"++)
     . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
     $ maybe "" genMain (mlookup "main" tab)
 
@@ -1345,6 +1357,7 @@ comdefsrc = [r|
 F x = "foreign(arg(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
+QQ f a b c d = d(c(b(a(f))))
 S x y z = x z(y z)
 B x y z = x (y z)
 C x y z = x z y
@@ -1355,11 +1368,18 @@ K x y = "_I" x
 I x = "sp[1] = arg(1); sp++;"
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
+DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
+DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
+DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
+DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
+DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
-DIV x y = "_NUM" "num(1) / num(2)"
-MOD x y = "_NUM" "num(1) % num(2)"
+QUOT x y = "_NUM" "num(1) / num(2)"
+REM x y = "_NUM" "num(1) % num(2)"
+DIV x y = "_NUM" "div(num(1), num(2))"
+MOD x y = "_NUM" "mod(num(1), num(2))"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
@@ -1378,7 +1398,7 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1)
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
 
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+preamble = ([r|
 enum { FORWARD = 127, REDUCING = 126 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
@@ -1453,9 +1473,15 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-|]
+typedef unsigned long long uu;
+static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
+static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
+|]++)
 
-runFun = ([r|static void run() {
+runFun = ([r|
+static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
+static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
+static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -1466,16 +1492,27 @@ runFun = ([r|static void run() {
     }
   }
 }
+|]++)
 
+rtsInit = ([r|
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
+|]++)
 
+rtsReduce Host = ([r|
 void rts_reduce(u n) {
-  RTS_INIT_CHECK
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
+}
+|]++)
+
+rtsReduce Wasm = ([r|
+void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
   run();
 }
@@ -1495,7 +1532,46 @@ genComb (s, (args, body)) = let
     E (StrCon s) -> (s++)
   ) . ("break;\n"++)
 
+declDemo = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
+void putchar(int) IMPORT("env", "putchar");
+int getchar(void) IMPORT("env", "getchar");
+int eof(void) IMPORT("env", "eof");
+enum {
+  ROOT_BASE = 1<<9,  // 0-terminated array of exported functions
+  // HEAP_BASE - 4: program size
+  HEAP_BASE = (1<<20) - 128 * sizeof(u),  // program
+  TOP = 1<<22
+};
+static u *root = (u*) ROOT_BASE;
+|]++)
+
+rtsInitDemo = ([r|
+void rts_init() {
+  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
+  hp = 128 + mem[127];
+  spTop = mem + TOP - 1;
+}
+|]++)
+
+foreignFun ffis =
+    ("static void foreign(u n) {\n  switch(n) {\n" ++)
+  . ffiDefine (length ffis - 1) ffis
+  . ("\n  }\n}\n" ++)
+
+demoFFIs =
+  [ ("putchar", arr (TC "Char") $ TAp (TC "IO") (TC "()"))
+  , ("getchar", TAp (TC "IO") (TC "Char"))
+  , ("eof", TAp (TC "IO") (TC "Int"))
+  ]
+
 main = getArgs >>= \case
+  "coms":_ -> putStr $ ("comlist = [\""++)
+    . foldr (.) id (intersperse ("\",\""++) $ (++) . fst <$> comdefs)
+    $ "\"]\n"
+  "blah":_ -> putStr $ enumComs . declDemo . preamble . foreignFun demoFFIs . runFun . rtsInitDemo . rtsReduce Wasm $ [r|
+void fun(void) asm("fun") __attribute__((visibility("default")));
+void fun(void) { rts_reduce(*((u*)512)); }
+|]
   "comb":_ -> interact dumpCombs
   "lamb":_ -> interact dumpLambs
   "type":_ -> interact dumpTypes
