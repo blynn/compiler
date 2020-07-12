@@ -21,6 +21,12 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+static char buf[1024], *bufp;
+static FILE *fp;
+void reset_buffer() { bufp = buf; }
+void put_buffer(int n) { *bufp++ = n; }
+void stdin_load_buffer() { fp = fopen(buf, "r"); }
+int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
 |]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
@@ -1291,7 +1297,8 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 compile s = case untangle s of
   Left err -> err
   Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      ("typedef unsigned u;\n"++)
+      ("#include<stdio.h>\n"++)
+    . ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
@@ -1441,6 +1448,7 @@ runFun = ([r|static void run() {
 }
 
 void rts_init() {
+  fp = stdin; bufp = buf;
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];

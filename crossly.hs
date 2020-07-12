@@ -2,9 +2,12 @@
 -- Top-level type annotations.
 
 ffi "putchar" putChar :: Int -> IO Int
-ffi "getchar" getChar :: IO Int
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
+ffi "getchar_fp" getChar :: IO Int
+ffi "reset_buffer" resetBuffer :: IO ()
+ffi "put_buffer" putBuffer :: Int -> IO ()
+ffi "stdin_load_buffer" stdinLoadBuffer :: IO ()
 
 infixr 9 .
 infixl 7 * , `div` , `mod`
@@ -1576,7 +1579,22 @@ void fun(void) { rts_reduce(*((u*)512)); }
   "lamb":_ -> interact dumpLambs
   "type":_ -> interact dumpTypes
   "wasm":_ -> interact $ compile Wasm
-  _ -> interact $ compile Host
+  _ -> getContents >>= \s -> either undefined (cpp . fst) (lex cppLexer (LexState s (0,0))) >>= putStr . compile Host
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
+
+-- Include directives.
+data CPP = CPPPass (String -> String) | CPPInclude String
+cppLexer = many $ include <|> (CPPPass . foldr (.) ('\n':) . map (:) <$> many (sat (/= '\n')) <* char '\n')
+include = (foldr (*>) (pure ()) $ map char "#include") *> many (sat isSpace) *>
+  (CPPInclude <$> tokStr) <* char '\n'
+cpp cpps = foldr ($) "" <$> mapM go cpps where
+  go (CPPPass f) = pure f
+  go (CPPInclude s) = do
+    resetBuffer
+    mapM_ (putBuffer . ord) s
+    putBuffer 0
+    stdinLoadBuffer
+    getContentsS
+getContentsS = getChar >>= \n -> if 0 <= n then ((chr n:) .) <$> getContentsS else pure id

@@ -12,7 +12,7 @@ include::wasm/blah.pre[]
 </p>
 <p>
 <label for="prog">Program:</label>
-<button id="hello">&#128075;</button>
+<button id="hello">&#127760;</button>
 <button id="edigits"><i>e</i></button>
 <button id="queens">&#9819;</button>
 <button id="lindon">Lindon</button>

@@ -68,6 +68,10 @@ sync: site ; rsync -R -r $(SITE) crypto.stanford.edu:www/compiler/
 
 clean: ; -rm $(SITE)
 
-fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
+# Later Asterius changes break my build, so first pin down a version with:
+#   $ docker pull terrorjack/asterius@sha256:77879bab47d392dc5be091f95af6306054e745a7b7ca477376c982adfe9cae61
+fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror 690a505d49b ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
+
+# fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
