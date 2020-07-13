@@ -616,8 +616,7 @@ tycon = want \case
 aType =
   res "(" *>
     (   res ")" *> pure (TC "()")
-    <|> ((&) <$> _type <*> ((res "," *> ((\a b -> TAp (TAp (TC ",") b) a) <$> _type)) <|> pure id)
-    ) <* res ")")
+    <|> (foldr1 (TAp . TAp (TC ",")) <$> sepBy1 _type (res ",")) <* res ")")
   <|> tycon
   <|> TV <$> wantVarId
   <|> (res "[" *> (res "]" *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* res "]")))
@@ -658,7 +657,8 @@ lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts)
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
-thenComma = res "," *> ((flipPairize <$> expr) <|> pure (A (V ",")))
+moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr (res ",")
+thenComma = res "," *> ((flipPairize <$> moreCommas) <|> pure (A (V ",")))
 parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id)
 rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> res ",")) <*> expr
 section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" *> pure (V "()"))
