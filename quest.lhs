@@ -289,9 +289,8 @@ BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$)
 
 == Term rewriting; bootstrapping ==
 
-https://tromp.github.io/cl/LC.pdf[John Tromp has a useful list of rewrite
-rules] to further reduce the size of the output combinatory logic term after
-bracket abstraction.
+https://tromp.github.io/cl/LC.pdf[John Tromp lists rewrite rules] to further
+reduce the size of the output combinatory logic term after bracket abstraction.
 
 Chapter 16 of
 https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/['The

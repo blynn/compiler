@@ -6,13 +6,14 @@ infixl 4 <*> , <$> , <* , *>
 infix 4 == , /= , <= , >= , < , >
 infixl 3 && , <|>
 infixl 2 ||
-infixl 1 >> , >>=
+infixl 1 >> , >>= , &
 infixr 1 =<<
 infixr 0 $
 
 isEOF = (0 /=) <$> isEOFInt
 
-($) f x = f x
+f $ x = f x
+x & f = f x
 id x = x
 const x y = x
 flip f x y = f y x
@@ -66,6 +67,14 @@ second f (x, y) = (x, f y)
 not a = if a then False else True
 x /= y = not $ x == y
 (.) f g x = f (g x)
+infixl 0 |>
+infixr 0 <|
+infixl 9 .>
+infixr 9 <.
+(<.) = (.)
+(.>) = flip (.)
+(|>) = ($)
+(<|) = (&)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
 instance Eq a => Eq [a] where
@@ -209,6 +218,7 @@ mlookup kx t = case t of
     GT -> mlookup kx r
     EQ -> Just y
 fromList = foldl (\t (k, x) -> insert k x t) Tip
+fromListWith f = foldl (\t (k, x) -> insertWith f k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
 t!k = maybe undefined id $ mlookup k t
 

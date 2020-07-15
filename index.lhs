@@ -138,7 +138,10 @@ function downloadWasm() {
 function go() { compile().then(x => { run(); }); }
 
 function genlink() {
-  var s = "https://crypto.stanford.edu/~blynn/compiler/?a=0&p="
+  var s = "https://"
+    + window.location.hostname
+    + window.location.pathname
+    + "?a=0&p="
     + encodeURIComponent(program.value)
     + "&i="
     + encodeURIComponent(stdin.value);
