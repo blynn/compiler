@@ -261,6 +261,10 @@ dropWhile _ [] = []
 dropWhile p xs@(x:xt)
   | p x       = dropWhile p xt
   | otherwise = xs
+takeWhile _ [] = []
+takeWhile p xs@(x:xt)
+  | p x  = x : takeWhile p xt
+  | True = []
 words s = case dropWhile isSpace s of
   "" -> []
   s' -> w : words s'' where (w, s'') = break isSpace s'
@@ -299,3 +303,24 @@ instance Show Char where
 showLitChar '\n' = ("\\n"++)
 showLitChar c = (c:)
 showParen b f = if b then ('(':) . f . (')':) else f
+
+class Enum a where
+  succ           :: a -> a
+  pred           :: a -> a
+  toEnum         :: Int -> a
+  fromEnum       :: a -> Int
+  enumFrom       :: a -> [a]
+  enumFrom = iterate succ
+  enumFromTo     :: a -> a -> [a]
+instance Enum Int where
+  succ = (+1)
+  pred = (+(0-1))
+  toEnum = id
+  fromEnum = id
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Char where
+  succ = chr . (+1) . ord
+  pred = chr . (+(0-1)) . ord
+  toEnum = chr
+  fromEnum = ord
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo

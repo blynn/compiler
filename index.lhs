@@ -187,17 +187,14 @@ index x = f 0 x where
   f n (a:x) = n:f(n+1)x
 safe q b = and $ map (not . checks q b) $ index b
 
--- List comprehensions and ranges are on the to-do list.
--- For now, desugar [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
+-- Desugar [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
 queens sz = go sz where
   go 0 = [[]]
   go n = do
     b <- go (n - 1)
-    q <- range 1 sz
+    q <- [1..sz]
     guard (safe q b)
     pure $ q:b
-range m n | m <= n = m:range (m+1) n
-          | otherwise = []
 main = print $ queens 8
 ------------------------------------------------------------------------
 
@@ -217,8 +214,7 @@ sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt)
 [id="hexmaze.hs"]
 ------------------------------------------------------------------------
 -- https://fivethirtyeight.com/features/can-you-escape-this-enchanted-maze/
-nats = iterate (1+) 0
-maze = fromList $ concat $ zipWith row nats
+maze = fromList $ concat $ zipWith row [0..]
   [ "."
   , "IF"
   , " BLUE"
@@ -230,7 +226,7 @@ maze = fromList $ concat $ zipWith row nats
   , "     O"
   ]
   where
-  row r s = concat $ zipWith (cell r) nats s
+  row r s = concat $ zipWith (cell r) [0..] s
   cell r c x | x /= ' '  = [((r, c), x)]
              | otherwise = []
 dirs = [(1, 0), (0, 0-1), (0-1, 0-1), (0-1, 0), (0, 1), (1, 1)]
@@ -279,11 +275,10 @@ sh z = div z prec
 sqAdd (x, y) (a, b) = (sh (a*a - b*b) + x, sh (2*a*b) + y)
 norm (x, y) = sh (x*x + y*y)
 douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0)
-nats = iterate (1+) 0
 main = putStr $ unlines $ do
-  y <- take 24 nats
+  y <- [0..23]
   pure $ do
-    x <- take 80 nats
+    x <- [0..79]
     pure $ if douady (616*x - 2*prec, 1502*y - 18022) then '*' else ' '
 ------------------------------------------------------------------------
 

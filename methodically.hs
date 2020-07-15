@@ -669,7 +669,18 @@ stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <
   <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
-atom = ifthenelse <|> doblock <|> letin <|> listify <$> sqList expr <|> section
+sqExpr = between (res "[") (res "]") $
+  ((&) <$> expr <*>
+    (   res ".." *>
+      (   (\hi lo -> (A (A (V "enumFromTo") lo) hi)) <$> expr
+      <|> pure (A (V "enumFrom"))
+      )
+    <|> (\t h -> listify (h:t)) <$> many (res "," *> expr)
+    )
+  )
+  <|> pure (V "[]")
+
+atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
   <|> fmap V (con <|> var) <|> E <$> wantLit
 
@@ -686,15 +697,14 @@ exprP n = if n <= 9
   else aexp
 expr = exprP 0
 
-sqList r = between (res "[") (res "]") $ sepBy r (res ",")
-
 gcon = wantConId <|> paren (wantqconsym <|> res ",") <|> ((++) <$> res "[" <*> (res "]"))
 
 apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatVar Nothing <$> (res "_" *> pure "_")
   <|> flip PatCon [] <$> gcon
   <|> PatLit <$> wantLit
-  <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" []) <$> sqList pat
+  <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
+    <$> between (res "[") (res "]") (sepBy pat $ res ",")
   <|> paren ((&) <$> pat <*> ((res "," *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
 
 binPat f x y = PatCon f [x, y]
@@ -767,7 +777,6 @@ prims = let
     , ("()", (TC "()", ro "K"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
-    , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "ADD"))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
@@ -1483,3 +1492,31 @@ main = getArgs >>= \case
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
+
+iterate f x = x : iterate f (f x)
+takeWhile _ [] = []
+takeWhile p xs@(x:xt)
+  | p x  = x : takeWhile p xt
+  | True = []
+
+class Enum a where
+  succ           :: a -> a
+  pred           :: a -> a
+  toEnum         :: Int -> a
+  fromEnum       :: a -> Int
+  enumFrom       :: a -> [a]
+  enumFromTo     :: a -> a -> [a]
+instance Enum Int where
+  succ = (+1)
+  pred = (+(0-1))
+  toEnum = id
+  fromEnum = id
+  enumFrom = iterate succ
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Char where
+  succ = chr . (+1) . ord
+  pred = chr . (+(0-1)) . ord
+  toEnum = chr
+  fromEnum = ord
+  enumFrom = iterate succ
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo

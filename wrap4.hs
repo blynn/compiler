@@ -29,8 +29,6 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 div = Prelude.div
 mod = Prelude.mod
-succ :: Int -> Int
-succ = Prelude.succ
 #define ffi foreign import ccall
 #define export --
 #include "methodically.hs"
