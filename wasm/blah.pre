@@ -31,6 +31,7 @@ liftA2 f x y = f <$> x <*> y
 (<*) = liftA2 \x y -> x
 (>>) f g = f >>= \_ -> g
 (=<<) = flip (>>=)
+bool f t b = if b then t else f
 class Eq a where (==) :: a -> a -> Bool
 instance Eq Int where (==) = intEq
 instance Eq Char where (==) = charEq
@@ -299,6 +300,8 @@ instance Show Char where
   showsPrec _ '\'' = ("'\\''"++)
   showsPrec _ c = ('\'':) . showLitChar c . ('\'':)
   showList s = ('"':) . foldr (.) id (map showLitChar s) . ('"':)
+instance (Show a, Show b) => Show (a, b) where
+  showsPrec _ (a, b) = showParen True $ shows a . (',':) . shows b
 
 showLitChar '\n' = ("\\n"++)
 showLitChar c = (c:)

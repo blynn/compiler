@@ -687,12 +687,20 @@ stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <
   <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
+compQual =
+  (\p xs e -> A (A (V "concatMap") $ onePat [p] e) xs)
+    <$> pat <*> (res "<-" *> expr)
+  <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
+  <|> addLets <$> (res "let" *> (coalesce . concat <$> braceSep def))
+
 sqExpr = between (res "[") (res "]") $
   ((&) <$> expr <*>
     (   res ".." *>
       (   (\hi lo -> (A (A (V "enumFromTo") lo) hi)) <$> expr
       <|> pure (A (V "enumFrom"))
       )
+    <|> res "|" *>
+      ((. A (V "pure")) . foldr (.) id <$> sepBy1 compQual (res ","))
     <|> (\t h -> listify (h:t)) <$> many (res "," *> expr)
     )
   ) <|> pure (V "[]")

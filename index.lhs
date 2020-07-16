@@ -21,6 +21,7 @@ include::wasm/blah.pre[]
 <button id="gray">Gray</button>
 <button id="hilbert">Hilbert</button>
 <button id="douady">Douady</button>
+<button id="enigma">Enigma</button>
 </p>
 <p>
 <textarea spellcheck='false' rows='12' id="prog" name="prog"
@@ -186,15 +187,9 @@ index x = f 0 x where
   f n [] = []
   f n (a:x) = n:f(n+1)x
 safe q b = and $ map (not . checks q b) $ index b
-
--- Desugar [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
 queens sz = go sz where
   go 0 = [[]]
-  go n = do
-    b <- go (n - 1)
-    q <- [1..sz]
-    guard (safe q b)
-    pure $ q:b
+  go n = [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
 main = print $ queens 8
 ------------------------------------------------------------------------
 
@@ -232,11 +227,9 @@ maze = fromList $ concat $ zipWith row [0..]
 dirs = [(1, 0), (0, 0-1), (0-1, 0-1), (0-1, 0), (0, 1), (1, 1)]
 turn f x = take 2 $ tail $ dropWhile (/= x) $ cycle $ f dirs
 data Hex = Hex (Int, Int) (Int, Int) String
-step (Hex (x, y) (xd, yd) path) = do
-  (xd', yd') <- next (xd, yd)
-  let pos' = (x + xd', y + yd')
-  guard (member pos' maze)
-  pure $ Hex pos' (xd', yd') (c:path)
+step (Hex (x, y) (xd, yd) path) =
+  [Hex pos' (xd', yd') (c:path) | (xd', yd') <- next (xd, yd),
+    let pos' = (x + xd', y + yd'), member pos' maze]
   where
   c = maze!(x, y)
   next = turn $ if elem c "AEIOUY" then id else reverse
@@ -275,11 +268,39 @@ sh z = div z prec
 sqAdd (x, y) (a, b) = (sh (a*a - b*b) + x, sh (2*a*b) + y)
 norm (x, y) = sh (x*x + y*y)
 douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0)
-main = putStr $ unlines $ do
-  y <- [0..23]
-  pure $ do
-    x <- [0..79]
-    pure $ if douady (616*x - 2*prec, 1502*y - 18022) then '*' else ' '
+main = putStr $ unlines
+  [[if douady (616*x - 2*prec, 1502*y - 18022)
+    then '*' else ' ' | x <- [0..79]] | y <- [0..23]]
+------------------------------------------------------------------------
+
+[id="enigma.hs"]
+------------------------------------------------------------------------
+-- https://crypto.stanford.edu/~blynn/haskell/enigma.html
+wI   = ("EKMFLGDQVZNTOWYHXUSPAIBRCJ", "Q")
+wII  = ("AJDKSIRUXBLHWTMCQGZNPYFVOE", "E")
+wIII = ("BDFHJLCPRTXVZNYEIWGAKMUSQO", "V")
+wIV  = ("ESOVPZJAYQUIRHXLNFTGKDCMWB", "J")
+wV   = ("VZBRGITYUPSDNHLXAWMJQOFECK", "Z")
+ukwA = "EJMZALYXVBWFCRQUONTSPIKHGD"
+ukwB = "YRUHQSLDPXNGOKMIEBFZCWVJAT"
+ukwC = "FVPJIAOYEDRZXWGCTKUQSBNMHL"
+
+abc = ['A'..'Z']
+abc2 = abc ++ abc
+sub p x   = maybe x id $ lookup x $ zip abc p
+unsub p x = maybe x id $ lookup x $ zip p abc
+shift k   = sub   $ dropWhile (/= k) $ abc2
+unshift k = unsub $ dropWhile (/= k) $ abc2
+conjugateSub p k = unshift k . sub p . shift k <$> abc
+rotorPerms gs = zipWith conjugateSub (fst <$> rotors) gs
+rotors = [wI, wII, wIII]
+zap gs = unsub p . sub ukwB . sub p where
+  p = foldr1 (.) (sub <$> rotorPerms gs) <$> abc
+turn gs@[_, g2, g3] = zipWith (bool id $ shift 'B') bs gs where
+  [_, n2, n3] = snd <$> rotors
+  bs = [g2 `elem` n2, g2 `elem` n2 || g3 `elem` n3, True]
+encrypt grundstellung = zipWith zap $ tail $ iterate turn grundstellung
+main = interact $ encrypt "AAA"
 ------------------------------------------------------------------------
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -359,6 +380,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "gray" ""
   setup "hilbert" ""
   setup "douady" ""
+  setup "enigma" "ATTACKATDAWN"
   go "hello" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString
