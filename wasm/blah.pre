@@ -74,8 +74,8 @@ infixl 9 .>
 infixr 9 <.
 (<.) = (.)
 (.>) = flip (.)
-(|>) = ($)
-(<|) = (&)
+(|>) = (&)
+(<|) = ($)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
 instance Eq a => Eq [a] where

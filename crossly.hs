@@ -1314,13 +1314,21 @@ hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
   \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
 
 -- Code generation.
+-- Fragile. We search for the above comment and replace the code below to
+-- build the web demo.
 customMods = id
 
-libc = ([r|
+libc = ([r|#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+static char buf[1024], *bufp;
+static FILE *fp;
+void reset_buffer() { bufp = buf; }
+void put_buffer(int n) { *bufp++ = n; }
+void stdin_load_buffer() { fp = fopen(buf, "r"); }
+int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
 void *malloc(unsigned long);
 |]++)
 
@@ -1352,14 +1360,12 @@ ffiDefine n ffis = case ffis of
       then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
 
 data Target = Host | Wasm
 
 targetFuns Host = libc
-targetFuns Wasm = wasmc
-
-wasmc = ([r|
+targetFuns Wasm = ([r|
 extern u __heap_base;
 void* malloc(unsigned long n) {
   static u bump = (u) &__heap_base;
@@ -1390,8 +1396,8 @@ compile tgt s = case untangle s of
     . (concatMap ffiDeclare ffis ++)
     . foreignFun ffis
     . runFun
-    . rtsInit
-    . rtsReduce tgt
+    . rtsInit tgt
+    . rtsReduce
     . ("#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility(\"default\"))); void f(){rts_reduce(root[n]);}\n"++)
     . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
     $ maybe "" genMain (mlookup "main" tab)
@@ -1508,7 +1514,7 @@ static void gc() {
 
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
-static inline int num(u n) { return mem[arg(n) + 1]; }
+static int num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
   u *p = mem + sp[height];
   *p = f;
@@ -1538,8 +1544,10 @@ static void run() {
 }
 |]++)
 
-rtsInit = ([r|
-void rts_init() {
+rtsInit tgt = ([r|
+void rts_init() {|]++) . (case tgt of
+  Host -> ("fp = stdin; bufp = buf;"++)
+  _ -> id) . ([r|
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
@@ -1547,14 +1555,7 @@ void rts_init() {
 }
 |]++)
 
-rtsReduce Host = ([r|
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
-|]++)
-
-rtsReduce Wasm = ([r|
+rtsReduce = ([r|
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
@@ -1590,7 +1591,7 @@ static u *root = (u*) ROOT_BASE;
 |]++)
 
 rtsInitDemo = ([r|
-void rts_init() {
+static inline void rts_init() {
   mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
   hp = 128 + mem[127];
   spTop = mem + TOP - 1;
@@ -1598,7 +1599,7 @@ void rts_init() {
 |]++)
 
 foreignFun ffis =
-    ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    ("void foreign(u n) {\n  switch(n) {\n" ++)
   . ffiDefine (length ffis - 1) ffis
   . ("\n  }\n}\n" ++)
 
@@ -1612,7 +1613,7 @@ main = getArgs >>= \case
   "coms":_ -> putStr $ ("comlist = [\""++)
     . foldr (.) id (intersperse ("\",\""++) $ (++) . fst <$> comdefs)
     $ "\"]\n"
-  "blah":_ -> putStr $ enumComs . declDemo . preamble . foreignFun demoFFIs . runFun . rtsInitDemo . rtsReduce Wasm $ [r|
+  "blah":_ -> putStr $ enumComs . declDemo . preamble . foreignFun demoFFIs . runFun . rtsInitDemo . rtsReduce $ [r|
 void fun(void) asm("fun") __attribute__((visibility("default")));
 void fun(void) { rts_reduce(*((u*)512)); }
 |]
