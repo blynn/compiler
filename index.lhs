@@ -14,6 +14,7 @@ include::wasm/blah.pre[]
 <label for="prog">Program:</label>
 <button id="hello">&#127760;</button>
 <button id="edigits"><i>e</i></button>
+<button id="primes">&#8473;</button>
 <button id="queens">&#9819;</button>
 <button id="lindon">Lindon</button>
 <button id="sort">&#9035;</button>
@@ -169,7 +170,7 @@ main = putStrLn "Hello, World!"
 ------------------------------------------------------------------------
 -- Digits of e. See http://miranda.org.uk/examples.
 mkdigit n | n <= 9 = chr (n + ord '0')
-norm c (d:(e:x))
+norm c (d:e:x)
   | e `mod` c + 10 <= c = d + e  `div` c : e' `mod` c : x'
   | otherwise           = d + e' `div` c : e' `mod` c : x'
   where (e':x') = norm (c+1) (e:x)
@@ -179,14 +180,17 @@ edigits = "2." ++ convert (repeat 1)
 main = putStr $ take 1024 edigits
 ------------------------------------------------------------------------
 
+[id="primes.hs"]
+------------------------------------------------------------------------
+primes = sieve [2..]
+sieve (p:x) = p : sieve [n | n <- x, n `mod` p /= 0]
+main = print $ take 100 $ primes
+------------------------------------------------------------------------
+
 [id="queens.hs"]
 ------------------------------------------------------------------------
 -- Eight queens puzzle. See http://miranda.org.uk/examples.
-checks q b i = q==b!!i || abs(q-b!!i)==i+1
-index x = f 0 x where
-  f n [] = []
-  f n (a:x) = n:f(n+1)x
-safe q b = and $ map (not . checks q b) $ index b
+safe q b = and[not $ q==p || abs(q-p)==i|(p,i) <- zip b [1..]]
 queens sz = go sz where
   go 0 = [[]]
   go n = [q:b | b <- go (n - 1), q <- [1..sz], safe q b]
@@ -267,7 +271,7 @@ prec = 16384
 sh z = div z prec
 sqAdd (x, y) (a, b) = (sh (a*a - b*b) + x, sh (2*a*b) + y)
 norm (x, y) = sh (x*x + y*y)
-douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0)
+douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 $ iterate (sqAdd p) (0, 0)
 main = putStr $ unlines
   [[if douady (616*x - 2*prec, 1502*y - 18022)
     then '*' else ' ' | x <- [0..79]] | y <- [0..23]]
@@ -291,11 +295,11 @@ sub p x   = maybe x id $ lookup x $ zip abc p
 unsub p x = maybe x id $ lookup x $ zip p abc
 shift k   = sub   $ dropWhile (/= k) $ abc2
 unshift k = unsub $ dropWhile (/= k) $ abc2
-conjugateSub p k = unshift k . sub p . shift k <$> abc
-rotorPerms gs = zipWith conjugateSub (fst <$> rotors) gs
+conjugateSub p k = unshift k . sub p . shift k
+rotorSubs gs = zipWith conjugateSub (fst <$> rotors) gs
 rotors = [wI, wII, wIII]
 zap gs = unsub p . sub ukwB . sub p where
-  p = foldr1 (.) (sub <$> rotorPerms gs) <$> abc
+  p = foldr1 (.) (rotorSubs gs) <$> abc
 turn gs@[_, g2, g3] = zipWith (bool id $ shift 'B') bs gs where
   [_, n2, n3] = snd <$> rotors
   bs = [g2 `elem` n2, g2 `elem` n2 || g3 `elem` n3, True]
@@ -373,6 +377,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
 
   setup "hello" ""
   setup "edigits" ""
+  setup "primes" ""
   setup "queens" ""
   setup "lindon" "you can cage a swallow can't you"
   setup "sort" "James while John had had had had had had had had had had had a better effect on the teacher"

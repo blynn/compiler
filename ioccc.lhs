@@ -6,11 +6,20 @@ of authoring an award-winning compiler!
 (Even if the award is from the https://www.ioccc.org/2019/whowon.html[26th
 International Obfuscated C Code Contest].)
 
-To see the source:
+The source looks like the following. The original uses raw tabs, vertical tabs,
+and form feeds to take advantage of the character counting rules.
+
+[source,c]
+------------------------------------------------------------------------
+include::prog.c[]
+------------------------------------------------------------------------
+
+Try it out!
 
 ------------------------------------------------------------------------
   $ curl https://www.ioccc.org/2019/2019.tar.bz2 | tar xj
   $ cd 2019/lynn
+  $ make
 ------------------------------------------------------------------------
 
 == Thanks! ==
@@ -43,8 +52,9 @@ of the letter Q.]
 Originally, I planned to represent the compiler as link:parse.html[ION
 assembly] in a C string. But soon it was obvious I needed more drastic
 measures. The prevalence of applications and certain combinators suggested
-entropy encoding. I chickened out of arithmetic coding and took refuge with
-Huffman.
+entropy encoding. I chickened out of
+link:../pr/stream.html[arithmetic coding] and took refuge with
+link:../pr/symbol.html[Huffman].
 
 The rules hint that high bits in the source are risky, so I represented the
 encoded output in base 85, using 5 bytes to represent a 32-bit word:
