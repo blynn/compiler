@@ -27,6 +27,7 @@ void reset_buffer() { bufp = buf; }
 void put_buffer(int n) { *bufp++ = n; }
 void stdin_load_buffer() { fp = fopen(buf, "r"); }
 int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
+void putchar_cast(char c) { putchar(c); }
 |]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
@@ -779,6 +780,8 @@ prims = let
   in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
+    , ("uintLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "U_LE"))
+
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
@@ -797,9 +800,9 @@ prims = let
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     ] ++ map (\(s, v) -> (s, (iii, bin v)))
-      [ ("+", "ADD")
-      , ("-", "SUB")
-      , ("*", "MUL")
+      [ ("intAdd", "ADD")
+      , ("intSub", "SUB")
+      , ("intMul", "MUL")
       , ("div", "DIV")
       , ("mod", "MOD")
       ]
@@ -1357,6 +1360,7 @@ DIV x y = "_NUM" "num(1) / num(2)"
 MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z

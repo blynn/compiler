@@ -8,7 +8,7 @@ customMods =
   . addFFI "getchar" "getChar" (TAp (TC "IO") (TC "Char"))
   . addFFI "eof" "isEOFInt" (TAp (TC "IO") (TC "Int"))
 
-ffi "putchar" putChar :: Int -> IO ()
+ffi "putchar" putChar :: Char -> IO ()
 ffi "getchar" getChar :: IO Int
 ffi "eof" isEOFInt :: IO Int
 isEOF = (0 /=) <$> isEOFInt

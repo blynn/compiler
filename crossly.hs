@@ -1,7 +1,7 @@
 -- Can target wasm.
 -- Top-level type annotations.
 
-ffi "putchar" putChar :: Int -> IO Int
+ffi "putchar_cast" putChar :: Char -> IO ()
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
 ffi "getchar_fp" getChar :: IO Int
@@ -88,10 +88,10 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ $ putChar . ord
+putStr = mapM_ putChar
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
+error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
@@ -797,6 +797,7 @@ prims = let
   in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
+    , ("uintLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "U_LE"))
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
@@ -820,9 +821,9 @@ prims = let
     , ("word64Div", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DDIV")))
     , ("word64Mod", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMOD")))
     ] ++ map (\(s, v) -> (s, (iii, bin v)))
-      [ ("+", "ADD")
-      , ("-", "SUB")
-      , ("*", "MUL")
+      [ ("intAdd", "ADD")
+      , ("intSub", "SUB")
+      , ("intMul", "MUL")
       , ("quot", "QUOT")
       , ("rem", "REM")
       , ("div", "DIV")
@@ -1140,15 +1141,22 @@ insertList xs m = foldr (uncurry insert) m xs
 prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
+
 inferDefs' tycl decls defmap (typeTab, lambF) syms = let
   add (tt, f) (s, (q@(Qual ps t), cs)) = do
     q <- case lookup s decls of
       Nothing -> pure q
       Just q0@(Qual ps0 t0) -> case match t t0 of
         Nothing -> Left $ "type mismatch, expected: " ++ showQual q0 "" ++ ", actual: " ++ showQual q ""
-        Just sub -> pure q0  -- SHould check predicates.
+        Just sub -> let
+          todo = filter (not . (`elem` ps0))
+            $ map (\(Pred cl ty) -> Pred cl $ apply sub ty) ps
+          in case todo of
+            [] -> pure q0
+            _ -> Left $ ("TODO: specialize "++) $ foldr ($) "" $ map showPred todo
     pure (insert s q tt, f . ((s, cs):))
   in inferno (prove tycl) (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
+
 inferDefs tycl decls defs typed = let
   typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   lambs = second snd <$> typed
@@ -1329,6 +1337,7 @@ void reset_buffer() { bufp = buf; }
 void put_buffer(int n) { *bufp++ = n; }
 void stdin_load_buffer() { fp = fopen(buf, "r"); }
 int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
+void putchar_cast(char c) { putchar(c); }
 void *malloc(unsigned long);
 |]++)
 
@@ -1432,6 +1441,7 @@ DIV x y = "_NUM" "div(num(1), num(2))"
 MOD x y = "_NUM" "mod(num(1), num(2))"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
@@ -1640,3 +1650,27 @@ cpp cpps = foldr ($) "" <$> mapM go cpps where
     stdinLoadBuffer
     getContentsS
 getContentsS = getChar >>= \n -> if 0 <= n then ((chr n:) .) <$> getContentsS else pure id
+
+class Ring a where
+  (+) :: a -> a -> a
+  (-) :: a -> a -> a
+  (*) :: a -> a -> a
+  fromInt :: Int -> a
+
+instance Ring Int where
+  (+) = intAdd
+  (-) = intSub
+  (*) = intMul
+  fromInt = id
+
+data Word = Word Int
+instance Ring Word where
+  Word x + Word y = Word $ x + y
+  Word x - Word y = Word $ x - y
+  Word x * Word y = Word $ x * y
+  fromInt x = Word x
+
+instance Eq Word where Word x == Word y = x == y
+instance Ord Word where Word x <= Word y = x `uintLE` y
+
+-- data Integer = Integer [Int]
