@@ -87,7 +87,6 @@ function compile() {
   stdout.value = "";
   blahInp = prelude.value + program.value;
   if (lastProg == blahInp) return new Promise(function(resolve) { resolve() });
-  lastProg = blahInp;
   blahInpLen = blahInp.length, blahInpCur = 0;
   blahOut = [];
   // Timeout so message is displayed. Unreliable.
@@ -98,6 +97,7 @@ function compile() {
     msg.innerHTML = "compile error: " + String.fromCharCode.apply(null, blahOut);
     reject();
   } else {
+    lastProg = blahInp;
     msg.innerHTML = "";
     resolve();
   }
@@ -303,8 +303,8 @@ zap gs = unsub p . sub ukwB . sub p where
 turn gs@[_, g2, g3] = zipWith (bool id $ shift 'B') bs gs where
   [_, n2, n3] = snd <$> rotors
   bs = [g2 `elem` n2, g2 `elem` n2 || g3 `elem` n3, True]
-encrypt grundstellung = zipWith zap $ tail $ iterate turn grundstellung
-main = interact $ encrypt "AAA"
+enigma grundstellung = zipWith zap $ tail $ iterate turn grundstellung
+main = interact $ enigma "AAA"
 ------------------------------------------------------------------------
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

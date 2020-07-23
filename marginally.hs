@@ -144,6 +144,15 @@ instance Monad (Either a) where { return = Right ; ex >>= f = case ex of
   ; Right x -> f x
   }
 };
+class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
+asum = foldr (<|>) empty;
+(*>) = liftA2 \x y -> y;
+(<*) = liftA2 \x y -> x;
+many p = liftA2 (:) p (many p) <|> pure [];
+some p = liftA2 (:) p (many p);
+sepBy1 p sep = liftA2 (:) p (many (sep *> p));
+sepBy p sep = sepBy1 p sep <|> pure [];
+between x y p = x *> (p <* y);
 
 -- Map.
 
@@ -209,16 +218,6 @@ foldrWithKey f = let
   } in go;
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
-
-class Alternative f where { empty :: f a ; (<|>) :: f a -> f a -> f a };
-asum = foldr (<|>) empty;
-(*>) = liftA2 \x y -> y;
-(<*) = liftA2 \x y -> x;
-many p = liftA2 (:) p (many p) <|> pure [];
-some p = liftA2 (:) p (many p);
-sepBy1 p sep = liftA2 (:) p (many (sep *> p));
-sepBy p sep = sepBy1 p sep <|> pure [];
-between x y p = x *> (p <* y);
 
 -- Syntax tree.
 
@@ -805,6 +804,9 @@ prims = let
       [ ("+", "ADD")
       , ("-", "SUB")
       , ("*", "MUL")
+      , ("intAdd", "ADD")
+      , ("intSub", "SUB")
+      , ("intMul", "MUL")
       , ("div", "DIV")
       , ("mod", "MOD")
       ];

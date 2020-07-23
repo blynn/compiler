@@ -7,20 +7,38 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
 import Prelude (Bool(..), Char, Int, String, Show, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
 import qualified Data.Map as Map
+import qualified Data.Word as Word
 import System.IO.Unsafe (unsafePerformIO)
 import System.Exit (exitSuccess)
 import Text.RawString.QQ
-(*) = (Prelude.*) :: Int -> Int -> Int
-(+) = (Prelude.+) :: Int -> Int -> Int
-(-) = (Prelude.-) :: Int -> Int -> Int
+
+default (Int)
+_to64 :: Int -> Int -> Word.Word
+_to64 a b = Prelude.fromIntegral a Prelude.+ Prelude.fromIntegral b Prelude.* (2 :: Word.Word)  Prelude.^ 32
+_lohi :: Word.Word -> (Int, Int)
+_lohi w = (Prelude.fromIntegral r, Prelude.fromIntegral q)
+  where (q, r) = w `Prelude.divMod` (2 Prelude.^ 32)
+
+word64Add a b c d = _lohi $ _to64 a b Prelude.+ _to64 c d
+word64Sub a b c d = _lohi $ _to64 a b Prelude.- _to64 c d
+word64Mul a b c d = _lohi $ _to64 a b Prelude.* _to64 c d
+intAdd :: Int -> Int -> Int
+intAdd = (Prelude.+)
+intSub :: Int -> Int -> Int
+intSub = (Prelude.-)
+intMul :: Int -> Int -> Int
+intMul = (Prelude.*)
 intEq :: Int -> Int -> Bool
 intEq = (Prelude.==)
 intLE :: Int -> Int -> Bool
 intLE = (Prelude.<=)
+uintLE :: Int -> Int -> Bool
+uintLE x y = ((Prelude.fromIntegral x :: Prelude.Word) Prelude.<= (Prelude.fromIntegral y :: Prelude.Word))
 charEq :: Char -> Char -> Bool
 charEq = (Prelude.==)
 charLE :: Char -> Char -> Bool
@@ -31,7 +49,7 @@ div = Prelude.div
 mod = Prelude.mod
 #define ffi foreign import ccall
 #define export --
-#include "methodically.hs"
+#include "crossly.hs"
 instance Prelude.Functor Parser where fmap = fmap
 instance Prelude.Applicative Parser where pure = pure ; (<*>) = (<*>)
 instance Prelude.Monad Parser where return = return ; (>>=) = (>>=)

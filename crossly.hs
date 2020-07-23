@@ -20,6 +20,18 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
 
+class Ring a where
+  (+) :: a -> a -> a
+  (-) :: a -> a -> a
+  (*) :: a -> a -> a
+  fromInt :: Int -> a
+
+instance Ring Int where
+  (+) = intAdd
+  (-) = intSub
+  (*) = intMul
+  fromInt = id
+
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
   pure :: a -> f a
@@ -38,11 +50,18 @@ id x = x
 const x y = x
 flip f x y = f y x
 (&) x f = f x
-class Ord a where (<=) :: a -> a -> Bool
-compare x y = if x <= y then if y <= x then EQ else LT else GT
+data Ordering = LT | GT | EQ
+class Ord a where
+  (<=) :: a -> a -> Bool
+  x <= y = case compare x y of
+    LT -> True
+    EQ -> True
+    GT -> False
+  compare :: a -> a -> Ordering
+  compare x y = if x <= y then if y <= x then EQ else LT else GT
+
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
-data Ordering = LT | GT | EQ
 instance Ord a => Ord [a] where
   xs <= ys = case xs of
     [] -> True
@@ -143,6 +162,17 @@ takeWhile _ [] = []
 takeWhile p xs@(x:xt)
   | p x  = x : takeWhile p xt
   | True = []
+class Alternative f where
+  empty :: f a
+  (<|>) :: f a -> f a -> f a
+asum = foldr (<|>) empty
+(*>) = liftA2 \x y -> y
+(<*) = liftA2 \x y -> x
+many p = liftA2 (:) p (many p) <|> pure []
+some p = liftA2 (:) p (many p)
+sepBy1 p sep = liftA2 (:) p (many (sep *> p))
+sepBy p sep = sepBy1 p sep <|> pure []
+between x y p = x *> (p <* y)
 class Enum a where
   succ           :: a -> a
   pred           :: a -> a
@@ -216,18 +246,6 @@ foldrWithKey f = go where
     Bin _ kx x l r -> go (f kx x (go z r)) l
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
-
-class Alternative f where
-  empty :: f a
-  (<|>) :: f a -> f a -> f a
-asum = foldr (<|>) empty
-(*>) = liftA2 \x y -> y
-(<*) = liftA2 \x y -> x
-many p = liftA2 (:) p (many p) <|> pure []
-some p = liftA2 (:) p (many p)
-sepBy1 p sep = liftA2 (:) p (many (sep *> p))
-sepBy p sep = sepBy1 p sep <|> pure []
-between x y p = x *> (p <* y)
 
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
@@ -1070,10 +1088,9 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn = fpair csn \cs n ->
-  let
-    va = TV (showInt n "")
-    insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
+infer typed loc ast csn@(cs, n) = let
+  va = TV (showInt n "")
+  insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
   in case ast of
     E x -> Right $ case x of
       Basic n | n == comEnum "Y" -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
@@ -1128,11 +1145,12 @@ scc ins outs = spanning . depthFirst where
 
 inferno prove typed defmap syms = let
   loc = zip syms (TV . (' ':) <$> syms)
-  in foldM (\(acc, (subs, n)) s ->
-    maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
-    \expr -> infer typed loc expr (subs, n) >>=
-    \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
-    \cs -> Right ((s, (t, a)):acc, (cs, n1))
+  in foldM (\(acc, (subs, n)) s -> do
+    expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
+    ((t, a), (ms, n1)) <- either (Left . (s++) . (": "++)) Right
+      $ infer typed loc expr (subs, n)
+    cs <- unify (TV (' ':s)) t ms
+    pure ((s, (t, a)):acc, (cs, n1))
   ) ([], ([], 0)) syms >>=
   \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove s $ typeAstSub soln ta) <$> stas
 
@@ -1143,18 +1161,24 @@ prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
 
 inferDefs' tycl decls defmap (typeTab, lambF) syms = let
-  add (tt, f) (s, (q@(Qual ps t), cs)) = do
-    q <- case lookup s decls of
-      Nothing -> pure q
-      Just q0@(Qual ps0 t0) -> case match t t0 of
-        Nothing -> Left $ "type mismatch, expected: " ++ showQual q0 "" ++ ", actual: " ++ showQual q ""
+  add (tt, f) (s, (q@(Qual ps t), lamb)) = do
+    (q, lamb) <- case lookup s decls of
+      Nothing -> pure (q, lamb)
+      Just qAnno@(Qual psA tA) -> case match t tA of
+        Nothing -> Left $ "type mismatch, expected: " ++ showQual qAnno "" ++ ", actual: " ++ showQual q ""
         Just sub -> let
-          todo = filter (not . (`elem` ps0))
-            $ map (\(Pred cl ty) -> Pred cl $ apply sub ty) ps
-          in case todo of
-            [] -> pure q0
-            _ -> Left $ ("TODO: specialize "++) $ foldr ($) "" $ map showPred todo
-    pure (insert s q tt, f . ((s, cs):))
+          vcount = length psA
+          vars = map (flip showInt "") $ take vcount $ upFrom 0
+          annoDictVars = (zip psA vars, vcount)
+          forbidNew p ((_, n), x)
+            | n == vcount = Right x
+            | True = Left $ "missing predicate: " ++ showPred p ""
+          findAnno p@(Pred cl ty) = findProof tycl (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
+          in do
+            dicts <- mapM findAnno ps
+            pure (qAnno, foldr L (foldl A lamb dicts) vars)
+    pure (insert s q tt, f . ((s, lamb):))
+
   in inferno (prove tycl) (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
 
 inferDefs tycl decls defs typed = let
@@ -1171,7 +1195,8 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
   perClass (classId, Tycl sigs insts) = do
     let
       checkDefault (s, Just expr) = do
-        (ta, (sub, _)) <- infer typed [] (patternCompile dcs expr) ([], 0)
+        (ta, (sub, _)) <- either (Left . (s++) . (" (class): "++)) Right
+          $ infer typed [] (patternCompile dcs expr) ([], 0)
         (_, (Qual ps t, a)) <- prove tycl s $ typeAstSub sub ta
         case ps of
           [Pred cl _] | cl == classId -> Right ()
@@ -1188,7 +1213,8 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
           dvs = map snd $ fst $ dictVars ps 0
           perMethod (s, mayDefault) = do
             let Just expr = mlookup s idefs <|> mayDefault <|> pure (V "fail#")
-            (ta, (sub, n)) <- infer typed [] (patternCompile dcs expr) ([], 0)
+            (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
+              $ infer typed [] (patternCompile dcs expr) ([], 0)
             let
               (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
@@ -1651,18 +1677,6 @@ cpp cpps = foldr ($) "" <$> mapM go cpps where
     getContentsS
 getContentsS = getChar >>= \n -> if 0 <= n then ((chr n:) .) <$> getContentsS else pure id
 
-class Ring a where
-  (+) :: a -> a -> a
-  (-) :: a -> a -> a
-  (*) :: a -> a -> a
-  fromInt :: Int -> a
-
-instance Ring Int where
-  (+) = intAdd
-  (-) = intSub
-  (*) = intMul
-  fromInt = id
-
 data Word = Word Int
 instance Ring Word where
   Word x + Word y = Word $ x + y
@@ -1673,4 +1687,11 @@ instance Ring Word where
 instance Eq Word where Word x == Word y = x == y
 instance Ord Word where Word x <= Word y = x `uintLE` y
 
--- data Integer = Integer [Int]
+data Word64 = Word64 Int Int
+instance Ring Word64 where
+  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
+  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
+  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
+  fromInt x = Word64 x 0
+
+instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d

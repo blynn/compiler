@@ -148,6 +148,17 @@ instance Applicative (Either a) where
 instance Monad (Either a) where
   return = Right
   ex >>= f = either Left f ex
+class Alternative f where
+  empty :: f a
+  (<|>) :: f a -> f a -> f a
+asum = foldr (<|>) empty
+(*>) = liftA2 \x y -> y
+(<*) = liftA2 \x y -> x
+many p = liftA2 (:) p (many p) <|> pure []
+some p = liftA2 (:) p (many p)
+sepBy1 p sep = liftA2 (:) p (many (sep *> p))
+sepBy p sep = sepBy1 p sep <|> pure []
+between x y p = x *> (p <* y)
 
 -- Map.
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
@@ -201,18 +212,6 @@ foldrWithKey f = go where
     Bin _ kx x l r -> go (f kx x (go z r)) l
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
-
-class Alternative f where
-  empty :: f a
-  (<|>) :: f a -> f a -> f a
-asum = foldr (<|>) empty
-(*>) = liftA2 \x y -> y
-(<*) = liftA2 \x y -> x
-many p = liftA2 (:) p (many p) <|> pure []
-some p = liftA2 (:) p (many p)
-sepBy1 p sep = liftA2 (:) p (many (sep *> p))
-sepBy p sep = sepBy1 p sep <|> pure []
-between x y p = x *> (p <* y)
 
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
@@ -799,6 +798,11 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("word64Add", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMOD")))
     ] ++ map (\(s, v) -> (s, (iii, bin v)))
       [ ("intAdd", "ADD")
       , ("intSub", "SUB")
@@ -1343,6 +1347,7 @@ comdefsrc = [r|
 F x = "foreign(arg(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
+QQ f a b c d = d(c(b(a(f))))
 S x y z = x z(y z)
 B x y z = x (y z)
 C x y z = x z y
@@ -1353,6 +1358,11 @@ K x y = "_I" x
 I x = "sp[1] = arg(1); sp++;"
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
+DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
+DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
+DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
+DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
+DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
@@ -1454,6 +1464,9 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
+typedef unsigned long long uu;
+static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
+static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 |]
 
 runFun = ([r|static void run() {
@@ -1532,3 +1545,7 @@ instance Enum Char where
   fromEnum = ord
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+
+(+) = intAdd
+(-) = intSub
+(*) = intMul

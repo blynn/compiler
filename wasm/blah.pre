@@ -12,6 +12,16 @@ infixr 0 $
 
 isEOF = (0 /=) <$> isEOFInt
 
+class Ring a where
+  (+) :: a -> a -> a
+  (-) :: a -> a -> a
+  (*) :: a -> a -> a
+
+instance Ring Int where
+  (+) = intAdd
+  (-) = intSub
+  (*) = intMul
+
 f $ x = f x
 x & f = f x
 id x = x
@@ -35,11 +45,17 @@ bool f t b = if b then t else f
 class Eq a where (==) :: a -> a -> Bool
 instance Eq Int where (==) = intEq
 instance Eq Char where (==) = charEq
-class Ord a where (<=) :: a -> a -> Bool
+class Ord a where
+  (<=) :: a -> a -> Bool
+  x <= y = case compare x y of
+    LT -> True
+    EQ -> True
+    GT -> False
+  compare :: a -> a -> Ordering
+  compare x y = if x <= y then if y <= x then EQ else LT else GT
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
 data Ordering = LT | GT | EQ
-compare x y = if x <= y then if y <= x then EQ else LT else GT
 instance Ord a => Ord [a] where
   xs <= ys = case xs of
     [] -> True

@@ -240,12 +240,12 @@ program that compiles a primitive lambda calculus to ION assembly.
 == Practically ==
 
 We've reached a milestone. Thanks to our previous compiler, never again do
-we need to convert LC to CL by hand.
+we convert LC to CL by hand.
 
 But there's a catch. For each variable we abstract over, our bracket
 abstraction algorithm adds an application of the S combinator to every
 application. Hence for N variables, this multiplies the number of applications
-by 2^N, which is intolerable for all but the smallest programas.
+by 2^N^, which is intolerable for all but the smallest programs.
 
 Thus our first priority is to optimize bracket abstraction. We stop
 recursively adding S combinators as soon as we realize they are unnecessary by
