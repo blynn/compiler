@@ -25,12 +25,49 @@ class Ring a where
   (-) :: a -> a -> a
   (*) :: a -> a -> a
   fromInt :: Int -> a
+class Integral a where
+  div :: a -> a -> a
+  mod :: a -> a -> a
+  quot :: a -> a -> a
+  rem :: a -> a -> a
+  -- toInteger, divMod, quotRem
 
 instance Ring Int where
   (+) = intAdd
   (-) = intSub
   (*) = intMul
   fromInt = id
+instance Integral Int where
+  div = intDiv
+  mod = intMod
+  quot = intQuot
+  rem = intRem
+
+instance Ring Word where
+  (+) = wordAdd
+  (-) = wordSub
+  (*) = wordMul
+  fromInt = wordFromInt
+instance Integral Word where
+  div = wordDiv
+  mod = wordMod
+  quot = wordQuot
+  rem = wordRem
+instance Eq Word where (==) = wordEq
+instance Ord Word where (<=) = wordLE
+
+data Word64 = Word64 Word Word
+instance Ring Word64 where
+  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
+  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
+  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
+  fromInt x = Word64 (wordFromInt x) (wordFromInt 0)
+
+instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d
+instance Ord Word64 where
+  Word64 a b <= Word64 c d
+    | b == d = a <= c
+    | True = b <= d
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -257,6 +294,11 @@ data Constr = Constr String [Type]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
 noQual = Qual []
+
+typeVars = \case
+  TC _ -> []
+  TV v -> [v]
+  TAp x y -> typeVars x `union` typeVars y
 
 instance Eq Type where
   (TC s) == (TC t) = s == t
@@ -809,17 +851,20 @@ primAdts =
   , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
 
 prims = let
-  ii = arr (TC "Int") (TC "Int")
-  iii = arr (TC "Int") ii
+  dyad s = TC s `arr` (TC s `arr` TC s)
+  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
   in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
-    , ("uintLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "U_LE"))
+    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
+    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
     , ("()", (TC "()", ro "K"))
+    , ("intFromWord", (arr (TC "Word") (TC "Int"), ro "I"))
+    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
@@ -833,19 +878,29 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    , ("word64Add", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DADD")))
-    , ("word64Sub", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DSUB")))
-    , ("word64Mul", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMUL")))
-    , ("word64Div", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DDIV")))
-    , ("word64Mod", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMOD")))
-    ] ++ map (\(s, v) -> (s, (iii, bin v)))
+    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
+    ]
+    ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
       , ("intSub", "SUB")
       , ("intMul", "MUL")
-      , ("quot", "QUOT")
-      , ("rem", "REM")
-      , ("div", "DIV")
-      , ("mod", "MOD")
+      , ("intDiv", "DIV")
+      , ("intMod", "MOD")
+      , ("intQuot", "QUOT")
+      , ("intRem", "REM")
+      ]
+    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
+      [ ("wordAdd", "ADD")
+      , ("wordSub", "SUB")
+      , ("wordMul", "MUL")
+      , ("wordDiv", "U_DIV")
+      , ("wordMod", "U_MOD")
+      , ("wordQuot", "U_DIV")
+      , ("wordRem", "U_MOD")
       ]
 
 -- Conversion to De Bruijn indices.
@@ -1160,25 +1215,54 @@ prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
 
-inferDefs' tycl decls defmap (typeTab, lambF) syms = let
-  add (tt, f) (s, (q@(Qual ps t), lamb)) = do
-    (q, lamb) <- case lookup s decls of
-      Nothing -> pure (q, lamb)
-      Just qAnno@(Qual psA tA) -> case match t tA of
-        Nothing -> Left $ "type mismatch, expected: " ++ showQual qAnno "" ++ ", actual: " ++ showQual q ""
-        Just sub -> let
-          vcount = length psA
-          vars = map (flip showInt "") $ take vcount $ upFrom 0
-          annoDictVars = (zip psA vars, vcount)
-          forbidNew p ((_, n), x)
-            | n == vcount = Right x
-            | True = Left $ "missing predicate: " ++ showPred p ""
-          findAnno p@(Pred cl ty) = findProof tycl (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
-          in do
-            dicts <- mapM findAnno ps
-            pure (qAnno, foldr L (foldl A lamb dicts) vars)
-    pure (insert s q tt, f . ((s, lamb):))
+ambiguous (Qual ps t) = filter (not . resolvable) ps where
+  resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
 
+f *** g = \(x, y) -> (f x, g y)
+
+defaultMagic tycl q@(Qual ps t) lamb = let
+  ambis = ambiguous q
+  rings = concatMap isRing ambis
+  isRing (Pred "Ring" (TV v)) = [v]
+  isRing _ = []
+  defaultize lambSub [] lamb = Right ([], foldr (uncurry beta) lamb lambSub)
+  defaultize lambSub (p:pt) (L s t) = case p of
+    Pred cl (TV v) | v `elem` rings -> do
+      (_, ast) <- findProof tycl (Pred cl $ TC "Int") ([], 0)
+      defaultize ((s, ast) : lambSub) pt t
+    _ -> ((p:) *** (L s)) <$> defaultize lambSub pt t
+  in case rings of
+    [] -> Right (q, lamb)
+    _ -> do
+      (ps, lamb) <- defaultize [] ps lamb
+      let q' = Qual ps t
+      case ambiguous q' of
+        [] -> Right (q', lamb)
+        ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
+
+reconcile tycl q@(Qual ps t) lamb = \case
+  Nothing -> defaultMagic tycl q lamb
+  Just qAnno@(Qual psA tA) -> case match t tA of
+    Nothing -> Left $ "type mismatch, expected: " ++ showQual qAnno "" ++ ", actual: " ++ showQual q ""
+    Just sub -> let
+      vcount = length psA
+      vars = map (flip showInt "") $ take vcount $ upFrom 0
+      annoDictVars = (zip psA vars, vcount)
+      forbidNew p ((_, n), x)
+        | n == vcount = Right x
+        | True = Left $ "missing predicate: " ++ showPred p ""
+      findAnno p@(Pred cl ty) = findProof tycl (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
+      in do
+        dicts <- mapM findAnno ps
+        case ambiguous qAnno of
+          [] -> pure (qAnno, foldr L (foldl A lamb dicts) vars)
+          ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
+
+inferDefs' tycl decls defmap (typeTab, lambF) syms = let
+  add (tt, f) (s, (q, lamb)) = do
+    (q, lamb) <- either (Left . (s++) . (": "++)) Right
+      $ reconcile tycl q lamb $ lookup s decls
+    pure (insert s q tt, f . ((s, lamb):))
   in inferno (prove tycl) (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
 
 inferDefs tycl decls defs typed = let
@@ -1227,7 +1311,7 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
               Just subc = match headT ty
               (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
             case match tx t2 of
-              Nothing -> Left "class/instance type conflict"
+              Nothing -> Left $ name ++ " class/instance type conflict"
               Just subx -> do
                 ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
                 if length ps2 /= length ps3
@@ -1467,6 +1551,8 @@ DIV x y = "_NUM" "div(num(1), num(2))"
 MOD x y = "_NUM" "mod(num(1), num(2))"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
+U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
 U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
@@ -1676,22 +1762,3 @@ cpp cpps = foldr ($) "" <$> mapM go cpps where
     stdinLoadBuffer
     getContentsS
 getContentsS = getChar >>= \n -> if 0 <= n then ((chr n:) .) <$> getContentsS else pure id
-
-data Word = Word Int
-instance Ring Word where
-  Word x + Word y = Word $ x + y
-  Word x - Word y = Word $ x - y
-  Word x * Word y = Word $ x * y
-  fromInt x = Word x
-
-instance Eq Word where Word x == Word y = x == y
-instance Ord Word where Word x <= Word y = x `uintLE` y
-
-data Word64 = Word64 Int Int
-instance Ring Word64 where
-  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
-  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
-  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  fromInt x = Word64 x 0
-
-instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d

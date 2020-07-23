@@ -8,45 +8,71 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
-import Prelude (Bool(..), Char, Int, String, Show, IO)
+import Prelude (Bool(..), Char, Int, Word, String, Show, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
 import qualified Data.Map as Map
-import qualified Data.Word as Word
 import System.IO.Unsafe (unsafePerformIO)
 import System.Exit (exitSuccess)
 import Text.RawString.QQ
 
 default (Int)
-_to64 :: Int -> Int -> Word.Word
-_to64 a b = Prelude.fromIntegral a Prelude.+ Prelude.fromIntegral b Prelude.* (2 :: Word.Word)  Prelude.^ 32
-_lohi :: Word.Word -> (Int, Int)
+_to64 :: Word -> Word -> Word
+_to64 a b = Prelude.fromIntegral a Prelude.+ Prelude.fromIntegral b Prelude.* (2 :: Word)  Prelude.^ 32
+_lohi :: Word -> (Word, Word)
 _lohi w = (Prelude.fromIntegral r, Prelude.fromIntegral q)
   where (q, r) = w `Prelude.divMod` (2 Prelude.^ 32)
 
 word64Add a b c d = _lohi $ _to64 a b Prelude.+ _to64 c d
 word64Sub a b c d = _lohi $ _to64 a b Prelude.- _to64 c d
 word64Mul a b c d = _lohi $ _to64 a b Prelude.* _to64 c d
+
 intAdd :: Int -> Int -> Int
 intAdd = (Prelude.+)
 intSub :: Int -> Int -> Int
 intSub = (Prelude.-)
 intMul :: Int -> Int -> Int
 intMul = (Prelude.*)
+intDiv :: Int -> Int -> Int
+intDiv = Prelude.div
+intMod :: Int -> Int -> Int
+intMod = Prelude.mod
+intQuot :: Int -> Int -> Int
+intQuot = Prelude.quot
+intRem :: Int -> Int -> Int
+intRem = Prelude.rem
 intEq :: Int -> Int -> Bool
 intEq = (Prelude.==)
 intLE :: Int -> Int -> Bool
 intLE = (Prelude.<=)
-uintLE :: Int -> Int -> Bool
-uintLE x y = ((Prelude.fromIntegral x :: Prelude.Word) Prelude.<= (Prelude.fromIntegral y :: Prelude.Word))
+
+wordAdd :: Word -> Word -> Word
+wordAdd = (Prelude.+)
+wordSub :: Word -> Word -> Word
+wordSub = (Prelude.-)
+wordMul :: Word -> Word -> Word
+wordMul = (Prelude.*)
+wordDiv :: Word -> Word -> Word
+wordDiv = Prelude.div
+wordMod :: Word -> Word -> Word
+wordMod = Prelude.mod
+wordQuot :: Word -> Word -> Word
+wordQuot = Prelude.quot
+wordRem :: Word -> Word -> Word
+wordRem = Prelude.rem
+wordEq :: Word -> Word -> Bool
+wordEq = (Prelude.==)
+wordLE :: Word -> Word -> Bool
+wordLE = (Prelude.<=)
+wordFromInt :: Int -> Word
+wordFromInt = Prelude.fromIntegral
+
 charEq :: Char -> Char -> Bool
 charEq = (Prelude.==)
 charLE :: Char -> Char -> Bool
 charLE = (Prelude.<=)
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
-div = Prelude.div
-mod = Prelude.mod
 #define ffi foreign import ccall
 #define export --
 #include "crossly.hs"

@@ -16,11 +16,50 @@ class Ring a where
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
+  fromInt :: Int -> a
+class Integral a where
+  div :: a -> a -> a
+  mod :: a -> a -> a
+  quot :: a -> a -> a
+  rem :: a -> a -> a
+  -- toInteger, divMod, quotRem
 
 instance Ring Int where
   (+) = intAdd
   (-) = intSub
   (*) = intMul
+  fromInt = id
+instance Integral Int where
+  div = intDiv
+  mod = intMod
+  quot = intQuot
+  rem = intRem
+
+instance Ring Word where
+  (+) = wordAdd
+  (-) = wordSub
+  (*) = wordMul
+  fromInt = wordFromInt
+instance Integral Word where
+  div = wordDiv
+  mod = wordMod
+  quot = wordQuot
+  rem = wordRem
+instance Eq Word where (==) = wordEq
+instance Ord Word where (<=) = wordLE
+
+data Word64 = Word64 Word Word
+instance Ring Word64 where
+  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
+  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
+  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
+  fromInt x = Word64 (wordFromInt x) (wordFromInt 0)
+
+instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d
+instance Ord Word64 where
+  Word64 a b <= Word64 c d
+    | b == d = a <= c
+    | True = b <= d
 
 f $ x = f x
 x & f = f x
@@ -312,6 +351,13 @@ instance Show Int where
     | 0 == n = ('0':)
     | 1 <= n = showInt_ n
     | True = ('-':) . showInt_ (0 - n)  -- Fails for INT_MIN.
+showWord_ n
+  | fromInt 0 == n = id
+  | True = showWord_ (n`div`fromInt 10) . (chr (48+(intFromWord $ n`mod`fromInt 10)):)
+instance Show Word where
+  showsPrec _ n
+    | fromInt 0 == n = ('0':)
+    | True = showWord_ n
 instance Show Char where
   showsPrec _ '\'' = ("'\\''"++)
   showsPrec _ c = ('\'':) . showLitChar c . ('\'':)

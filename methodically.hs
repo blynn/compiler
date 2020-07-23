@@ -773,18 +773,20 @@ primAdts =
   , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
 
 prims = let
-  ii = arr (TC "Int") (TC "Int")
-  iii = arr (TC "Int") ii
+  dyad s = TC s `arr` (TC s `arr` TC s)
+  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
   in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
-    , ("uintLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "U_LE"))
+    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
+    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
 
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
     , ("()", (TC "()", ro "K"))
+    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
@@ -798,17 +800,29 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    , ("word64Add", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DADD")))
-    , ("word64Sub", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DSUB")))
-    , ("word64Mul", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMUL")))
-    , ("word64Div", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DDIV")))
-    , ("word64Mod", (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` (TC "Int" `arr` TAp (TAp (TC ",") (TC "Int")) (TC "Int")))), A (ro "QQ") (ro "DMOD")))
-    ] ++ map (\(s, v) -> (s, (iii, bin v)))
+    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
+    ]
+    ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
       , ("intSub", "SUB")
       , ("intMul", "MUL")
-      , ("div", "DIV")
-      , ("mod", "MOD")
+      , ("intDiv", "DIV")
+      , ("intMod", "MOD")
+      , ("intQuot", "DIV")
+      , ("intRem", "MOD")
+      ]
+    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
+      [ ("wordAdd", "ADD")
+      , ("wordSub", "SUB")
+      , ("wordMul", "MUL")
+      , ("wordDiv", "U_DIV")
+      , ("wordMod", "U_MOD")
+      , ("wordQuot", "U_DIV")
+      , ("wordRem", "U_MOD")
       ]
 
 -- Conversion to De Bruijn indices.
@@ -1370,6 +1384,8 @@ DIV x y = "_NUM" "num(1) / num(2)"
 MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
+U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
 U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
@@ -1549,3 +1565,5 @@ instance Enum Char where
 (+) = intAdd
 (-) = intSub
 (*) = intMul
+div = intDiv
+mod = intMod

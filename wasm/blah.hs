@@ -42,9 +42,9 @@ compile s = case untangle s of
   Right ((typed, lambs), _) -> let
     (tab, mem) = hashcons $ optiComb lambs
     go (n, sec) = leb n <> extendSection sec []
-    roots = encodeData rootBase $ wordLE (tab ! "main") <> wordLE 0
+    roots = encodeData rootBase $ little (tab ! "main") <> little 0
     prog = encodeData heapBase hpHeap
-    hpHeap = wordLE (length mem) <> mconcat (map wordLE mem)
+    hpHeap = little (length mem) <> mconcat (map little mem)
     mainQT = maybe (Left "no main") Right $ mlookup "main" typed
     wasm = fst (hexy "0061736d01000000" <> mconcat (map go rts)
 -- Data section:
@@ -58,7 +58,7 @@ extendSection (k, s) xs = encodeSection (k + length xs) $ hexy s <> mconcat xs
 encodeExport s n = encodeString s <> hexy "00" <> leb n
 encodeString s = let n = length s in leb n <> ((s++), n)
 
-wordLE n = (go n 4, 4) where
+little n = (go n 4, 4) where
   go n k
     | k == 0 = id
     | True = (chr (n `mod` 256):) . go (n `div` 256) (k - 1)
