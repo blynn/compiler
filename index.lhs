@@ -268,9 +268,10 @@ include::hilsys.inc[]
 ------------------------------------------------------------------------
 -- Based on https://sametwice.com/4_line_mandelbrot.
 prec = 16384
-sh z = div z prec
-sqAdd (x, y) (a, b) = (sh (a*a - b*b) + x, 2*sh (a*b) + y)
-norm (x, y) = sh (x*x + y*y)
+infixl 7 #
+x # y = x * y `div` prec
+sqAdd (x, y) (a, b) = (a#a - b#b + x, 2*(a#b) + y)
+norm (x, y) = x#x + y#y
 douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 $ iterate (sqAdd p) (0, 0)
 main = putStr $ unlines
   [[if douady (616*x - 2*prec, 1502*y - 18022)

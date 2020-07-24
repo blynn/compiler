@@ -543,7 +543,7 @@ wantLit = want \case
 paren = between (res "(") (res ")")
 braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";")
 
-maybeFix s x = if elem s $ fvPro [] x then A (ro "Y") (L s x) else x
+maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 
 coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
   f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
@@ -784,6 +784,7 @@ prims = let
 
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
+    , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
     , ("()", (TC "()", ro "K"))
     , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
@@ -1071,7 +1072,6 @@ infer typed loc ast csn = fpair csn \cs n ->
     insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
   in case ast of
     E x -> Right $ case x of
-      Basic n | n == comEnum "Y" -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
       Const _ -> ((TC "Int",  ast), csn)
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
