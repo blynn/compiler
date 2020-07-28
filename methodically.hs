@@ -563,7 +563,7 @@ addLets ls x = foldr triangle x components where
     tnames = nonemptyTails names
     suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
     insLams vs t = foldr L t vs
-    in foldr (\(x:xt) t -> A (L x t) $ insLams xt $ maybeFix x $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
 
 data Assoc = NAssoc | LAssoc | RAssoc
 instance Eq Assoc where
