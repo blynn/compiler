@@ -30,7 +30,6 @@ class Integral a where
   mod :: a -> a -> a
   quot :: a -> a -> a
   rem :: a -> a -> a
-  -- toInteger, divMod, quotRem
 
 instance Ring Int where
   (+) = intAdd
@@ -438,7 +437,7 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure (chr 0))
 tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
@@ -463,7 +462,6 @@ lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
   <|> special <|> literal
 
 whitespace = many (sat isSpace <|> comment)
-lexemes = whitespace *> many (lexeme <* whitespace)
 
 getPos = Lexer \st@(LexState _ rc) -> Right (rc, st)
 posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace)
@@ -790,7 +788,8 @@ apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> PatLit <$> wantLit
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
     <$> between (res "[") (res "]") (sepBy pat $ res ",")
-  <|> paren ((&) <$> pat <*> ((res "," *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
+  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ","))
+  where pairPat x y = PatCon "," [x, y]
 
 binPat f x y = PatCon f [x, y]
 patP n = if n <= 9
@@ -1006,7 +1005,10 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
+patEq lit b x y = A (A (A (V "if") (A (A (V "==") lit') b)) x) y where
+  lit' = case lit of
+    Const _ -> A (V "fromInt") (E lit)
+    _ -> E lit
 
 unpat dcs as t = case as of
   [] -> pure t
@@ -1061,8 +1063,10 @@ rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip)
   $ uncurry classifyAlt <$> as) \acc tab -> acc . genCase dcs tab $ V "fail#"
 
 secondM f (a, b) = (a,) <$> f b
+-- Compiles patterns. Overloads literals.
 patternCompile dcs t = optiApp' $ evalState (go t) 0 where
   go t = case t of
+    E (Const c) -> pure $ A (V "fromInt") t
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)

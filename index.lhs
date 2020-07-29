@@ -314,10 +314,7 @@ main = interact $ enigma "AAA"
 
 The above compiles a Haskell program to a WebAssembly binary [+++<a href='#'
 onclick='downloadWasm()'>download it!</a>+++], then runs it on the given input.
-
-Many language features are missing, including checking for certain errors. The
-parser is fussy, and the error messages are cryptic. The only primitive type
-is `Int`, which are signed 32-bit integers.
+Several language features are missing.
 
 Source: https://github.com/blynn/compiler[https://github.com/blynn/compiler]
 

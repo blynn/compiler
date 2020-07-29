@@ -713,7 +713,8 @@ apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> PatLit <$> wantLit
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
     <$> between (res "[") (res "]") (sepBy pat $ res ",")
-  <|> paren ((&) <$> pat <*> ((res "," *> ((\y x -> PatCon "," [x, y]) <$> pat)) <|> pure id))
+  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ","))
+  where pairPat x y = PatCon "," [x, y]
 
 binPat f x y = PatCon f [x, y]
 patP n = if n <= 9

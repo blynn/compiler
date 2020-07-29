@@ -22,7 +22,6 @@ class Integral a where
   mod :: a -> a -> a
   quot :: a -> a -> a
   rem :: a -> a -> a
-  -- toInteger, divMod, quotRem
 
 instance Ring Int where
   (+) = intAdd
@@ -66,7 +65,6 @@ x & f = f x
 id x = x
 const x y = x
 flip f x y = f y x
-(&) x f = f x
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
   pure :: a -> f a
@@ -84,6 +82,10 @@ bool f t b = if b then t else f
 class Eq a where (==) :: a -> a -> Bool
 instance Eq Int where (==) = intEq
 instance Eq Char where (==) = charEq
+instance Eq Bool where
+  True == True = True
+  False == False = True
+  _ == _ = False
 class Ord a where
   (<=) :: a -> a -> Bool
   x <= y = case compare x y of
@@ -352,11 +354,11 @@ instance Show Int where
     | 1 <= n = showInt_ n
     | True = ('-':) . showInt_ (0 - n)  -- Fails for INT_MIN.
 showWord_ n
-  | fromInt 0 == n = id
-  | True = showWord_ (n`div`fromInt 10) . (chr (48+(intFromWord $ n`mod`fromInt 10)):)
+  | 0 == n = id
+  | True = showWord_ (n`div`10) . (chr (48+(intFromWord $ n`mod`10)):)
 instance Show Word where
   showsPrec _ n
-    | fromInt 0 == n = ('0':)
+    | 0 == n = ('0':)
     | True = showWord_ n
 instance Show Char where
   showsPrec _ '\'' = ("'\\''"++)
@@ -379,9 +381,15 @@ class Enum a where
   enumFromTo     :: a -> a -> [a]
 instance Enum Int where
   succ = (+1)
-  pred = (+(0-1))
+  pred = flip (-) 1
   toEnum = id
   fromEnum = id
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Integer where
+  succ = (+1)
+  pred = flip (-) 1
+  toEnum = fromInt
+  fromEnum (Integer xsgn xs) = intFromWord $ fst $ mpView xs
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 instance Enum Char where
   succ = chr . (+1) . ord
@@ -389,3 +397,106 @@ instance Enum Char where
   toEnum = chr
   fromEnum = ord
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+
+data Integer = Integer Bool [Word]
+instance Ring Integer where
+  Integer xsgn xs + Integer ysgn ys
+    | xsgn == ysgn = Integer xsgn $ mpAdd xs ys
+    | True = case mpCompare xs ys of
+      LT -> mpCanon ysgn $ mpSub ys xs
+      _ -> mpCanon xsgn $ mpSub xs ys
+  Integer xsgn xs - Integer ysgn ys
+    | xsgn /= ysgn = Integer xsgn $ mpAdd xs ys
+    | True = case mpCompare xs ys of
+      LT -> mpCanon (not ysgn) $ mpSub ys xs
+      _ -> mpCanon xsgn $ mpSub xs ys
+  Integer xsgn xs * Integer ysgn ys = Integer (xsgn == ysgn) $ mpMul xs ys
+  fromInt x
+    | 0 <= x = Integer True $ if x == 0 then [] else [wordFromInt x]
+    | True = Integer False [wordFromInt $ 0 - x]
+instance Integral Integer where
+  -- TODO: Trucate `div` towards zero.
+  div (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
+  mod (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
+  quot (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
+  rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
+
+instance Eq Integer where
+  Integer xsgn xs == Integer ysgn ys = xsgn == ysgn && xs == ys
+instance Ord Integer where
+  compare (Integer xsgn xs) (Integer ysgn ys)
+    | xsgn = if ysgn then mpCompare xs ys else GT
+    | True = if ysgn then LT else mpCompare ys xs
+instance Show Integer where showsPrec _ (Integer xsgn xs) = (if xsgn then id else ('-':)) . mpBase 10 xs
+
+mpView [] = (0, [])
+mpView (x:xt) = (x, xt)
+
+mpCanon sgn xs = mpCanon0 sgn $ reverse $ dropWhile (0 ==) $ reverse xs
+mpCanon0 sgn xs = case xs of
+  [] -> Integer True []
+  _ -> Integer sgn xs
+
+mpCompare [] [] = EQ
+mpCompare [] _  = LT
+mpCompare _  [] = GT
+mpCompare (x:xt) (y:yt) = case mpCompare xt yt of
+  EQ -> compare x y
+  o -> o
+
+mpAdc [] [] c = ([], c)
+mpAdc xs ys c = first (lo:) $ mpAdc xt yt hi where
+  (x, xt) = mpView xs
+  (y, yt) = mpView ys
+  (lo,hi) = uncurry (word64Add c 0) $ word64Add x 0 y 0
+
+mpAdd xs ys | c == 0 = zs
+            | True = zs ++ [c]
+  where (zs, c) = mpAdc xs ys 0
+
+mpSub xs ys = fst $ mpSbb xs ys 0
+
+mpSbb xs ys b = go xs ys b where
+  go [] [] b = ([], b)
+  go xs ys b = first (lo:) $ go xt yt $ 1 - hi where
+    (x, xt) = mpView xs
+    (y, yt) = mpView ys
+    (lo,hi) = uncurry word64Sub (word64Sub x 1 y 0) b 0
+
+mpMulWord _ []     c = if c == 0 then [] else [c]
+mpMulWord x (y:yt) c = lo:mpMulWord x yt hi where
+  (lo, hi) = uncurry (word64Add c 0) $ word64Mul x 0 y 0
+
+mpMul [] _ = []
+mpMul (x:xt) ys = case mpMulWord x ys 0 of
+  [] -> []
+  z:zs -> z:mpAdd zs (mpMul xt ys)
+
+mpDivModWord xs y = first (reverse . dropWhile (0 ==)) $ go 0 $ reverse xs where
+  go r [] = ([], r)
+  go n (x:xt) = first (q:) $ go r xt where
+    q = fst $ word64Div x n y 0
+    r = fst $ word64Mod x n y 0
+
+mpBase _ [] = ('0':)
+mpBase b xs = go xs where
+  go [] = id
+  go xs = go q . shows r where (q, r) = mpDivModWord xs b
+
+mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
+  s = mpDivScale $ last ys
+  us = mpMulWord s (xs ++ [0]) 0
+  vs = mpMulWord s ys 0
+  (v1:_) = reverse vs
+  vlen = length vs
+  go us | ulen <= vlen = ([], fst $ mpDivModWord us s)
+        | True = first (q:) $ go $ lsbs ++ init ds
+    where
+    ulen = length us
+    (u0:u1:_) = reverse us
+    (lsbs, msbs) = splitAt (ulen - vlen - 1) us
+    (ql, qh) = word64Div u1 u0 v1 0
+    q0  = if 1 <= qh then (0-1) else ql
+    (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- 1) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs 0) 0, bor == 0]
+
+mpDivScale n = fst $ word64Div 0 1 (n + 1) 0

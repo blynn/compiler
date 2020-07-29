@@ -8,7 +8,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
-import Prelude (Bool(..), Char, Int, Word, String, Show, IO)
+import Prelude (Bool(..), Char, Int, Word, String, IO)
 import Data.Char (chr, ord)
 import qualified Prelude
 import qualified Data.Map as Map
@@ -23,9 +23,14 @@ _lohi :: Word -> (Word, Word)
 _lohi w = (Prelude.fromIntegral r, Prelude.fromIntegral q)
   where (q, r) = w `Prelude.divMod` (2 Prelude.^ 32)
 
+intFromWord :: Word -> Int
+intFromWord = Prelude.fromIntegral
+
 word64Add a b c d = _lohi $ _to64 a b Prelude.+ _to64 c d
 word64Sub a b c d = _lohi $ _to64 a b Prelude.- _to64 c d
 word64Mul a b c d = _lohi $ _to64 a b Prelude.* _to64 c d
+word64Div a b c d = _lohi $ _to64 a b `Prelude.div` _to64 c d
+word64Mod a b c d = _lohi $ _to64 a b `Prelude.mod` _to64 c d
 
 intAdd :: Int -> Int -> Int
 intAdd = (Prelude.+)
