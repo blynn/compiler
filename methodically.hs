@@ -713,7 +713,7 @@ apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> PatLit <$> wantLit
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
     <$> between (res "[") (res "]") (sepBy pat $ res ",")
-  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ","))
+  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ",") <|> pure (PatCon "()" []))
   where pairPat x y = PatCon "," [x, y]
 
 binPat f x y = PatCon f [x, y]
@@ -769,7 +769,8 @@ program s = case lex posLexemes $ LexState s (1, 1) of
 
 -- Primitives.
 primAdts =
-  [ addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
+  [ addAdt (TC "()") [Constr "()" []]
+  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
   , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
 
@@ -787,7 +788,6 @@ prims = let
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("()", (TC "()", ro "K"))
     , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))

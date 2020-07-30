@@ -561,7 +561,8 @@ program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ ins
 -- Primitives.
 
 primAdts =
-  [ addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
+  [ addAdt (TC "()") [Constr "()" []]
+  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
   , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]];
 
@@ -574,7 +575,6 @@ prims = let
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("()", (TC "()", ro "K"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "ADD"))))

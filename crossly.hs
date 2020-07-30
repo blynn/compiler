@@ -788,7 +788,7 @@ apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> PatLit <$> wantLit
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
     <$> between (res "[") (res "]") (sepBy pat $ res ",")
-  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ","))
+  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ",") <|> pure (PatCon "()" []))
   where pairPat x y = PatCon "," [x, y]
 
 binPat f x y = PatCon f [x, y]
@@ -845,7 +845,8 @@ program s = case lex posLexemes $ LexState s (1, 1) of
 
 -- Primitives.
 primAdts =
-  [ addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
+  [ addAdt (TC "()") [Constr "()" []]
+  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
   , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
   , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
 
@@ -862,7 +863,6 @@ prims = let
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("()", (TC "()", ro "K"))
     , ("intFromWord", (arr (TC "Word") (TC "Int"), ro "I"))
     , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
@@ -1503,10 +1503,15 @@ enumComs = ("typedef unsigned u;\n"++)
   . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
   . ("};\n"++)
 
-compile tgt s = case untangle s of
-  Left err -> err
-  Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      enumTop tgt
+compile tgt s = either id id do
+  ((typed, lambs), (ffis, exs)) <- untangle s
+  let
+    (tab, mem) = hashcons $ optiComb lambs
+    getIOType (Qual [] (TAp (TC "IO") t)) = Right t
+    getIOType q = Left $ "main : " ++ showQual q ""
+  maybe (Right undefined) getIOType $ mlookup "main" typed
+  pure
+    $ enumTop tgt
     . enumComs
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
