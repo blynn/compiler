@@ -157,6 +157,8 @@ find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
 instance Functor [] where fmap = map
+instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
+instance Monad [] where return = (:[]); (>>=) = flip concatMap
 concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
@@ -289,7 +291,7 @@ arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic Int | Const Int | ChrCon Char | StrCon String
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
-data Constr = Constr String [Type]
+data Constr = Constr String [(String, Type)]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
 noQual = Qual []
@@ -543,14 +545,19 @@ ro = E . Basic . comEnum
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
+  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
-scottConstr t cs (Constr s ts) = (s,
+scottConstr t cs (Constr s sts) = (s,
   (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
-mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
+  : [(field, (noQual $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
+  where
+  ts = snd <$> sts
+  proj fd = foldr L (V fd) $ fst <$> sts
+  inj x = map (\(Constr s' _) -> if s' == s then x else V "undefined") cs
+mkAdtDefs t cs = mkCase t cs : concatMap (scottConstr t cs) cs
 
 mkFFIHelper n t acc = case t of
   TC s -> acc
@@ -822,8 +829,13 @@ conop = want f <|> between (res "`") (res "`") (want g) where
   f _ = Left ""
   g (ConId s) = Right s
   g _ = Left "want conop"
-constr = (\x c y -> Constr c [x, y]) <$> aType <*> conop <*> aType
-  <|> Constr <$> wantConId <*> many aType
+
+vars = sepBy1 var $ res ","
+fieldDecl = (\vs t -> map (, t) vs) <$> vars <*> (res "::" *> _type)
+constr = (\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType
+  <|> Constr <$> wantConId <*>
+    (   concat <$> between (res "{") (res "}") (fieldDecl `sepBy` res ",")
+    <|> map ("",) <$> many aType)
 adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
 
 topdecls = braceSep
@@ -847,8 +859,8 @@ program s = case lex posLexemes $ LexState s (1, 1) of
 primAdts =
   [ addAdt (TC "()") [Constr "()" []]
   , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
-  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
-  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
+  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [("", TV "a"), ("", TAp (TC "[]") (TV "a"))]]
+  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [("", TV "a"), ("", TV "b")]]]
 
 prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
@@ -1157,8 +1169,8 @@ infer typed loc ast csn@(cs, n) = let
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
     V s -> maybe (Left $ "undefined: " ++ s) Right
-      $ insta <$> mlookup s typed
-      <|> (\t -> ((t, ast), csn)) <$> lookup s loc
+      $ (\t -> ((t, ast), csn)) <$> lookup s loc
+      <|> insta <$> mlookup s typed
     A x y -> infer typed loc x (cs, n + 1) >>=
       \((tx, ax), csn1) -> infer typed loc y csn1 >>=
       \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=

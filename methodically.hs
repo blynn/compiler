@@ -1077,8 +1077,8 @@ infer typed loc ast csn = fpair csn \cs n ->
       ChrCon _ -> ((TC "Char",  ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
     V s -> maybe (Left $ "undefined: " ++ s) Right
-      $ insta <$> mlookup s typed
-      <|> (\t -> ((t, ast), csn)) <$> lookup s loc
+      $ (\t -> ((t, ast), csn)) <$> lookup s loc
+      <|> insta <$> mlookup s typed
     A x y -> infer typed loc x (cs, n + 1) >>=
       \((tx, ax), csn1) -> infer typed loc y csn1 >>=
       \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
