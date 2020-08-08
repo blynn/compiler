@@ -444,7 +444,7 @@ tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
 tokStr = between (char '"') (char '"') $ many (tokOne '"')
-integer = decimal <|> char '0' *> (char 'x' <|> char 'X') *> hexadecimal
+integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   ck s = (if elem s
@@ -1760,16 +1760,21 @@ main = getArgs >>= \case
 void fun(void) asm("fun") __attribute__((visibility("default")));
 void fun(void) { rts_reduce(*((u*)512)); }
 |]
-  "comb":_ -> interact dumpCombs
-  "lamb":_ -> interact dumpLambs
-  "type":_ -> interact dumpTypes
-  "wasm":_ -> interact $ compile Wasm
-  _ -> getContents >>= \s -> either undefined (cpp . fst) (lex cppLexer (LexState s (0,0))) >>= putStr . compile Host
+  "comb":_ -> interactCPP dumpCombs
+  "lamb":_ -> interactCPP dumpLambs
+  "type":_ -> interactCPP dumpTypes
+  "wasm":_ -> interactCPP $ compile Wasm
+  _ -> interactCPP $ compile Host
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
 
 -- Include directives.
+interactCPP f = do
+  s <- getContents
+  case lex cppLexer $ LexState s (0,0) of
+    Left e -> putStr $ "CPP error: " ++ e
+    Right (r, _) -> cpp r >>= putStr . f
 data CPP = CPPPass (String -> String) | CPPInclude String
 cppLexer = many $ include <|> (CPPPass . foldr (.) ('\n':) . map (:) <$> many (sat (/= '\n')) <* char '\n')
 include = (foldr (*>) (pure ()) $ map char "#include") *> many (sat isSpace) *>

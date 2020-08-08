@@ -86,6 +86,9 @@ instance Eq Bool where
   True == True = True
   False == False = True
   _ == _ = False
+instance Show Bool where
+  show True = "True"
+  show False = "False"
 class Ord a where
   (<=) :: a -> a -> Bool
   x <= y = case compare x y of
@@ -97,6 +100,8 @@ class Ord a where
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
 data Ordering = LT | GT | EQ
+min a b = if a <= b then a else b
+max a b = if b <= a then a else b
 instance Ord a => Ord [a] where
   xs <= ys = case xs of
     [] -> True
@@ -157,6 +162,12 @@ drop _ []              =  []
 drop n (_:xs)          =  drop (n-1) xs
 length = foldr (\_ n -> n + 1) 0
 splitAt n xs = (take n xs, drop n xs)
+lines "" = []
+lines s = let
+  (l, rest) = break (== '\n') s
+  in l : case rest of
+    [] -> []
+    (_:s') -> lines s'
 unlines [] = []
 unlines (l:ls) = l ++ '\n' : unlines ls
 maybe n j m = case m of Nothing -> n; Just x -> j x
@@ -301,6 +312,8 @@ instance Alternative [] where empty = [] ; (<|>) = (++)
 guard False = empty
 guard True = pure ()
 asum = foldr (<|>) empty
+many p = liftA2 (:) p (many p) <|> pure []
+some p = liftA2 (:) p (many p)
 
 intersperse _ [] = []
 intersperse x (a:at) = a : foldr (\h t -> [x, h] ++ t) [] at

@@ -367,7 +367,7 @@ tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
 tokStr = between (char '"') (char '"') $ many (tokOne '"')
-integer = decimal <|> char '0' *> (char 'x' <|> char 'X') *> hexadecimal
+integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   ck s = (if elem s
