@@ -1521,7 +1521,11 @@ compile tgt s = either id id do
     (tab, mem) = hashcons $ optiComb lambs
     getIOType (Qual [] (TAp (TC "IO") t)) = Right t
     getIOType q = Left $ "main : " ++ showQual q ""
+    mustType s = case mlookup s typed of
+      Just (Qual [] t) -> t
+      _ -> error "TODO: report bad exports"
   maybe (Right undefined) getIOType $ mlookup "main" typed
+
   pure
     $ enumTop tgt
     . enumComs
@@ -1538,9 +1542,23 @@ compile tgt s = either id id do
     . runFun
     . rtsInit tgt
     . rtsReduce
-    . ("#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility(\"default\"))); void f(){rts_reduce(root[n]);}\n"++)
-    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
+    . ("#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility(\"default\")));\n"++)
+    . foldr (.) id (zipWith (\p n -> ("EXPORT(f"++) . showInt n . (", \""++) . (fst p++) . ("\")\n"++)
+      . genExport (arrCount $ mustType $ snd p) n) exs (upFrom 0))
     $ maybe "" genMain (mlookup "main" tab)
+
+genExport m n = ("void f"++) . showInt n . ("("++)
+  . foldr (.) id (intersperse (',':) xs)
+  . ("){rts_reduce("++)
+  . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
+  . (");}\n"++)
+  where
+  xs = map ((('x':) .) . showInt) $ take m $ upFrom 0
+  rt = ("root["++) . showInt n . ("]"++)
+
+arrCount = \case
+  TAp (TAp (TC "->") _) y -> 1 + arrCount y
+  _ -> 0
 
 -- Main VM loop.
 comdefsrc = [r|
