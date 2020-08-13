@@ -873,7 +873,7 @@ rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
 
 classifyAlt v x = case v of
   { PatLit lit -> Left $ patEq lit (V "of") x
-  ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ beta s (V "of") x
+  ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ A (L s x) $ V "of"
   ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
   };
 
