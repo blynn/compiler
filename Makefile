@@ -33,6 +33,7 @@ $(call rtsup,virtually,uniquely)
 marginally.c:marginally.hs virtually;time ./virtually < $< > $@
 methodically.c:methodically.hs marginally;time ./marginally < $< > $@
 crossly.c:crossly.hs methodically;time ./methodically < $< > $@
+precisely.c:precisely.hs crossly;time ./crossly < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
