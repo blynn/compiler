@@ -137,11 +137,12 @@ avoid recursion schemes: our compiler can handle them, but lacks support for
 pattern synonyms and deriving `Functor`.
 
 \begin{code}
-data Term = Var String | Fun String [Term]
+data Term = Var String | Fun String [Term] deriving Eq
 
 data FO = Top | Bot | Atom String [Term]
   | Not FO | FO :/\ FO | FO :\/ FO | FO :==> FO | FO :<=> FO
   | Forall String FO | Exists String FO
+  deriving Eq
 \end{code}
 
 A value of type `Theorem` should only exist if it contains a valid formula.
@@ -152,37 +153,9 @@ be able to create or change `Theorem` values.
 data Theorem = Theorem FO
 \end{code}
 
-Our compiler lacks the `deriving` mechanism, so we must write out the boring
-code to show and compare data types ourselves:
-
-++++++++++
-<p><a onclick='hideshow("eqshow");'>&#9654; Toggle Eq, Show</a></p>
-<div id='eqshow' style='display:none'>
-++++++++++
+Functions for pretty-printing:
 
 \begin{code}
-instance Eq Term where
-  t1 == t2 = case t1 of
-    Var s1 -> case t2 of
-      Var s2 -> s1 == s2
-      Fun _ _ -> False
-    Fun f1 as1 -> case t2 of
-      Var _ -> False
-      Fun f2 as2 -> f1 == f2 && as1 == as2
-
-instance Eq FO where  -- `deriving Eq` is sorely missed.
-  Top == Top = True
-  Bot == Bot = True
-  (Atom s1 ts1) == (Atom s2 ts2) = s1 == s2 && ts1 == ts2
-  (Not x1) == (Not x2) = x1 == x2
-  (x1 :/\ y1) == (x2 :/\ y2) = x1 == x2 && y1 == y2
-  (x1 :\/ y1) == (x2 :\/ y2) = x1 == x2 && y1 == y2
-  (x1 :==> y1) == (x2 :==> y2) = x1 == x2 && y1 == y2
-  (x1 :<=> y1) == (x2 :<=> y2) = x1 == x2 && y1 == y2
-  (Forall s1 f1) == (Forall s2 f2) = s1 == s2 && f1 == f2
-  (Exists s1 f1) == (Exists s2 f2) = s1 == s2 && f1 == f2
-  _ == _ = False
-
 instance Show Term where
   showsPrec _ = \case
     Var s -> (s ++)
@@ -202,10 +175,6 @@ instance Show FO where
     Forall s x -> showParen (p > 0) $ ("forall " ++) . (s++) . (". "++) . showsPrec 0 x
     Exists s x -> showParen (p > 0) $ ("exists " ++) . (s++) . (". "++) . showsPrec 0 x
 \end{code}
-
-++++++++++
-</div>
-++++++++++
 
 == Rules and Axioms ==
 

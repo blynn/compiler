@@ -47,14 +47,13 @@ instance Integral Word where
 instance Eq Word where (==) = wordEq
 instance Ord Word where (<=) = wordLE
 
-data Word64 = Word64 Word Word
+data Word64 = Word64 Word Word deriving Eq
 instance Ring Word64 where
   Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
   Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
   Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
   fromInt x = Word64 (wordFromInt x) (wordFromInt 0)
 
-instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d
 instance Ord Word64 where
   Word64 a b <= Word64 c d
     | b == d = a <= c
@@ -82,10 +81,6 @@ bool f t b = if b then t else f
 class Eq a where (==) :: a -> a -> Bool
 instance Eq Int where (==) = intEq
 instance Eq Char where (==) = charEq
-instance Eq Bool where
-  True == True = True
-  False == False = True
-  _ == _ = False
 instance Show Bool where
   show True = "True"
   show False = "False"
@@ -411,7 +406,7 @@ instance Enum Char where
   fromEnum = ord
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
-data Integer = Integer Bool [Word]
+data Integer = Integer Bool [Word] deriving Eq
 instance Ring Integer where
   Integer xsgn xs + Integer ysgn ys
     | xsgn == ysgn = Integer xsgn $ mpAdd xs ys
@@ -434,8 +429,6 @@ instance Integral Integer where
   quot (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
   rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
 
-instance Eq Integer where
-  Integer xsgn xs == Integer ysgn ys = xsgn == ysgn && xs == ys
 instance Ord Integer where
   compare (Integer xsgn xs) (Integer ysgn ys)
     | xsgn = if ysgn then mpCompare xs ys else GT

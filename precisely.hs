@@ -74,7 +74,7 @@ instance Integral Word where
 instance Eq Word where (==) = wordEq
 instance Ord Word where (<=) = wordLE
 
-data Word64 = Word64 Word Word
+data Word64 = Word64 Word Word deriving Eq
 instance Ring Word64 where
   Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
   Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
@@ -84,14 +84,13 @@ instance Ring Word64 where
     (x, xt) = mpView xs
     (y, _) = mpView xt
 
-instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d
 instance Ord Word64 where
   Word64 a b <= Word64 c d
     | b == d = a <= c
     | True = b <= d
 
 -- Multiprecision arithmetic.
-data Integer = Integer Bool [Word]
+data Integer = Integer Bool [Word] deriving Eq
 instance Ring Integer where
   Integer xsgn xs + Integer ysgn ys
     | xsgn == ysgn = Integer xsgn $ mpAdd xs ys
@@ -114,8 +113,6 @@ instance Integral Integer where
   rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
   toInteger = id
 
-instance Eq Integer where
-  Integer xsgn xs == Integer ysgn ys = xsgn == ysgn && xs == ys
 instance Ord Integer where
   compare (Integer xsgn xs) (Integer ysgn ys)
     | xsgn = if ysgn then mpCompare xs ys else GT
@@ -188,10 +185,6 @@ mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
 
 mpDivScale n = fst $ word64Div 0 1 (n + 1) 0
 
-instance Eq Bool where
-  True == True = True
-  False == False = True
-  _ == _ = False
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
   pure :: a -> f a
@@ -305,7 +298,6 @@ intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
 intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
-upFrom n = n : upFrom (n + 1)
 zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))
@@ -421,13 +413,13 @@ foldrWithKey f = go where
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 
 -- Syntax tree.
-data Type = TC String | TV String | TAp Type Type
+data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic Int | Const Integer | ChrCon Char | StrCon String
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
-data Pred = Pred String Type
+data Pred = Pred String Type deriving Eq
 data Qual = Qual [Pred] Type
 noQual = Qual []
 
@@ -435,14 +427,6 @@ typeVars = \case
   TC _ -> []
   TV v -> [v]
   TAp x y -> typeVars x `union` typeVars y
-
-instance Eq Type where
-  (TC s) == (TC t) = s == t
-  (TV s) == (TV t) = s == t
-  (TAp a b) == (TAp c d) = a == c && b == d
-  _ == _ = False
-
-instance Eq Pred where (Pred s a) == (Pred t b) = s == t && a == b
 
 data Instance = Instance
   -- Type, e.g. Int for Eq Int.
@@ -701,12 +685,23 @@ mkFFIHelper n t acc = case t of
   TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
-addAdt t cs (Neat tycl fs typed dcs ffis exs) =
-  Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs
+addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
+  ast = Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs
+  derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
+    [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
+    )]
+  derive der = error $ "bad deriving: " ++ der
+  mkPreds classId = Pred classId . TV <$> typeVars t
+  mkPatVar pre s = PatVar (pre ++ s) Nothing
+  eqCase (Constr con args) = let as = (`showInt` "") <$> [1.. length args]
+    in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
+      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+         $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
+      , (PatVar "_" Nothing, V "False")])
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs) = let
-  vars = take (size sigs) $ (`showInt` "") <$> upFrom 0
+  vars = (`showInt` "") <$> [1..size sigs]
   selectors = zipWith (\var (s, Qual ps t) -> (s, (Qual (Pred classId v:ps) t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
@@ -784,12 +779,7 @@ addLets ls x = foldr triangle x components where
     insLams vs t = foldr L t vs
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
 
-data Assoc = NAssoc | LAssoc | RAssoc
-instance Eq Assoc where
-  NAssoc == NAssoc = True
-  LAssoc == LAssoc = True
-  RAssoc == RAssoc = True
-  _ == _ = False
+data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
 precOf s precTab = maybe 5 fst $ mlookup s precTab
 assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
@@ -972,7 +962,9 @@ constr = (\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType
   <|> Constr <$> wantConId <*>
     (   concat <$> between (res "{") (res "}") (fieldDecl `sepBy` res ",")
     <|> map ("",) <$> many aType)
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
+dclass = wantConId
+_deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
 
 topdecls = braceSep
   (   adt
@@ -993,10 +985,11 @@ program s = case lex posLexemes $ LexState s (1, 1) of
 
 -- Primitives.
 primAdts =
-  [ addAdt (TC "()") [Constr "()" []]
-  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
-  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [("", TV "a"), ("", TAp (TC "[]") (TV "a"))]]
-  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [("", TV "a"), ("", TV "b")]]]
+  [ addAdt (TC "()") [Constr "()" []] []
+  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []] ["Eq"]
+  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [("", TV "a"), ("", TAp (TC "[]") (TV "a"))]] []
+  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [("", TV "a"), ("", TV "b")]] []
+  ]
 
 prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
@@ -1186,7 +1179,7 @@ rewritePats' dcs asxs ls = case asxs of
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
 
 rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (flip showInt "#") $ take (length vs0) $ upFrom n
+  ls = map (flip showInt "#") $ take (length vs0) [n..]
   in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' dcs vsxs ls
 
 classifyAlt v x = case v of
@@ -1398,7 +1391,7 @@ reconcile tycl q@(Qual ps t) lamb = \case
     Nothing -> Left $ "type mismatch, expected: " ++ showQual qAnno "" ++ ", actual: " ++ showQual q ""
     Just sub -> let
       vcount = length psA
-      vars = map (flip showInt "") $ take vcount $ upFrom 0
+      vars = map (`showInt` "") [1..vcount]
       annoDictVars = (zip psA vars, vcount)
       forbidNew p ((_, n), x)
         | n == vcount = Right x
@@ -1425,7 +1418,7 @@ inferDefs tycl decls defs typed = let
   outs k = maybe [] id $ mlookup k $ snd graph
   in foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
 
-dictVars ps n = (zip ps $ map (('*':) . flip showInt "") $ upFrom n, n + length ps)
+dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
 inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) where
   perClass (classId, Tycl sigs insts) = do
@@ -1680,7 +1673,7 @@ compile tgt s = either id id do
     . rtsReduce
     . ("#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility(\"default\")));\n"++)
     . foldr (.) id (zipWith (\p n -> ("EXPORT(f"++) . showInt n . (", \""++) . (fst p++) . ("\")\n"++)
-      . genExport (arrCount $ mustType $ snd p) n) exs (upFrom 0))
+      . genExport (arrCount $ mustType $ snd p) n) exs [0..])
     $ maybe "" genMain (mlookup "main" tab)
 
 genExport m n = ("void f"++) . showInt n . ("("++)
@@ -1689,7 +1682,7 @@ genExport m n = ("void f"++) . showInt n . ("("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . showInt) $ take m $ upFrom 0
+  xs = map ((('x':) .) . showInt) [0..m - 1]
   rt = ("root["++) . showInt n . ("]"++)
 
 arrCount = \case
@@ -1742,8 +1735,8 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
   Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
     Left e -> error e
     Right (cs, _) -> cs
-comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1)
-comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
+comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
+comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 
 preamble = ([r|
 enum { FORWARD = 127, REDUCING = 126 };
@@ -1867,7 +1860,7 @@ genArg m a = case a of
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
   argc = ('(':) . showInt (length args)
-  m = zip args $ upFrom 1
+  m = zip args [1..]
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
     A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
@@ -1921,7 +1914,7 @@ void fun(void) { rts_reduce(*((u*)512)); }
   _ -> interactCPP $ compile Host
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-  getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1)
+  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n - 1]
 
 -- Include directives.
 interactCPP f = do

@@ -22,8 +22,8 @@ goComb = interact dumpCombs
 export "lamb" goLamb
 goLamb = interact dumpLambs
 
-comEnum s = maybe (error $ s) id $ lookup s $ zip comlist (upFrom 1)
-comName i = maybe undefined id $ lookup i $ zip (upFrom 1) comlist
+comEnum s = maybe (error $ s) id $ lookup s $ zip comlist [1..]
+comName i = maybe undefined id $ lookup i $ zip [1..] comlist
 
 mempty = (id, 0)
 mconcat = foldr (<>) mempty
