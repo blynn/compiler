@@ -568,17 +568,17 @@ freeCount v expr = case expr of
   ; L w t -> if v == w then 0 else freeCount v t
   };
 
-optiApp s x = let { n = freeCount s x } in
+app01 s x = let { n = freeCount s x } in
   if 2 <= n then A $ L s x else
     if 0 == n then const x else flip (beta s) x;
-optiApp' t = case t of
-  { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
-  ; A x y -> A (optiApp' x) (optiApp' y)
-  ; L s x -> L s (optiApp' x)
+optiApp t = case t of
+  { A (L s x) y -> app01 s (optiApp x) (optiApp y)
+  ; A x y -> A (optiApp x) (optiApp y)
+  ; L s x -> L s (optiApp x)
   ; _ -> t
   };
 
-nolam m x = (\(Closed d) -> d) $ babs $ debruijn m [] $ optiApp' x;
+nolam m x = (\(Closed d) -> d) $ babs $ debruijn m [] $ optiApp x;
 
 isLeaf t c = case t of { Lf n -> n == ord c ; _ -> False };
 

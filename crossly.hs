@@ -1034,14 +1034,14 @@ freeCount v expr = case expr of
   V s -> if s == v then 1 else 0
   A x y -> freeCount v x + freeCount v y
   L w t -> if v == w then 0 else freeCount v t
-optiApp s x = case freeCount s x of
+app01 s x = case freeCount s x of
   0 -> const x
   1 -> flip (beta s) x
   _ -> A $ L s x
-optiApp' t = case t of
-  A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
-  A x y -> A (optiApp' x) (optiApp' y)
-  L s x -> L s (optiApp' x)
+optiApp t = case t of
+  A (L s x) y -> app01 s (optiApp x) (optiApp y)
+  A x y -> A (optiApp x) (optiApp y)
+  L s x -> L s (optiApp x)
   _ -> t
 
 -- Pattern compiler.
@@ -1108,7 +1108,7 @@ rewriteCase dcs as = acc . genCase dcs tab $ V "fail#" where
 
 secondM f (a, b) = (a,) <$> f b
 -- Compiles patterns. Overloads literals.
-patternCompile dcs t = optiApp' $ evalState (go t) 0 where
+patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
     E (Const c) -> pure $ A (V "fromInt") t
     E _ -> pure t
@@ -1386,7 +1386,7 @@ optiComb' (subs, combs) (s, lamb) = let
     LfVar v -> maybe t id $ lookup v subs
     Nd a b -> Nd (gosub a) (gosub b)
     _ -> t
-  c = optim $ gosub $ nolam $ optiApp' lamb
+  c = optim $ gosub $ nolam $ optiApp lamb
   combs' = combs . ((s, c):)
   in case c of
     Lf (Basic _) -> ((s, c):subs, combs')

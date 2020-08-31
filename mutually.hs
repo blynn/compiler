@@ -618,13 +618,13 @@ freeCount v expr = case expr of
   ; L w t -> if v == w then 0 else freeCount v t
   };
 
-optiApp s x = let { n = freeCount s x } in
+app01 s x = let { n = freeCount s x } in
   if 2 <= n then A $ L s x else
     if 0 == n then const x else flip (beta s) x;
-optiApp' t = case t of
-  { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
-  ; A x y -> A (optiApp' x) (optiApp' y)
-  ; L s x -> L s (optiApp' x)
+optiApp t = case t of
+  { A (L s x) y -> app01 s (optiApp x) (optiApp y)
+  ; A x y -> A (optiApp x) (optiApp y)
+  ; L s x -> L s (optiApp x)
   ; _ -> t
   };
 
@@ -905,8 +905,8 @@ rewritePatterns dcs = let {
     ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     }
   } in \case
-  { Left (s, t) -> Left (s, optiApp' $ evalState (go t) 0)
-  ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp' $ evalState (go t) 0) <$> ds))
+  { Left (s, t) -> Left (s, optiApp $ evalState (go t) 0)
+  ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp $ evalState (go t) 0) <$> ds))
   };
 
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
@@ -1023,7 +1023,7 @@ optiComb' (subs, combs) (s, lamb) = let
     ; Nd a b -> Nd (gosub a) (gosub b)
     ; _ -> t
     }
-  ; c = optim $ gosub $ nolam $ optiApp' lamb
+  ; c = optim $ gosub $ nolam $ optiApp lamb
   ; combs' = combs . ((s, c):)
   } in case c of
   { Lf (Basic b) -> ((s, c):subs, combs')

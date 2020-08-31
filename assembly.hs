@@ -638,18 +638,18 @@ freeCount v expr = case expr of
   ; L w t -> if v == w then 0 else freeCount v t
   };
 
-optiApp s x = let { n = freeCount s x } in
+app01 s x = let { n = freeCount s x } in
   if 2 <= n then A $ L s x else
     if 0 == n then const x else flip (beta s) x;
-optiApp' t = case t of
-  { A (L s x) y -> optiApp s (optiApp' x) (optiApp' y)
-  ; A x y -> A (optiApp' x) (optiApp' y)
-  ; L s x -> L s (optiApp' x)
+optiApp t = case t of
+  { A (L s x) y -> app01 s (optiApp x) (optiApp y)
+  ; A x y -> A (optiApp x) (optiApp y)
+  ; L s x -> L s (optiApp x)
   ; _ -> t
   };
 
 nolam lambs = let
-  { comtab = foldl (\m (s, t) -> insert s (optim m $ nolam' $ optiApp' t) m) Tip lambs
+  { comtab = foldl (\m (s, t) -> insert s (optim m $ nolam' $ optiApp t) m) Tip lambs
   } in map (\(s, _) -> (s, maybe undefined id $ mlookup s comtab)) lambs;
 
 resolve tab t = case t of
@@ -925,8 +925,8 @@ rewritePatterns dcs = let {
     ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     }
   } in \case
-  { Left (s, t) -> Left (s, optiApp' $ evalState (go t) 0)
-  ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp' $ evalState (go t) 0) <$> ds))
+  { Left (s, t) -> Left (s, optiApp $ evalState (go t) 0)
+  ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp $ evalState (go t) 0) <$> ds))
   };
 
 prove ienv s (t, a) = flip fmap (prove' ienv ([], 0) a) \((ps, _), x) ->
