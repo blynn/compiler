@@ -878,7 +878,7 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> guards "->"
+alts = braceSep $ (,) <$> pat <*> caseGuards
 cas = Ca <$> between (res "case") (res "of") expr <*> alts
 lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts)
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
@@ -953,19 +953,20 @@ pat = patP 0
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
 
-guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+guards s v = maybeWhere $ res s *> expr <|> foldr ($) v <$> some ((\x y -> case x of
   V "True" -> \_ -> y
   _ -> A (A (A (V "if") x) y)
   ) <$> (res "|" *> expr) <*> (res s *> expr))
-
+eqGuards = guards "=" $ V "pjoin#"
+caseGuards = guards "->" $ V "cjoin#"
 onePat vs x = Pa [(vs, x)]
 opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case patVars p of
   [] -> []
   (h:t) -> let gen = '@':h in
     (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+def = liftA2 (\l r -> [(l, r)]) var (onePat <$> many apat <*> eqGuards)
+  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> eqGuards <|> leftyPat x <$> eqGuards)
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -1218,8 +1219,8 @@ updateCaseSt dcs (acc, tab) alt = case alt of
   Left f -> (acc . genCase dcs tab . f, Tip)
   Right upd -> (acc, upd tab)
 
-rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip)
-  $ uncurry classifyAlt <$> as) \acc tab -> acc . genCase dcs tab $ V "fail#"
+rewriteCase dcs as = acc . genCase dcs tab $ V "fail#" where
+  (acc, tab) = foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as
 
 secondM f (a, b) = (a,) <$> f b
 -- Compiles patterns. Overloads literals.

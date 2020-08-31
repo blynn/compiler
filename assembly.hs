@@ -356,11 +356,13 @@ pat = PatCon <$> gcon <*> many (apat' pat)
   <|> (&) <$> apat' pat <*> ((\s r l -> PatCon s [l, r]) <$> conop <*> apat' pat <|> pure id);
 apat = apat' pat;
 
-guards s r = tok s *> r <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+guards s v r = tok s *> r <|> foldr ($) v <$> some ((\x y -> case x of
   { V "True" -> \_ -> y
   ; _ -> A (A (A (V "if") x) y)
   }) <$> (spch '|' *> r) <*> (tok s *> r));
-alt r = (,) <$> pat <*> guards "->" r;
+eqGuards = guards "=" $ V "pjoin#";
+caseGuards = guards "->" $ V "cjoin#";
+alt r = (,) <$> pat <*> caseGuards r;
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts r = braceSep (alt r);
 cas r = Ca <$> between (tok "case") (tok "of") r <*> alts r;
@@ -407,8 +409,8 @@ coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
   ; f _ _ = error "bad multidef"
   } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t;
 
-def r = opDef <$> apat <*> varSym <*> apat <*> guards "=" r
-  <|> liftA2 (,) var (liftA2 onePat (many apat) (guards "=" r));
+def r = opDef <$> apat <*> varSym <*> apat <*> eqGuards r
+  <|> liftA2 (,) var (liftA2 onePat (many apat) (eqGuards r));
 
 addLets ls x = foldr (\(name, def) t -> A (L name t) $ maybeFix name def) x ls;
 letin r = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep (def r)) <*> r;

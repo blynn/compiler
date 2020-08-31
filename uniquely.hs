@@ -367,11 +367,13 @@ pat = patP 0;
 
 maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce <$> braceSep def) <|> pure id);
 
-guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+guards s v = maybeWhere $ tok s *> expr <|> foldr ($) v <$> some ((\x y -> case x of
   { V "True" -> \_ -> y
   ; _ -> A (A (A (V "if") x) y)
   }) <$> (spch '|' *> expr) <*> (tok s *> expr));
-alt = (,) <$> pat <*> guards "->";
+eqGuards = guards "=" $ V "pjoin#";
+caseGuards = guards "->" $ V "cjoin#";
+alt = (,) <$> pat <*> caseGuards;
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts = braceSep alt;
 cas = Ca <$> between (tok "case") (tok "of") expr <*> alts;
@@ -443,8 +445,8 @@ leftyPat p expr = case patVars p of
     (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
   };
 
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
+def = liftA2 (\l r -> [(l, r)]) var (onePat <$> many apat <*> eqGuards)
+  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> eqGuards <|> leftyPat x <$> eqGuards);
 
 nonemptyTails [] = [];
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;

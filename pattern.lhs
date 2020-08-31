@@ -271,7 +271,7 @@ We use language features we just added to shrink the code. At the same time, we
 add support for guards.
 
 Before, the right-hand sides of lambdas, equations, and case alternatives were
-simply `Ast` values.  We change to the type `[(Ast, Ast]`, that is, a list of
+simply `Ast` values.  We change to the type `[(Ast, Ast)]`, that is, a list of
 pairs of expressions. During parsing, the guard condition becomes the first
 element of a pair, and the corresponding expression is the second element. We
 use a list because there can be multiple guards.

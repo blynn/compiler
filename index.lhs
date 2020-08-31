@@ -343,7 +343,7 @@ Gustafson, 'The End of Error: Unum Computing', I'm glad I'm not an expert on
 the stuff they asked in that Numerical Analysis exam. But that's a topic for
 another day.)
 
-== Duet ==
+== See also ==
 
 https://github.com/chrisdone/duet[Duet is another tiny implementation of a
 subset of Haskell].
