@@ -20,38 +20,50 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-typedef unsigned u;
 
-enum { FORWARD = 27, REDUCING = 9 };
+typedef unsigned (*FUNCTION1) ();
+typedef void (*FUNCTION2) (unsigned);
+
+#define FORWARD 27
+#define REDUCING 9
+
+#define TOP    (1 << 23)
+#define TABMAX (1 << 10)
+#define BUFMAX (1 << 20)
+
 
 void die(char *s)
 {
 	fprintf(stderr, "error: %s\n", s);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
-enum { TOP = 1 << 23, TABMAX = 1 << 10, BUFMAX = 1 << 20 };
-//enum { TOP = 1000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
-u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
+unsigned *mem;
+unsigned *altmem;
+unsigned *sp;
+unsigned *spTop;
+unsigned hp;
+unsigned tab[TABMAX];
+unsigned tabn;
 
 void stats()
 {
-	printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp);
+	printf("[HP = %u, stack usage = %ld]\n", hp, (long)(spTop - sp));
 }
 
-static inline u isAddr(u n)
+unsigned isAddr(unsigned n)
 {
 	return n >= 128;
 }
 
-u evac(u n)
+unsigned evac(unsigned n)
 {
 	if(!isAddr(n))
 	{
 		return n;
 	}
 
-	u x = mem[n];
+	unsigned x = mem[n];
 
 	while(isAddr(x) && mem[x] == 'T')
 	{
@@ -66,7 +78,7 @@ u evac(u n)
 		x = mem[n] = 'I';
 	}
 
-	u y = mem[n + 1];
+	unsigned y = mem[n + 1];
 
 	switch(x)
 	{
@@ -95,12 +107,9 @@ u evac(u n)
 			}
 
 			return mem[n + 1];
-
-		default:
-			break;
 	}
 
-	u z = hp;
+	unsigned z = hp;
 	hp += 2;
 	mem[n] = FORWARD;
 	mem[n + 1] = z;
@@ -109,19 +118,19 @@ u evac(u n)
 	return z;
 }
 
-u gccount;
+unsigned gccount;
 void gc()
 {
 	gccount++;
 	hp = 128;
-	u di = hp;
+	unsigned di = hp;
 	sp = altmem + TOP - 1;
 	*sp = evac(*spTop);
 
 	//fprintf(stderr, "GC %u\n", hp - 128);
 	while(di < hp)
 	{
-		u x = altmem[di] = evac(altmem[di]);
+		unsigned x = altmem[di] = evac(altmem[di]);
 		di++;
 
 		if(x != 'a' && x != '#')
@@ -133,12 +142,12 @@ void gc()
 	}
 
 	spTop = sp;
-	u *tmp = mem;
+	unsigned *tmp = mem;
 	mem = altmem;
 	altmem = tmp;
 }
 
-static inline u app(u f, u x)
+unsigned app(unsigned f, unsigned x)
 {
 	mem[hp] = f;
 	mem[hp + 1] = x;
@@ -146,21 +155,20 @@ static inline u app(u f, u x)
 	return hp - 2;
 }
 
-static u root_memo;
-void reset(u root)
+unsigned root_memo;
+void reset(unsigned root)
 {
 	root_memo = root;
-	*(sp = spTop) = app(
-	                    app(app(root, app('0', '?')), '.'), app('T', '1'));
+	*(sp = spTop) = app(app(app(root, app('0', '?')), '.'), app('T', '1'));
 }
 
-void loadRaw(u(*get)())
+void loadRaw(unsigned(*get)())
 {
-	hp = 128 - 1;
+	hp = 127;
 
 	for(;;)
 	{
-		u c;
+		unsigned c;
 
 		do
 		{
@@ -172,7 +180,7 @@ void loadRaw(u(*get)())
 			break;
 		}
 
-		u n = 0;
+		unsigned n = 0;
 
 		for(;;)
 		{
@@ -191,9 +199,10 @@ void loadRaw(u(*get)())
 	reset(mem[128 - 1]);
 }
 
-u parseTerm(u(*get)())
+unsigned parseTerm(unsigned(*get)())
 {
-	u n, c;
+	unsigned n;
+	unsigned c;
 
 	do
 	{
@@ -237,11 +246,11 @@ u parseTerm(u(*get)())
 	}
 }
 
-void parseMore(u(*get)())
+void parseMore(unsigned(*get)())
 {
 	for(;;)
 	{
-		u c = parseTerm(get);
+		unsigned c = parseTerm(get);
 
 		if(!c)
 		{
@@ -264,7 +273,7 @@ void parseMore(u(*get)())
 }
 
 char *str;
-u str_get()
+unsigned str_get()
 {
 	return *(unsigned char*)str++;
 }
@@ -283,30 +292,30 @@ void parseRaw(char *s)
 	loadRaw(str_get);
 }
 
-static inline u arg(u n)
+unsigned arg(unsigned n)
 {
 	return mem[sp [n] + 1];
 }
-static inline u num(u n)
+unsigned num(unsigned n)
 {
 	return mem[arg(n) + 1];
 }
 
-static inline void lazy(u height, u f, u x)
+void lazy(unsigned height, unsigned f, unsigned x)
 {
-	u *p = mem + sp[height];
+	unsigned *p = mem + sp[height];
 	*p = f;
 	*++p = x;
 	sp += height - 1;
 	*sp = f;
 }
 
-static inline u apparg(u i, u j)
+unsigned apparg(unsigned i, unsigned j)
 {
 	return app(arg(i), arg(j));
 }
 
-static void foreign(u n)
+void foreign(unsigned n)
 {
 	switch(n)
 	{
@@ -317,22 +326,22 @@ static void foreign(u n)
 	};
 }
 
-void run(u(*get)(), void (*put)(u))
+void run(FUNCTION1 get, FUNCTION2 put)
 {
 	gccount = 0;
-	u c;
+	unsigned c;
 	clock_t start = clock();
 
 	for(;;)
 	{
-		// static int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-		// static int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+		// int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
+		// int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
 		if(mem + hp > sp - 8)
 		{
 			gc();
 		}
 
-		u x = *sp;
+		unsigned x = *sp;
 
 		if(isAddr(x))
 		{
@@ -343,6 +352,7 @@ void run(u(*get)(), void (*put)(u))
 				case FORWARD:
 					stats();
 					die("stray forwarding pointer");
+					break;
 
 				case '.':
 				{
@@ -432,12 +442,12 @@ void run(u(*get)(), void (*put)(u))
 
 				case 'a':
 				{
-					u mnt = arg(1);
-					u m = mnt >> 16;
-					u n = (mnt >> 8) & 255;
-					u t = mnt & 255;
+					unsigned mnt = arg(1);
+					unsigned m = mnt >> 16;
+					unsigned n = (mnt >> 8) & 255;
+					unsigned t = mnt & 255;
 					sp += 2;
-					u f = arg(m);
+					unsigned f = arg(m);
 
 					for(; n; n--)
 					{
@@ -467,7 +477,7 @@ void buf_reset()
 {
 	bufptr = buf;
 }
-void buf_put(u c)
+void buf_put(unsigned c)
 {
 	if(bufptr == buf_end)
 	{
@@ -730,10 +740,15 @@ void fp_reset(char *f)
 		die("fopen failed");
 	}
 }
-u fp_get()
+unsigned fp_get()
 {
-	u c = fgetc(fp);
-	return c == EOF ? fclose(fp), 0 : c;
+	int c = fgetc(fp);
+	if(c == EOF)
+	{
+		fclose(fp);
+		return 0;
+	}
+	return c;
 }
 
 const char iocccshim[] = "infixr 5 ++;(<=) = intLE;";
@@ -743,17 +758,21 @@ void ioccc_reset(char *f)
 	fp_reset(f);
 	iocccp = iocccshim;
 }
-u ioccc_get()
+unsigned ioccc_get()
 {
-	return *iocccp ? *iocccp++ : fp_get();
+	if(0 == *iocccp)
+	{
+		return *iocccp++;
+	}
+	return fp_get();
 }
 
-void pc(u c)
+void pc(unsigned c)
 {
 	putchar(c);
 	fflush(stdout);
 }
-u ioget()
+unsigned ioget()
 {
 	int c = getchar();
 
@@ -879,8 +898,8 @@ void iotest()
 
 int main(int argc, char **argv)
 {
-	mem = malloc(TOP * sizeof(u));
-	altmem = malloc(TOP * sizeof(u));
+	mem = malloc(TOP * sizeof(unsigned));
+	altmem = malloc(TOP * sizeof(unsigned));
 	buf_end = buf + BUFMAX;
 	spTop = mem + TOP - 1;
 
@@ -901,7 +920,7 @@ int main(int argc, char **argv)
 			rpg();
 			fp_reset("raw");
 			str = buf;
-			u c;
+			unsigned c;
 
 			while((c = str_get())) if(c != fp_get())
 				{
