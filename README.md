@@ -1,93 +1,126 @@
-# Compiler Quest
-![Build Status](https://github.com/oriansj/blynn-compiler/workflows/Build/badge.svg)
+# Bootstrapping GCC from combinatory logic
+![Build
+Status](https://github.com/siraben/compiler/workflows/Build/badge.svg)
 
-[The adventures of a Haskell compiler](https://crypto.stanford.edu/~blynn/compiler/).
+The [stage0](https://github.com/oriansj/stage0),
+[mes-m2](https://github.com/oriansj/mes-m2/) and
+[mescc-tools](https://savannah.nongnu.org/projects/mescc-tools)
+projects combined would make it possible to compile GCC starting from
+a minimal trusted binary less than 1 KB in size.  This project
+represents a promising alternative approach based on [Ben
+Lynn's](https://crypto.stanford.edu/~blynn/)
+[compiler](https://crypto.stanford.edu/~blynn/) for a subset of
+Haskell.  The entire process starts with a [single C file](./vm.c)
+which reads [ION
+assembly](https://crypto.stanford.edu/~blynn/compiler/asm.html), then
+[a few trusted
+compilers](https://crypto.stanford.edu/~blynn/compiler/quest.html)
+(which could be compiled manually by a motivated person), until the
+[first self-hosting version](./singularity) is reached.
 
-The main goal is to continually level-up a self-hosting Haskell
-compiler.  However, it's a survival game as well as an RPG: it should
-always be possible to build this compiler starting with only a C
-compiler.
+Then a successive chain of compilers ends with a dialect of
+Haskell 98.  We can take advantage of this to complete the bootstrap
+to GCC.  The goals in mind are to complete the bootstrap in as little
+effort as possible, while still maintaining correctness and
+readability.
 
-I had thought this was a daunting challenge. In the past, constructing
-a parser alone was a laborious grind for me. Then it got worse:
-compilers manipulate abstract syntax trees, so the self-hosting
-requirement demands the source language be complex enough to handle
-compound data types.
+The entire [build process](./pkgs/blynn-compiler.nix) has been
+formalized in Nix and continuously checked with [GitHub
+Actions](./.github/workflows/build.yml), showing that only
+[mescc-tools-seed](https://github.com/OriansJ/mescc-tools-seed) is
+needed.
 
-This time around, I found it shockingly easy to bootstrap a compiler
-for stripped-down Haskell (or perhaps I should say souped-up lambda
-calculus), thanks to a few tricks:
-
-* Parsing combinators are a joy to build from scratch and a joy to
-  use.
-* Kiselyov's bracket abstraction algorithm is simple yet practical.
-* Interpreting basic combinators is child's play, and almost the only
-  task we need perform in C or assembly.
-* Lambda calculus gives us the Scott encoding for free. Thus we
-  effortlessly gain algebraic data types.
-* Laziness is at odds with native instructions, which are eagerly
-  evaluated.  However, we can readily reconcile their differences with
-  shrewdly chosen combinators.
-
-Perhaps the greatest difficulty was mustering the discipline to mark
-the road taken so that anyone with a C compiler can follow.
-
-## How to build
-
-The earliest generations of our compiler reside in `vm.c`:
+## Building on x86_64-linux
+To build blynn-compiler with Nix without installing anything:
 
 ```ShellSession
-$ cc -O2 vm.c -o vm
+$ nix-build -I nixpkgs=https://github.com/OriansJ/blynn-compiler/archive/master.tar.gz '<nixpkgs>' -A blynn-compiler
 ```
 
-When run without arguments, this program gets each compiler to compile
-its successor, which results in a series of numbers that we output to
-`raw`:
+To build it from the Git repository:
 
 ```ShellSession
-$ ./vm > raw
+$ nix-build -A blynn-compiler # if using Nix
+$ make # otherwise
 ```
 
-These numbers are a compiled form of the `barely.hs` compiler. The `vm
-run` command reads this `raw` file and interprets it to compile a
-given Haskell file:
+Note that the Makefile uses the system C compiler instead of the
+minimal seed.
 
-```ShellSession
-$ echo "prependH s = 'H':s;" > /tmp/example.hs
-$ echo "ello, World!" | ./vm run /tmp/example.hs
-```
+## Finishing the GCC bootstrap
+### From a Scheme interpreter in Haskell
+Since Ben Lynn's compiler already bootstraps a large subset of Haskell
+(layout parsing, monadic I/O, typeclasses, etc.), it would not be
+difficult to write a Scheme interpreter (see
+[r5rs-denot](https://github.com/siraben/r5rs-denot) for a
+semantics-conforming R5RS interpreter).  This Scheme interpreter would
+accept Scheme code from stdin and interpret it.
 
-It only accepts code that type-checks. Moreover, the `(<=)` operator
-is undefined and disallows mixing the `(++)` operator with `(:)`
-unless its fixity has been declared. This conflicts with the examples
-bundled with [my IOCCC
-entry](https://www.ioccc.org/2019/whowon.html). The `vm ioccc` command
-inserts code to fix these issues:
+#### Advantages
+- Heavy work of implementing many of Haskell's features has been done
+  already.
+- Can use GHC to aid development of the interpreter (Ben Lynn's
+  Haskell dialect with a short preamble can be read by GHC),
+  especially with testing, type checking and linting.
+- Easier verification of interpreter since written in standard
+  Haskell and should be based on denotational semantics.
 
-```ShellSession
-$ ./vm ioccc fib.hs
-```
+#### Disadvantages
+- Bootstrapping is slower, more resource intensive intermediate
+  phases, compared to an alternative approach below.
+- Fully understanding and verifying all the Haskell passes requires
+  knowledge of parser combinators, type inference, semantic bracket
+  abstraction, among others. (minimizing the diff between stages helps
+  here)
 
-The compilers thus far expect pure functions as input. The last
-function should have type `String -> String`, and we implicitly wrap
-it in the `interact` function from the standard Haskell Prelude during
-compilation.
+### From a Scheme compiler in Haskell
+If performance becomes a problem, it may be necessary to compile
+rather than interpret Scheme.
 
-The `effectively.hs` compiler bucks the trend. It assumes the last
-function has type `IO ()`, and treats it like `main` in a standard
-Haskell program.  It also has support for FFI.
+#### Advantages
+- More precise bootstrapping path, i.e. implementing type inference,
+  parsing fixity declarations are not needed.
+- Scheme compiler could be more efficient than interpretation.
 
-The `lonely.hs` compiler is the first generation with a main function
-of type `IO ()`. It also outputs C code that should be appended to
-`rts.c`.
+#### Disadvantages
+- More work to do, and since the intermediate languages are custom and
+  typeless we cannot really reuse existing tooling elsewhere to aid us.
+- Requires compilation of a call-by-value language into one that is
+  call-by-need, effect on time and space usage unknown.
 
-In sum, after running the above to produce `raw`, we can build a
-standalone compiler with:
+## Resources
+It is recommended to have good knowledge of functional languages,
+their theory and implementation.  For more specialized topics the
+relevant resources are shown below.
 
-```ShellSession
-$ (cat rts.c; ./vm run effectively.hs) > lonely.c
-$ cc -O2 lonely.c -o lonely
-```
+### Parsing
+- [Applicative programming with
+  effects](https://openaccess.city.ac.uk/id/eprint/13222/1/), [Monadic
+  parser
+  combinators](https://nottingham-repository.worktribe.com/preview/1024448/monparsing.pdf)
+  - After singularity, every compiler uses applicative parser
+    combinators.
 
-(A few generations later, our `virtually.hs` compiler bundles the
-runtime system with the output, so the `cat` is no longer needed.)
+### Type system
+- [Typing Haskell in
+  Haskell](https://web.cecs.pdx.edu/~mpj/thih/thih.pdf)
+  - The type checking and inference code is taken from this paper.
+- [Tackling the Awkward Squad: monadic input/output, concurrency,
+  exceptions, and foreign-language calls in
+  Haskell](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/mark.pdf)
+  - The effectively compiler adds IO and FFI.  This paper gives
+    relevant background on how it is implemented.
+
+### Compilation
+- [Scott
+  encoding](https://crypto.stanford.edu/~blynn/compiler/scott.html)
+  - Turns out compiling algebraic data types and pattern matching
+    isn't hard at all, if you know how to rewrite it to lambda
+    calculus.  Scott encoding is one such method.
+- [Lambda to SKI,
+  Semantically](http://okmij.org/ftp/tagless-final/ski.pdf)
+  - Without the results from this paper, compiling to combinators
+    would be far more inefficient.  The paper uses a semantic
+    translation rather than the usual syntactic translation, thus
+    making compositionality and correctness-preservation more
+    self-evident.
