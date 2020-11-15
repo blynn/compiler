@@ -41,12 +41,12 @@ void die(char *s)
 	exit(EXIT_FAILURE);
 }
 
-unsigned *mem;
-unsigned *altmem;
-unsigned *sp;
-unsigned *spTop;
+unsigned* mem;
+unsigned* altmem;
+unsigned* sp;
+unsigned* spTop;
 unsigned hp;
-unsigned tab[TABMAX];
+unsigned* tab;
 unsigned tabn;
 
 void stats()
@@ -83,33 +83,31 @@ unsigned evac(unsigned n)
 
 	unsigned y = mem[n + 1];
 
-	switch(x)
+	if(FORWARD == x) return y;
+	else if(REDUCING == x)
 	{
-		case FORWARD:
-			return y;
+		mem[n] = FORWARD;
+		mem[n + 1] = hp;
+		hp += 2;
+		return mem[n + 1];
+	}
+	else if('I' == x)
+	{
+		mem[n] = REDUCING;
+		y = evac(y);
 
-		case REDUCING:
+		if(mem[n] == FORWARD)
+		{
+			altmem[mem[n + 1]] = 'I';
+			altmem[mem[n + 1] + 1] = y;
+		}
+		else
+		{
 			mem[n] = FORWARD;
-			mem[n + 1] = hp;
-			hp += 2;
-			return mem[n + 1];
+			mem[n + 1] = y;
+		}
 
-		case 'I':
-			mem[n] = REDUCING;
-			y = evac(y);
-
-			if(mem[n] == FORWARD)
-			{
-				altmem[mem[n + 1]] = 'I';
-				altmem[mem[n + 1] + 1] = y;
-			}
-			else
-			{
-				mem[n] = FORWARD;
-				mem[n + 1] = y;
-			}
-
-			return mem[n + 1];
+		return mem[n + 1];
 	}
 
 	unsigned z = hp;
@@ -133,7 +131,8 @@ void gc()
 	//fprintf(stderr, "GC %u\n", hp - 128);
 	while(di < hp)
 	{
-		unsigned x = altmem[di] = evac(altmem[di]);
+		unsigned x = altmem[di];
+		altmem[di] = evac(altmem[di]);
 		di++;
 
 		if(x != 'a' && x != '#')
@@ -212,41 +211,37 @@ unsigned parseTerm(unsigned(*get)())
 		c = get();
 	} while(c == '\n');
 
-	switch(c)
+	if('`' == c)
 	{
-		case '`':
-			c = parseTerm(get);
-			return app(c, parseTerm(get));
-
-		case '#':
-			return app('#', get());
-
-		case '@':
-			return tab[get() - ' '];
-
-		case '(':
-			n = 0;
-
-			while((c = get()) != ')')
-			{
-				n = 10 * n + c - '0';
-			}
-
-			return app('#', n);
-
-		case '[':
-			n = 0;
-
-			while((c = get()) != ']')
-			{
-				n = 10 * n + c - '0';
-			}
-
-			return tab[n];
-
-		default:
-			return c;
+		c = parseTerm(get);
+		return app(c, parseTerm(get));
 	}
+	else if('#' == c) return app('#', get());
+	else if('@' == c) return tab[get() - ' '];
+	else if('(' == c)
+	{
+		n = 0;
+
+		while((c = get()) != ')')
+		{
+			n = 10 * n + c - '0';
+		}
+
+		return app('#', n);
+	}
+	else if('[' == c)
+	{
+		n = 0;
+
+		while((c = get()) != ']')
+		{
+			n = 10 * n + c - '0';
+		}
+
+		return tab[n];
+	}
+
+	return c;
 }
 
 void parseMore(unsigned(*get)())
@@ -320,13 +315,11 @@ unsigned apparg(unsigned i, unsigned j)
 
 void foreign(unsigned n)
 {
-	switch(n)
+	if(1 == n)
 	{
-		case 1:
-			putchar(num(2));
-			lazy(4, app(arg(4), 'K'), arg(3));
-			break;
-	};
+		putchar(num(2));
+		lazy(4, app(arg(4), 'K'), arg(3));
+	}
 }
 
 void run(FUNCTION get, FUNCTION put)
@@ -350,127 +343,72 @@ void run(FUNCTION get, FUNCTION put)
 		{
 			*--sp = mem[x];
 		}
-		else switch(x)
+		else if(FORWARD == x)
+		{
+			stats();
+			die("stray forwarding pointer");
+		}
+		else if('.' == x)
+		{
+			clock_t end = clock();
+			fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
+			return;
+		}
+		else if('Y' == x) lazy(1, arg(1), sp[1]);
+		else if('S' == x) lazy(3, apparg(1, 3), apparg(2, 3));
+		else if('B' == x) lazy(3, arg(1), apparg(2, 3));
+		else if('C' == x) lazy(3, apparg(1, 3), arg(2));
+		else if('R' == x) lazy(3, apparg(2, 3), arg(1));
+		else if('I' == x)
+		{
+			sp[1] = arg(1);
+			sp++;
+		}
+		else if('T' == x) lazy(2, arg(2), arg(1));
+		else if('K' == x) lazy(2, 'I', arg(1));
+		else if(':' == x) lazy(4, apparg(4, 1), arg(2));
+		else if('0' == x)
+		{
+			c = get(0);
+			!c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?'));
+		}
+		else if('#' == x) lazy(2, arg(2), sp[1]);
+		else if('1' == x)
+		{
+			put(num(1));
+			lazy(2, app(arg(2), '.'), app('T', '1'));
+		}
+		else if('=' == x) num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
+		else if('L' == x) num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
+		else if('*' == x) lazy(2, '#', num(1) * num(2));
+		else if('/' == x) lazy(2, '#', num(1) / num(2));
+		else if('%' == x) lazy(2, '#', num(1) % num(2));
+		else if('+' == x) lazy(2, '#', num(1) + num(2));
+		else if('-' == x) lazy(2, '#', num(1) - num(2));
+		else if('a' == x)
+		{
+			unsigned mnt = arg(1);
+			unsigned m = mnt >> 16;
+			unsigned n = (mnt >> 8) & 255;
+			unsigned t = mnt & 255;
+			sp += 2;
+			unsigned f = arg(m);
+
+			for(; n; n--)
 			{
-				case FORWARD:
-					stats();
-					die("stray forwarding pointer");
-					break;
-
-				case '.':
-				{
-					clock_t end = clock();
-					fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
-					return;
-				}
-
-				case 'Y':
-					lazy(1, arg(1), sp[1]);
-					break;
-
-				case 'S':
-					lazy(3, apparg(1, 3), apparg(2, 3));
-					break;
-
-				case 'B':
-					lazy(3, arg(1), apparg(2, 3));
-					break;
-
-				case 'C':
-					lazy(3, apparg(1, 3), arg(2));
-					break;
-
-				case 'R':
-					lazy(3, apparg(2, 3), arg(1));
-					break;
-
-				case 'I':
-					sp[1] = arg(1);
-					sp++;
-					break;
-
-				case 'T':
-					lazy(2, arg(2), arg(1));
-					break;
-
-				case 'K':
-					lazy(2, 'I', arg(1));
-					break;
-
-				case ':':
-					lazy(4, apparg(4, 1), arg(2));
-					break;
-
-				case '0':
-					c = get(0);
-					!c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?'));
-					break;
-
-				case '#':
-					lazy(2, arg(2), sp[1]);
-					break;
-
-				case '1':
-					put(num(1));
-					lazy(2, app(arg(2), '.'), app('T', '1'));
-					break;
-
-				case '=':
-					num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
-					break;
-
-				case 'L':
-					num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
-					break;
-
-				case '*':
-					lazy(2, '#', num(1) * num(2));
-					break;
-
-				case '/':
-					lazy(2, '#', num(1) / num(2));
-					break;
-
-				case '%':
-					lazy(2, '#', num(1) % num(2));
-					break;
-
-				case '+':
-					lazy(2, '#', num(1) + num(2));
-					break;
-
-				case '-':
-					lazy(2, '#', num(1) - num(2));
-					break;
-
-				case 'a':
-				{
-					unsigned mnt = arg(1);
-					unsigned m = mnt >> 16;
-					unsigned n = (mnt >> 8) & 255;
-					unsigned t = mnt & 255;
-					sp += 2;
-					unsigned f = arg(m);
-
-					for(; n; n--)
-					{
-						f = app(f, mem[*sp++ + 1]);
-					}
-
-					sp += t;
-					mem[*sp] = 'I';
-					mem[*sp + 1] = f;
-					break;
-				}
-
-				case 'F':
-					foreign(arg(1));
-					break;
-
-				default:
-					printf("?%u\n", x);
-					die("unknown combinator");
+				f = app(f, mem[*sp++ + 1]);
 			}
+
+			sp += t;
+			mem[*sp] = 'I';
+			mem[*sp + 1] = f;
+		}
+		else if('F' == x) foreign(arg(1));
+		else
+		{
+			printf("?%u\n", x);
+			die("unknown combinator");
+		}
 	}
 }
 
@@ -907,6 +845,7 @@ int main(int argc, char **argv)
 	altmem = malloc(TOP * sizeof(unsigned));
 	buf_end = buf + BUFMAX;
 	spTop = mem + TOP - 1;
+	tab = calloc(TABMAX, sizeof(unsigned));
 
 	if(argc > 1)
 	{
