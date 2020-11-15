@@ -20,16 +20,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "gcc_req.h"
 
-typedef unsigned (*FUNCTION1) ();
-typedef void (*FUNCTION2) (unsigned);
-
+//CONSTANT FORWARD 27
 #define FORWARD 27
+//CONSTANT REDUCING 9
 #define REDUCING 9
 
-#define TOP    (1 << 23)
-#define TABMAX (1 << 10)
-#define BUFMAX (1 << 20)
+//CONSTANT TOP    8388608
+#define TOP       8388608
+//CONSTANT TABMAX 1024
+#define TABMAX    1024
+//CONSTANT BUFMAX 1048576
+#define BUFMAX    1048576
 
 
 void die(char *s)
@@ -326,7 +329,7 @@ void foreign(unsigned n)
 	};
 }
 
-void run(FUNCTION1 get, FUNCTION2 put)
+void run(FUNCTION get, FUNCTION put)
 {
 	gccount = 0;
 	unsigned c;
@@ -399,7 +402,7 @@ void run(FUNCTION1 get, FUNCTION2 put)
 					break;
 
 				case '0':
-					c = get();
+					c = get(0);
 					!c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?'));
 					break;
 
@@ -477,7 +480,7 @@ void buf_reset()
 {
 	bufptr = buf;
 }
-void buf_put(unsigned c)
+unsigned buf_put(unsigned c)
 {
 	if(bufptr == buf_end)
 	{
@@ -485,6 +488,7 @@ void buf_put(unsigned c)
 	}
 
 	*bufptr++ = c;
+	return 0;
 }
 
 void testCmp(char *inp, char *want)
@@ -767,10 +771,11 @@ unsigned ioccc_get()
 	return fp_get();
 }
 
-void pc(unsigned c)
+unsigned pc(unsigned c)
 {
 	putchar(c);
 	fflush(stdout);
+	return 0;
 }
 unsigned ioget()
 {
