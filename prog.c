@@ -1,3 +1,21 @@
+/*
+ * Copyright © 2019 Ben Lynn
+ * This file is part of blynn-compiler.
+ *
+ * blynn-compiler is free software: you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, only under version 3 of
+ * the License.
+ *
+ * blynn-compiler is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with blynn-compiler.  If not, see
+ * <https://www.gnu.org/licenses/>.
+ */
 #define x 0/**/
 char*v,*y="33Yb59@&iBFApt;[[h3V19\\3<:4cJ!U 2eT18pC,Qqik4J:sh?HUXMrR(-l0R\"!eKZcI!@E(@B,C/*!aogn5LbK/e=2CmReb+6,]kD!iOC9DEOC9Dc1EV6976c?&s)Be;P;E^tl2eUYkg*#Yf:6^d[Mg_P;VGCr823^L_<X+j2,%nD20Ls lmpi&I(*hV=+p aTO`r.b1<i[/R\\t1,KBt)\\%;\\@27H>^#d6B!tb-on27d%i_OS5(W5eV-=M14kYO);Fe7k!N41<iX*T,kHW,&)_l&L)'0:Jj%j7^h+JU /9pZn&Td:&T%'TE<7>LW%m/R\\rON3-=G]^akjT778YCJ7B8e-5E#RX R=Ig8#/pDdAI;=a[ ISbp't+ZLJ;lUO71C)b5[Y)qTWmFJ)G1ehmS<.`n3RnE IG+G_A`CE=?hZU)bScgt7R3GNs+V(HQLL_R)n4;]#cUR.p>5!^4T3pQg^o//WLATCE18mSUme[Q<53e:')Q_%<L$1lKOnFD(R3%*jj85VW+#8Wt*Ud,1D7AKcdh<9r%igC$2</HD7X$K_0Rr/>L.*D2%;[0B+#8UANT1.tSd/^@L$&a6^g@jYNMC7O<rPWO5AfA;C'9WnLn9E:0d:R\\hAZ^m=/09d.R$Jd%:Gp hB-g4&N!VO)$;iED1:F`^`UrnWCSZ!L$Tdma!_hn7H0F$^MT(-Ln9F_Ljfp9*h8Er!<.g.h_7@b0l03?a+]`=dIoY>WCKOk&#[9FCQ#WFoga(tK<[PG6@5k2KY\\ oW':M;e//kd\"[l,_V?UlZ,m(Hh?O81mhM!G18 ]7m?X7e^[7EZYj[;kR,YXD\\X,!k6.HF8Z(V^^nBYea^NIL:]lG0(/\\Ik<m`>jPam;F-A,(tVN+bG@<L'J 1D8dE*hN87:TsccSKVE7KP+k8^5qZIkJG_fH_$MS--5(!*St/1:b+g8(/*",*T,*n=" $6I7H#v Jw\t{\v}\f;\t \v }\f }\f \f \f \v }\f \v\t } }\t ;\f }\f \f\t {\f\v } \f\t }\f ;\t \f\f \t\t {\f {\v\v \t \v\v\v \f }\v\v } }\v\v \f\v\v \f\v\v ;\v\v \v ;\v\v \t\v\v }\v\v \v\t ;\v\v \t\v\v }\v\v }\v\v ;\f }\t }\t }\v\v ;\f }\t \f\f \v\t \f\f \t\v\v }\v\v ;\v\v \t\v\v }\v\v {\t \f\f \f\v\v \t\v\v }\t ;\f }\f }\v\v \t\v\v ; \f\f ;\f }\f \t\f }\f ;\v\v \f\v\v {\t }\f \f\v\v \v {\f\v }\v\v ;\v\v }\f {\f\v ;\t {\f\v \f\v\v ;\t {\f\v \f\t }\f \v ;\v\v ;\v\v ;\t\v {\v\v {\f\v }\f\v }\v\v \t\f\v ;\v\v \t\v\v ;\v\v {\f\v \t\v\v } \f\v\v \f\f\v {\v} \f\v\v }\v\v \v\v} }\f \f\f {\t\v ;\f \f\f \v {\t \f\f \t\f ;\f } {\t \t\f } }\f \v\f} }\t \f \f \f\f ;\v} ;\t \f\t }\f }\t }\t\v \f\v} }\f} }\f \v\f} \f\t }\t {\f}  :!#$%&*+./<=>?@\\^|-~\t\t\t \v\v\v \f\t   \n\t\v\f} {\v\v {\v\v \f\f }\f  --\t\t\t \f\t ;\f} ;\f \v\t ;\f }\f \v\t }\f \f\t \v\f\v ;\v\v {\f\v {\f\v \v\f\v } }\v\v \f\v\v }\f {\f\v \v\f} \t\v\v ;\v\v \t\t }\v\t \t\v\v \v\v\v  \\'\"\t\t\f} {\f\v ;\f \t\t }\v{\f \v\v\v }\t} }\v\v \v\v\v \t\f} ;\v\f \v\f} }\f} \f\f\v \f\v\f }\f} }\f  :\t\f\v} \v\t \v\v\v }\f }\t }\f \v\v\t \f\v\t }\f\v \v\f\v {\f\t \f\t{\f \v\f\v ;\f\f \v\v\t \f\v\f \t\v\t  of\t\v\v\v ;\t\v \f\t\v } \f\f {\t\v }\t\v }\t\v \f\f \f\t }\f\v \f\v} {\f\v \t\v\f \f\f }\f \f\v\v ;\t\v \t\v\v \v\t {\f\t {\f\t }\f }\t ;\v} \t\v} {\v} ;\f }\f \f\f }\t\f \t\v\f }\v} \f\v} \f\v\f \f\f \v\v\v ;\t }\f} \t\v\v \t\f\v {\t  ->\t\v\v\v \f\t{\f \t\t{\f \t\v\f \v\f\v \v\t\v ;\t \f\v} ;\t \f\f} }\f} \f\v; \t\f} \v\f\v \t\f\f }\t \f\f} }\f} \v\t \t\v} \t\t {\f} \t\f\v \v\f\f \f\f} \v\v; }\f\f \t\v} }\f} }\f} }\f} {\f\v }\v} \f\v} \f\v} ;\f\v \f\v} \v\f\v {\f\v }\v} ;\t\v ;\t\v {\f} ;\f\v ;\t\v \f\f} ;\f\f \f\f} }\v; {\t} {\f \t ;\f ;  \v\t\v \t\v} \f\f\v }\f} }\f} }\f} }\f} ;\f} \f\f} \f\v; }\f\f {\t\f {\v} ;\f  let\t;\f  in\t\t\f }\f ;\f} \f\f} \v\v; }\f\f } {\v} ;\f  case\t;\f }\v\v \t\f \v\f} \v\t ;\f} \f\f} }\t {\f} {\v\v \v\f} {\t ;\f} \f\f} \f\v; {\t\f {\v} {\t\v }\v\t {\t \f\f ;\t }\f} }\f} \f\f} }\f\v \t\t \t\f} ;\f} \f\f} ;\f} \f\f} }\f\f }\f\f \t\t} \f\f\f \t\t \v\t \t\v;  \f\v; \t\v; \t \v } {\f; {\f; {\f; } \t } } \f\v; } }\f\f \v \f\v;  } \v {\f ;\v\v  {\f; } } \v\f; {\f; }\f; } }\f; \v }\f; \v \f\f }\f; \f\f \v\f; }\v; ;\v; \f\f }\f; ;\f \t ;\t }\f; } }\f ;\f} \f\v\v  : <= * + - /\t}\f; {\f\v }\f \t\f} {\v} \v\t} \v\f; }\f\f \f\t\v {\t} \t\f} ;\f\v }\t  data\t\v\f\f \v\t \v\t} \v\v; }\f; ;\t} {\v\v {\f; \v\t\f {\t\f \v\t\f }\f\f \v\v; ;\v; \f\t\v }\t} \v\t} }\f; \v\v\v \v\t} ;\f } ;\f} {\t} {\t} }\v\v \v\t }\f\v \v\t ;\v\v ;\t{\f \v\t} } {\t \v }\t} \v\t} {\f; \t\f ;\f} }\t} \v\t} {\t\f {\t\v \f\v\v \t\f \t\v\f ;\f; #define x \\";
 #include <stdio.h>
