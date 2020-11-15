@@ -122,7 +122,7 @@ unsigned evac(unsigned n)
 unsigned gccount;
 void gc()
 {
-	gccount++;
+	gccount = gccount + 1;
 	hp = 128;
 	unsigned di = hp;
 	sp = altmem + TOP - 1;
@@ -133,14 +133,14 @@ void gc()
 	{
 		unsigned x = altmem[di];
 		altmem[di] = evac(altmem[di]);
-		di++;
+		di = di + 1;
 
 		if(x != 'a' && x != '#')
 		{
 			altmem[di] = evac(altmem[di]);
 		}
 
-		di++;
+		di = di + 1;
 	}
 
 	spTop = sp;
@@ -195,7 +195,8 @@ void loadRaw(unsigned(*get)())
 			c = get();
 		}
 
-		mem[hp++] = n;
+		mem[hp] = n;
+		hp = hp + 1;
 	}
 
 	reset(mem[128 - 1]);
@@ -261,7 +262,8 @@ void parseMore(unsigned(*get)())
 			die("table overflow");
 		}
 
-		tab[tabn++] = c;
+		tab[tabn] = c;
+		tabn = tabn + 1;
 
 		if(get() != ';')
 		{
@@ -273,7 +275,9 @@ void parseMore(unsigned(*get)())
 char *str;
 unsigned str_get()
 {
-	return *(unsigned char*)str++;
+	unsigned c = str[0] & 0xFF;
+	str = str + 1;
+	return c;
 }
 
 void parse(char *s)
@@ -303,7 +307,8 @@ void lazy(unsigned height, unsigned f, unsigned x)
 {
 	unsigned *p = mem + sp[height];
 	*p = f;
-	*++p = x;
+	p = p + 1;
+	*p = x;
 	sp += height - 1;
 	*sp = f;
 }
@@ -341,7 +346,8 @@ void run(FUNCTION get, FUNCTION put)
 
 		if(isAddr(x))
 		{
-			*--sp = mem[x];
+			sp = sp - 1;
+			*sp = mem[x];
 		}
 		else if(FORWARD == x)
 		{
@@ -362,7 +368,7 @@ void run(FUNCTION get, FUNCTION put)
 		else if('I' == x)
 		{
 			sp[1] = arg(1);
-			sp++;
+			sp = sp + 1;
 		}
 		else if('T' == x) lazy(2, arg(2), arg(1));
 		else if('K' == x) lazy(2, 'I', arg(1));
@@ -394,9 +400,11 @@ void run(FUNCTION get, FUNCTION put)
 			sp += 2;
 			unsigned f = arg(m);
 
-			for(; n; n--)
+			while(n)
 			{
-				f = app(f, mem[*sp++ + 1]);
+				sp = sp + 1;
+				f = app(f, mem[*(sp + 1)]);
+				n = n - 1;
 			}
 
 			sp += t;
@@ -425,7 +433,8 @@ unsigned buf_put(unsigned c)
 		die("buffer overflow");
 	}
 
-	*bufptr++ = c;
+	*bufptr = c;
+	bufptr = bufptr + 1;
 	return 0;
 }
 
@@ -704,7 +713,9 @@ unsigned ioccc_get()
 {
 	if(0 == *iocccp)
 	{
-		return *iocccp++;
+		unsigned r = *iocccp;
+		iocccp = iocccp + 1;
+		return r;
 	}
 	return fp_get();
 }
