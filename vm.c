@@ -88,7 +88,7 @@ unsigned evac(unsigned n)
 	{
 		mem[n] = FORWARD;
 		mem[n + 1] = hp;
-		hp += 2;
+		hp = hp + 2;
 		return mem[n + 1];
 	}
 	else if('I' == x)
@@ -111,7 +111,7 @@ unsigned evac(unsigned n)
 	}
 
 	unsigned z = hp;
-	hp += 2;
+	hp = hp + 2;
 	mem[n] = FORWARD;
 	mem[n + 1] = z;
 	altmem[z] = x;
@@ -153,7 +153,7 @@ unsigned app(unsigned f, unsigned x)
 {
 	mem[hp] = f;
 	mem[hp + 1] = x;
-	hp += 2;
+	hp = hp + 2;
 	return hp - 2;
 }
 
@@ -164,7 +164,7 @@ void reset(unsigned root)
 	*(sp = spTop) = app(app(app(root, app('0', '?')), '.'), app('T', '1'));
 }
 
-void loadRaw(unsigned(*get)())
+void loadRaw(FUNCTION get)
 {
 	hp = 127;
 
@@ -174,7 +174,7 @@ void loadRaw(unsigned(*get)())
 
 		do
 		{
-			c = get();
+			c = get(0);
 		} while(c && (c < '0' || c > '9'));
 
 		if(!c)
@@ -192,7 +192,7 @@ void loadRaw(unsigned(*get)())
 			}
 
 			n = 10 * n + c - '0';
-			c = get();
+			c = get(0);
 		}
 
 		mem[hp] = n;
@@ -202,14 +202,14 @@ void loadRaw(unsigned(*get)())
 	reset(mem[128 - 1]);
 }
 
-unsigned parseTerm(unsigned(*get)())
+unsigned parseTerm(FUNCTION get)
 {
 	unsigned n;
 	unsigned c;
 
 	do
 	{
-		c = get();
+		c = get(0);
 	} while(c == '\n');
 
 	if('`' == c)
@@ -217,13 +217,13 @@ unsigned parseTerm(unsigned(*get)())
 		c = parseTerm(get);
 		return app(c, parseTerm(get));
 	}
-	else if('#' == c) return app('#', get());
-	else if('@' == c) return tab[get() - ' '];
+	else if('#' == c) return app('#', get(0));
+	else if('@' == c) return tab[get(0) - ' '];
 	else if('(' == c)
 	{
 		n = 0;
 
-		while((c = get()) != ')')
+		while((c = get(0)) != ')')
 		{
 			n = 10 * n + c - '0';
 		}
@@ -234,7 +234,7 @@ unsigned parseTerm(unsigned(*get)())
 	{
 		n = 0;
 
-		while((c = get()) != ']')
+		while((c = get(0)) != ']')
 		{
 			n = 10 * n + c - '0';
 		}
@@ -245,13 +245,13 @@ unsigned parseTerm(unsigned(*get)())
 	return c;
 }
 
-void parseMore(unsigned(*get)())
+void parseMore(FUNCTION get)
 {
 	for(;;)
 	{
 		unsigned c = parseTerm(get);
 
-		if(!c)
+		if(0 == c)
 		{
 			reset(tab[tabn - 1]);
 			return;
@@ -265,7 +265,7 @@ void parseMore(unsigned(*get)())
 		tab[tabn] = c;
 		tabn = tabn + 1;
 
-		if(get() != ';')
+		if(get(0) != ';')
 		{
 			die("expected ';'");
 		}
@@ -309,7 +309,7 @@ void lazy(unsigned height, unsigned f, unsigned x)
 	*p = f;
 	p = p + 1;
 	*p = x;
-	sp += height - 1;
+	sp = sp + height - 1;
 	*sp = f;
 }
 
@@ -397,7 +397,7 @@ void run(FUNCTION get, FUNCTION put)
 			unsigned m = mnt >> 16;
 			unsigned n = (mnt >> 8) & 255;
 			unsigned t = mnt & 255;
-			sp += 2;
+			sp = sp + 2;
 			unsigned f = arg(m);
 
 			while(n)
@@ -407,7 +407,7 @@ void run(FUNCTION get, FUNCTION put)
 				n = n - 1;
 			}
 
-			sp += t;
+			sp = sp + t;
 			mem[*sp] = 'I';
 			mem[*sp + 1] = f;
 		}
