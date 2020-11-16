@@ -18,7 +18,6 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include "gcc_req.h"
 
@@ -34,6 +33,7 @@
 //CONSTANT BUFMAX 1048576
 #define BUFMAX    1048576
 
+int match(char* a, char* b);
 
 void die(char *s)
 {
@@ -126,9 +126,9 @@ void gc()
 	hp = 128;
 	unsigned di = hp;
 	sp = altmem + TOP - 1;
-	*sp = evac(*spTop);
+	sp[0] = evac(spTop[0]);
 
-	//fprintf(stderr, "GC %u\n", hp - 128);
+	/* fprintf(stderr, "GC %u\n", hp - 128); */
 	while(di < hp)
 	{
 		unsigned x = altmem[di];
@@ -335,8 +335,8 @@ void run(FUNCTION get, FUNCTION put)
 
 	for(;;)
 	{
-		// int ctr; if (++ctr == (1<<25)) stats(), ctr = 0;
-		// int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0;
+		/* int ctr; if (++ctr == (1<<25)) stats(), ctr = 0; */
+		/* int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0; */
 		if(mem + hp > sp - 8)
 		{
 			gc();
@@ -376,7 +376,8 @@ void run(FUNCTION get, FUNCTION put)
 		else if('0' == x)
 		{
 			c = get(0);
-			!c ? lazy(1, 'I', 'K') : lazy(1, app(':', app('#', c)), app('0', '?'));
+			if(0 ==c) lazy(1, 'I', 'K');
+			else lazy(1, app(':', app('#', c)), app('0', '?'));
 		}
 		else if('#' == x) lazy(2, arg(2), sp[1]);
 		else if('1' == x)
@@ -384,8 +385,16 @@ void run(FUNCTION get, FUNCTION put)
 			put(num(1));
 			lazy(2, app(arg(2), '.'), app('T', '1'));
 		}
-		else if('=' == x) num(1) == num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
-		else if('L' == x) num(1) <= num(2) ? lazy(2, 'I', 'K') : lazy(2, 'K', 'I');
+		else if('=' == x)
+		{
+			if(num(1) == num(2)) lazy(2, 'I', 'K');
+			else lazy(2, 'K', 'I');
+		}
+		else if('L' == x)
+		{
+			if(num(1) <= num(2)) lazy(2, 'I', 'K');
+			else lazy(2, 'K', 'I');
+		}
 		else if('*' == x) lazy(2, '#', num(1) * num(2));
 		else if('/' == x) lazy(2, '#', num(1) / num(2));
 		else if('%' == x) lazy(2, '#', num(1) % num(2));
@@ -445,7 +454,7 @@ void testCmp(char *inp, char *want)
 	run(str_get, buf_put);
 	*bufptr = 0;
 
-	if(strcmp(buf, want))
+	if(!match(buf, want))
 	{
 		printf("FAIL: got '%s', want '%s'\n", buf, want);
 	}
@@ -564,7 +573,7 @@ char *exponentially =
     "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"
     ;
 char *practically =
-// Same as above, except:
+/* Same as above, except: */
     /*
     occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
     unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
@@ -769,7 +778,8 @@ void lvlup_file_raw(char *filename)
 
 void rpg()
 {
-	strcpy(buf, "I;");
+	buf[0] = 'I';
+	buf[1] = ';';
 	bufptr = buf + 2;
 	lvlup(parenthetically);
 	lvlup(exponentially);
@@ -860,17 +870,17 @@ int main(int argc, char **argv)
 
 	if(argc > 1)
 	{
-		if(!strcmp(argv[1], "test"))
+		if(match(argv[1], "test"))
 		{
 			return runTests(), 0;
 		}
 
-		if(!strcmp(argv[1], "iotest"))
+		if(match(argv[1], "iotest"))
 		{
 			return iotest(), 0;
 		}
 
-		if(!strcmp(argv[1], "rawck"))
+		if(match(argv[1], "rawck"))
 		{
 			rpg();
 			fp_reset("raw");
@@ -886,40 +896,40 @@ int main(int argc, char **argv)
 			return 0;
 		}
 
-		if(!strcmp(argv[1], "run"))
+		if(match(argv[1], "run"))
 		{
 			return runFile(argv[2]), 0;
 		}
 
-		if(!strcmp(argv[1], "ioccc"))
+		if(match(argv[1], "ioccc"))
 		{
 			return ioccc(argv[2]), 0;
 		}
 
-		if(!strcmp(argv[1], "testdis"))
+		if(match(argv[1], "testdis"))
 		{
 			return dis("disassembly.hs"), 0;
 		}
 
-		if(!strcmp(argv[1], "dis"))
+		if(match(argv[1], "dis"))
 		{
 			return dis(argv[2]), 0;
 		}
 
-		if(!strcmp(argv[1], "asm"))
+		if(match(argv[1], "asm"))
 		{
 			fp_reset("raw");
 			loadRaw(fp_get);
 			run(ioget, pc);
-			return 0;
+			return EXIT_SUCCESS;
 		}
 
-		if(!strcmp(argv[1], "asmWith"))
+		if(match(argv[1], "asmWith"))
 		{
 			fp_reset(argv[2]);
 			loadRaw(fp_get);
 			run(ioget, pc);
-			return 0;
+			return EXIT_SUCCESS;
 		}
 
 		return puts("bad command"), 0;
@@ -927,5 +937,5 @@ int main(int argc, char **argv)
 
 	rpg();
 	puts(buf);
-	return 0;
+	return EXIT_SUCCESS;
 }

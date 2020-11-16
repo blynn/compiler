@@ -1,3 +1,34 @@
+##
+## Copyright © 2019 Ben Lynn
+## This file is part of blynn-compiler.
+##
+## blynn-compiler is free software: you can redistribute it and/or
+## modify it under the terms of the GNU General Public License as
+## published by the Free Software Foundation, only under version 3 of
+## the License.
+##
+## blynn-compiler is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+## General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with blynn-compiler.  If not, see
+## <https://www.gnu.org/licenses/>.
+##
+
+# Prevent rebuilding
+VPATH = bin:site:test/results
+
+CC?=clang
+CFLAGS:=$(CFLAGS) -D_GNU_SOURCE -std=c99 -ggdb -D WITH_GLIBC=1 -O2
+
+vm: vm.c functions/match.c
+	$(CC) $(CFLAGS) vm.c functions/match.c -o vm
+
+raw: vm
+	./vm > raw
+
 .PHONY: site sync clean target
 
 target: site
@@ -13,8 +44,6 @@ menu.html: menu; cobble menu menu
 %.html: %.lhs menu.html; cobble mathbook menu $<
 %:%.c;clang -O3 $^ -o $@
 
-vm:vm.c
-raw:vm;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c
 
