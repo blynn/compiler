@@ -123,11 +123,15 @@ unsigned evac(unsigned n)
 }
 
 unsigned gccount;
+
+/* Garbage collection */
 void gc()
 {
 	gccount = gccount + 1;
+	/* Reset the heap pointer */
 	hp = 128;
 	unsigned di = hp;
+	/* Set the stack pointer to point to the top of altmem */
 	sp = altmem + TOP - 1;
 	sp[0] = evac(spTop[0]);
 
@@ -147,11 +151,14 @@ void gc()
 	}
 
 	spTop = sp;
+	/* Swap the addresses of mem and altmem */
 	unsigned *tmp = mem;
 	mem = altmem;
 	altmem = tmp;
 }
 
+/* An application of two nodes is represented by putting them in
+   adjacent memory locations */
 unsigned app(unsigned f, unsigned x)
 {
 	mem[hp] = f;
@@ -303,10 +310,15 @@ void parseRaw(char *s)
 	loadRaw(str_get);
 }
 
+/* Since application nodes are stored in adjacent memory locations, we
+   can get the nth argument. */
 unsigned arg(unsigned n)
 {
 	return mem[sp [n] + 1];
 }
+
+/* If the argument is a number, then we call arg to get the pointer to
+   the number in memory, then find its value by indexing into mem. */
 unsigned num(unsigned n)
 {
 	return mem[arg(n) + 1];
