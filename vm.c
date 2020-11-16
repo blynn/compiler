@@ -83,7 +83,10 @@ unsigned evac(unsigned n)
 
 	unsigned y = mem[n + 1];
 
-	if(FORWARD == x) return y;
+	if(FORWARD == x)
+	{
+		return y;
+	}
 	else if(REDUCING == x)
 	{
 		mem[n] = FORWARD;
@@ -217,8 +220,14 @@ unsigned parseTerm(FUNCTION get)
 		c = parseTerm(get);
 		return app(c, parseTerm(get));
 	}
-	else if('#' == c) return app('#', get(0));
-	else if('@' == c) return tab[get(0) - ' '];
+	else if('#' == c)
+	{
+		return app('#', get(0));
+	}
+	else if('@' == c)
+	{
+		return tab[get(0) - ' '];
+	}
 	else if('(' == c)
 	{
 		n = 0;
@@ -360,26 +369,84 @@ void run(FUNCTION get, FUNCTION put)
 			fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
 			return;
 		}
-		else if('Y' == x) lazy(1, arg(1), sp[1]);
-		else if('S' == x) lazy(3, apparg(1, 3), apparg(2, 3));
-		else if('B' == x) lazy(3, arg(1), apparg(2, 3));
-		else if('C' == x) lazy(3, apparg(1, 3), arg(2));
-		else if('R' == x) lazy(3, apparg(2, 3), arg(1));
+		/* fix */
+		/* Y f = let x = f x in x */
+		else if('Y' == x)
+		{
+			lazy(1, arg(1), sp[1]);
+		}
+		/* ap */
+		/* S x y z = x z (y z) */
+		else if('S' == x)
+		{
+			lazy(3, apparg(1, 3), apparg(2, 3));
+		}
+		/* (.) */
+		/* B x y z = x (y z) */
+		else if('B' == x)
+		{
+			lazy(3, arg(1), apparg(2, 3));
+		}
+		/* flip */
+		/* C x y z = x z y */
+		else if('C' == x)
+		{
+			lazy(3, apparg(1, 3), arg(2));
+		}
+		/* flip flip */
+		/* R x y z = y z x */
+		else if('R' == x)
+		{
+			lazy(3, apparg(2, 3), arg(1));
+		}
+		/* id */
+		/* I x = x */
 		else if('I' == x)
 		{
 			sp[1] = arg(1);
 			sp = sp + 1;
 		}
-		else if('T' == x) lazy(2, arg(2), arg(1));
-		else if('K' == x) lazy(2, 'I', arg(1));
-		else if(':' == x) lazy(4, apparg(4, 1), arg(2));
+		/* (&) */
+		/* T x y = y x */
+		else if('T' == x)
+		{
+			lazy(2, arg(2), arg(1));
+		}
+		/* const */
+		/* K x y = x */
+		else if('K' == x)
+		{
+			lazy(2, 'I', arg(1));
+		}
+		/* cons */
+		/* : a b c d = (d a) b */
+		else if(':' == x)
+		{
+			lazy(4, apparg(4, 1), arg(2));
+		}
+		/* Read a character c from the input */
+		/* If c == 0, then I K (represents nil) */
+		/* else : (# c) (0 ?)  (represents a list of the first */
+		/*                      character and the rest of the input) */
 		else if('0' == x)
 		{
 			c = get(0);
-			if(0 ==c) lazy(1, 'I', 'K');
-			else lazy(1, app(':', app('#', c)), app('0', '?'));
+
+			if(0 == c)
+			{
+				lazy(1, 'I', 'K');
+			}
+			else
+			{
+				lazy(1, app(':', app('#', c)), app('0', '?'));
+			}
 		}
-		else if('#' == x) lazy(2, arg(2), sp[1]);
+		/* numeric combinator */
+		/* # n f = f (# n) */
+		else if('#' == x)
+		{
+			lazy(2, arg(2), sp[1]);
+		}
 		else if('1' == x)
 		{
 			put(num(1));
@@ -387,19 +454,46 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('=' == x)
 		{
-			if(num(1) == num(2)) lazy(2, 'I', 'K');
-			else lazy(2, 'K', 'I');
+			if(num(1) == num(2))
+			{
+				lazy(2, 'I', 'K');
+			}
+			else
+			{
+				lazy(2, 'K', 'I');
+			}
 		}
 		else if('L' == x)
 		{
-			if(num(1) <= num(2)) lazy(2, 'I', 'K');
-			else lazy(2, 'K', 'I');
+			if(num(1) <= num(2))
+			{
+				lazy(2, 'I', 'K');
+			}
+			else
+			{
+				lazy(2, 'K', 'I');
+			}
 		}
-		else if('*' == x) lazy(2, '#', num(1) * num(2));
-		else if('/' == x) lazy(2, '#', num(1) / num(2));
-		else if('%' == x) lazy(2, '#', num(1) % num(2));
-		else if('+' == x) lazy(2, '#', num(1) + num(2));
-		else if('-' == x) lazy(2, '#', num(1) - num(2));
+		else if('*' == x)
+		{
+			lazy(2, '#', num(1) * num(2));
+		}
+		else if('/' == x)
+		{
+			lazy(2, '#', num(1) / num(2));
+		}
+		else if('%' == x)
+		{
+			lazy(2, '#', num(1) % num(2));
+		}
+		else if('+' == x)
+		{
+			lazy(2, '#', num(1) + num(2));
+		}
+		else if('-' == x)
+		{
+			lazy(2, '#', num(1) - num(2));
+		}
 		else if('a' == x)
 		{
 			unsigned mnt = arg(1);
@@ -420,7 +514,10 @@ void run(FUNCTION get, FUNCTION put)
 			mem[*sp] = 'I';
 			mem[*sp + 1] = f;
 		}
-		else if('F' == x) foreign(arg(1));
+		else if('F' == x)
+		{
+			foreign(arg(1));
+		}
 		else
 		{
 			printf("?%u\n", x);
@@ -573,7 +670,7 @@ char *exponentially =
     "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"
     ;
 char *practically =
-/* Same as above, except: */
+    /* Same as above, except: */
     /*
     occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
     unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
@@ -703,11 +800,13 @@ void fp_reset(char *f)
 unsigned fp_get()
 {
 	int c = fgetc(fp);
+
 	if(c == EOF)
 	{
 		fclose(fp);
 		return 0;
 	}
+
 	return c;
 }
 
@@ -726,6 +825,7 @@ unsigned ioccc_get()
 		iocccp = iocccp + 1;
 		return r;
 	}
+
 	return fp_get();
 }
 
