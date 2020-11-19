@@ -913,7 +913,7 @@ void rpg()
 
 void dis(char *file)
 {
-	fp_reset("raw");
+	fp_reset("bin/raw");
 	loadRaw(fp_get);
 	fp_reset("disassembly.hs");
 	buf_reset();
@@ -926,7 +926,7 @@ void dis(char *file)
 
 void runFile(char *f)
 {
-	fp_reset("raw");
+	fp_reset("bin/raw");
 	loadRaw(fp_get);
 	fp_reset(f);
 	buf_reset();
@@ -938,7 +938,7 @@ void runFile(char *f)
 
 void ioccc(char *f)
 {
-	fp_reset("raw");
+	fp_reset("bin/raw");
 	loadRaw(fp_get);
 	ioccc_reset(f);
 	buf_reset();
@@ -950,7 +950,7 @@ void ioccc(char *f)
 
 void iotest()
 {
-	fp_reset("raw");
+	fp_reset("bin/raw");
 	loadRaw(fp_get);
 	str =
 	    "ioBind2 m k = ioBind m (\\_ -> k);"
@@ -995,7 +995,7 @@ int main(int argc, char **argv)
 		if(match(argv[1], "rawck"))
 		{
 			rpg();
-			fp_reset("raw");
+			fp_reset("bin/raw");
 			str = buf;
 			unsigned c;
 
@@ -1030,7 +1030,7 @@ int main(int argc, char **argv)
 
 		if(match(argv[1], "asm"))
 		{
-			fp_reset("raw");
+			fp_reset("bin/raw");
 			loadRaw(fp_get);
 			run(ioget, pc);
 			return EXIT_SUCCESS;

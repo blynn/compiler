@@ -18,90 +18,91 @@
 ##
 
 # Prevent rebuilding
-VPATH = bin:site:test/results
+VPATH = bin:generated
 
 CC?=clang
 CFLAGS:=$(CFLAGS) -D_GNU_SOURCE -std=c99 -ggdb -D WITH_GLIBC=1 -O2
 
-vm: vm.c functions/match.c
-	$(CC) $(CFLAGS) vm.c functions/match.c -o vm
+vm: vm.c functions/match.c | bin
+	$(CC) $(CFLAGS) vm.c functions/match.c -o bin/vm
 
-raw: vm
-	./vm > raw
+raw: vm | bin
+	./bin/vm > bin/raw
 
-.PHONY: site sync clean target
+lonely:lonely.c | bin
+	$(CC) $(CFLAGS) generated/lonely.c -o bin/lonely
 
-target: site
+lonely.c: vm effectively.hs lonely.hs rts.c raw | generated
+	cp rts.c generated/lonely.c
+	./bin/vm run effectively.hs < lonely.hs >> generated/lonely.c
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp web
+patty: patty.c | bin
+	$(CC) $(CFLAGS) generated/patty.c -o bin/patty
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
+patty.c: patty.hs lonely | generated
+	(cat rts.c && time ./bin/lonely < patty.hs) > generated/patty.c
 
-%.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
+guardedly: guardedly.c | bin
+	$(CC) $(CFLAGS) generated/guardedly.c -o bin/guardedly
 
-menu.html: menu; cobble menu menu
+guardedly.c: guardedly.hs patty | generated
+	(cat rts.c && time ./bin/patty < guardedly.hs) > generated/guardedly.c
 
-%.html: %.lhs menu.html; cobble mathbook menu $<
-%:%.c;clang -O3 $^ -o $@
+assembly: assembly.c | bin
+	$(CC) $(CFLAGS) generated/assembly.c -o bin/assembly
 
-lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
-lonely:lonely.c
+assembly.c: assembly.hs guardedly | generated
+	(cat rts.c && time ./bin/guardedly < assembly.hs) > generated/assembly.c
 
-define rtsup
-$(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
-endef
+mutually: mutually.c | bin
+	$(CC) $(CFLAGS) generated/mutually.c -o bin/mutually
 
-$(call rtsup,internally,uniquely)
+mutually.c: mutually.hs assembly | generated
+	(cat rts.c && time ./bin/assembly < mutually.hs) > generated/mutually.c
 
-$(call rtsup,patty,lonely)
-$(call rtsup,guardedly,patty)
-$(call rtsup,assembly,guardedly)
-$(call rtsup,mutually,assembly)
-$(call rtsup,uniquely,mutually)
-$(call rtsup,virtually,uniquely)
-marginally.c:marginally.hs virtually;time ./virtually < $< > $@
-methodically.c:methodically.hs marginally;time ./marginally < $< > $@
-crossly.c:crossly.hs methodically;time ./methodically < $< > $@
-precisely.c:precisely.hs crossly;time ./crossly < $< > $@
+uniquely: uniquely.c | bin
+	$(CC) $(CFLAGS) generated/uniquely.c -o bin/uniquely
 
-hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
-test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
-test/mandelbrot:test/mandelbrot.c
+uniquely.c: uniquely.hs mutually | generated
+	(cat rts.c && time ./bin/mutually < uniquely.hs) > generated/uniquely.c
 
-WCC=clang -O3 -c --target=wasm32 -Wall
-ifeq ($(WASMLINK),)
-WASMLINK=wasm-ld-10
-endif
-WLD=$(WASMLINK) --export-dynamic --allow-undefined --no-entry
-wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
-wasm/douady.o:wasm/douady.c;$(WCC) $^ -o $@
-wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
-douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
-douady.html:douady.txt menu.html;cobble mathbook menu $<
+virtually: virtually.c | bin
+	$(CC) $(CFLAGS) generated/virtually.c -o bin/virtually
 
-wasm/env.c:crossly;./$< blah > $@
-wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
-wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+virtually.c: virtually.hs uniquely | generated
+	(cat rts.c && time ./bin/uniquely < virtually.hs) > generated/virtually.c
 
-wasm/tmp.hs:wasm/blah.hs crossly wasm/env.wasm wasm/section; \
-	(sed -n '/infix/,/Code generation/p' crossly.hs | sed '/^getContents =/d' \
-	&& ./crossly coms && cd wasm && cat blah.hs && ./section < env.wasm) > $@
-wasm/blah.c:wasm/tmp.hs crossly; ./crossly wasm < $< > $@
-wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
-blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-index.html:index.lhs index.js wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<
-hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
+marginally: marginally.c | bin
+	$(CC) $(CFLAGS) generated/marginally.c -o bin/marginally
 
-site: $(SITE)
+marginally.c:marginally.hs virtually | generated
+	./bin/virtually < marginally.hs > generated/marginally.c
 
-sync: site ; rsync -R -r $(SITE) crypto.stanford.edu:www/compiler/
+methodically: methodically.c | bin
+	$(CC) $(CFLAGS) generated/methodically.c -o bin/methodically
 
-clean: ; -rm $(SITE)
+methodically.c:methodically.hs marginally | generated
+	./bin/marginally < methodically.hs > generated/methodically.c
 
-# Later Asterius changes break my build, so first pin down a version with:
-#   $ docker pull terrorjack/asterius@sha256:77879bab47d392dc5be091f95af6306054e745a7b7ca477376c982adfe9cae61
-fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror 690a505d49b ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
+crossly: crossly.c | bin
+	$(CC) $(CFLAGS) generated/crossly.c -o bin/crossly
 
-# fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
+crossly.c:crossly.hs methodically | generated
+	./bin/methodically < crossly.hs > generated/crossly.c
 
-cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
+precisely: precisely.c | bin
+	$(CC) $(CFLAGS) generated/precisely.c -o bin/precisely
+
+precisely.c:precisely.hs crossly | generated
+	./bin/crossly < precisely.hs > generated/precisely.c
+
+# Directories
+bin:
+	mkdir -p bin
+
+generated:
+	mkdir -p generated
+
+.PHONY: clean
+clean:
+	rm -rf bin/ generated/
