@@ -40,37 +40,43 @@ patty: patty.c | bin
 	$(CC) $(CFLAGS) generated/patty.c -o bin/patty
 
 patty.c: patty.hs lonely | generated
-	(cat rts.c && time ./bin/lonely < patty.hs) > generated/patty.c
+	cp rts.c generated/patty.c
+	./bin/lonely < patty.hs >> generated/patty.c
 
 guardedly: guardedly.c | bin
 	$(CC) $(CFLAGS) generated/guardedly.c -o bin/guardedly
 
 guardedly.c: guardedly.hs patty | generated
-	(cat rts.c && time ./bin/patty < guardedly.hs) > generated/guardedly.c
+	cp rts.c generated/guardedly.c
+	./bin/patty < guardedly.hs >> generated/guardedly.c
 
 assembly: assembly.c | bin
 	$(CC) $(CFLAGS) generated/assembly.c -o bin/assembly
 
 assembly.c: assembly.hs guardedly | generated
-	(cat rts.c && time ./bin/guardedly < assembly.hs) > generated/assembly.c
+	cp rts.c generated/assembly.c
+	./bin/guardedly < assembly.hs >> generated/assembly.c
 
 mutually: mutually.c | bin
 	$(CC) $(CFLAGS) generated/mutually.c -o bin/mutually
 
 mutually.c: mutually.hs assembly | generated
-	(cat rts.c && time ./bin/assembly < mutually.hs) > generated/mutually.c
+	cp rts.c generated/mutually.c
+	./bin/assembly < mutually.hs >> generated/mutually.c
 
 uniquely: uniquely.c | bin
 	$(CC) $(CFLAGS) generated/uniquely.c -o bin/uniquely
 
 uniquely.c: uniquely.hs mutually | generated
-	(cat rts.c && time ./bin/mutually < uniquely.hs) > generated/uniquely.c
+	cp rts.c generated/uniquely.c
+	./bin/mutually < uniquely.hs >> generated/uniquely.c
 
 virtually: virtually.c | bin
 	$(CC) $(CFLAGS) generated/virtually.c -o bin/virtually
 
 virtually.c: virtually.hs uniquely | generated
-	(cat rts.c && time ./bin/uniquely < virtually.hs) > generated/virtually.c
+	cp rts.c generated/virtually.c
+	./bin/uniquely < virtually.hs >> generated/virtually.c
 
 marginally: marginally.c | bin
 	$(CC) $(CFLAGS) generated/marginally.c -o bin/marginally
