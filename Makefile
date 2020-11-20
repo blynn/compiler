@@ -23,8 +23,10 @@ VPATH = bin:generated
 CC?=clang
 CFLAGS:=$(CFLAGS) -D_GNU_SOURCE -std=c99 -ggdb -D WITH_GLIBC=1 -O2
 
-vm: vm.c functions/match.c | bin
-	$(CC) $(CFLAGS) vm.c functions/match.c -o bin/vm
+ALL: precisely
+
+vm: vm.c functions/match.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) vm.c functions/file_print.c functions/match.c -o bin/vm
 
 raw: vm | bin
 	./bin/vm > bin/raw

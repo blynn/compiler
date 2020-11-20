@@ -18,8 +18,12 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include "gcc_req.h"
+
+// CONSTANT FALSE 0
+#define FALSE 0
+// CONSTANT TRUE 1
+#define TRUE 1
 
 //CONSTANT FORWARD 27
 #define FORWARD 27
@@ -34,10 +38,13 @@
 #define BUFMAX    1048576
 
 int match(char* a, char* b);
+void file_print(char* s, FILE* f);
 
 void die(char *s)
 {
-	fprintf(stderr, "error: %s\n", s);
+	file_print("error: ", stderr);
+	file_print(s, stderr);
+	file_print(" \n", stderr);
 	exit(EXIT_FAILURE);
 }
 
@@ -51,7 +58,12 @@ unsigned tabn;
 
 void stats()
 {
-	printf("[HP = %u, stack usage = %ld]\n", hp, (long)(spTop - sp));
+	file_print("[HP = ",stdout);
+	file_print("$hp",stdout);
+	file_print(", stack usage = ",stdout);
+	file_print("$spTop",stdout);
+	file_print("$sp",stdout);
+	file_print("]\n",stdout);
 }
 
 unsigned isAddr(unsigned n)
@@ -136,9 +148,10 @@ void gc()
 	sp[0] = evac(spTop[0]);
 
 	/* fprintf(stderr, "GC %u\n", hp - 128); */
+	unsigned x;
 	while(di < hp)
 	{
-		unsigned x = altmem[di];
+		x = altmem[di];
 		altmem[di] = evac(altmem[di]);
 		di = di + 1;
 
@@ -171,17 +184,18 @@ unsigned root_memo;
 void reset(unsigned root)
 {
 	root_memo = root;
-	*(sp = spTop) = app(app(app(root, app('0', '?')), '.'), app('T', '1'));
+	sp = spTop;
+	sp[0] = app(app(app(root, app('0', '?')), '.'), app('T', '1'));
 }
 
 void loadRaw(FUNCTION get)
 {
 	hp = 127;
+	unsigned c;
+	unsigned n;
 
-	for(;;)
+	while(TRUE)
 	{
-		unsigned c;
-
 		do
 		{
 			c = get(0);
@@ -192,9 +206,9 @@ void loadRaw(FUNCTION get)
 			break;
 		}
 
-		unsigned n = 0;
+		n = 0;
 
-		for(;;)
+		while(TRUE)
 		{
 			if(c < '0' || c > '9')
 			{
@@ -263,9 +277,11 @@ unsigned parseTerm(FUNCTION get)
 
 void parseMore(FUNCTION get)
 {
-	for(;;)
+	unsigned c;
+
+	while(TRUE)
 	{
-		unsigned c = parseTerm(get);
+		c = parseTerm(get);
 
 		if(0 == c)
 		{
@@ -326,12 +342,12 @@ unsigned num(unsigned n)
 
 void lazy(unsigned height, unsigned f, unsigned x)
 {
-	unsigned *p = mem + sp[height];
-	*p = f;
+	unsigned* p = mem + sp[height];
+	p[0] = f;
 	p = p + 1;
-	*p = x;
+	p[0] = x;
 	sp = sp + height - 1;
-	*sp = f;
+	sp[0] = f;
 }
 
 unsigned apparg(unsigned i, unsigned j)
@@ -343,7 +359,7 @@ void foreign(unsigned n)
 {
 	if(1 == n)
 	{
-		putchar(num(2));
+		fputc(num(2), stdout);
 		lazy(4, app(arg(4), 'K'), arg(3));
 	}
 }
@@ -352,9 +368,14 @@ void run(FUNCTION get, FUNCTION put)
 {
 	gccount = 0;
 	unsigned c;
-	clock_t start = clock();
+	unsigned x;
+	unsigned mnt;
+	unsigned m;
+	unsigned n;
+	unsigned t;
+	unsigned f;
 
-	for(;;)
+	while(TRUE)
 	{
 		/* int ctr; if (++ctr == (1<<25)) stats(), ctr = 0; */
 		/* int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0; */
@@ -363,12 +384,12 @@ void run(FUNCTION get, FUNCTION put)
 			gc();
 		}
 
-		unsigned x = *sp;
+		x = sp[0];
 
 		if(isAddr(x))
 		{
 			sp = sp - 1;
-			*sp = mem[x];
+			sp[0] = mem[x];
 		}
 		else if(FORWARD == x)
 		{
@@ -377,8 +398,6 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('.' == x)
 		{
-			clock_t end = clock();
-			fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
 			return;
 		}
 		/* fix */
@@ -508,23 +527,23 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('a' == x)
 		{
-			unsigned mnt = arg(1);
-			unsigned m = mnt >> 16;
-			unsigned n = (mnt >> 8) & 255;
-			unsigned t = mnt & 255;
+			mnt = arg(1);
+			m = mnt >> 16;
+			n = (mnt >> 8) & 255;
+			t = mnt & 255;
 			sp = sp + 2;
-			unsigned f = arg(m);
+			f = arg(m);
 
 			while(n)
 			{
 				sp = sp + 1;
-				f = app(f, mem[*(sp + 1)]);
+				f = app(f, mem[(sp[1])]);
 				n = n - 1;
 			}
 
 			sp = sp + t;
-			mem[*sp] = 'I';
-			mem[*sp + 1] = f;
+			mem[sp[0]] = 'I';
+			mem[sp[1]] = f;
 		}
 		else if('F' == x)
 		{
@@ -532,14 +551,18 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else
 		{
-			printf("?%u\n", x);
+			file_print("?", stderr);
+			file_print("$x",stderr);
+			file_print("\n",stderr);
 			die("unknown combinator");
 		}
 	}
 }
 
-char buf[BUFMAX];
-char *bufptr, *buf_end;
+char* buf;
+char* bufptr;
+char* buf_end;
+
 void buf_reset()
 {
 	bufptr = buf;
@@ -551,7 +574,7 @@ unsigned buf_put(unsigned c)
 		die("buffer overflow");
 	}
 
-	*bufptr = c;
+	bufptr[0] = c;
 	bufptr = bufptr + 1;
 	return 0;
 }
@@ -561,11 +584,15 @@ void testCmp(char *inp, char *want)
 	str = inp;
 	buf_reset();
 	run(str_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 
 	if(!match(buf, want))
 	{
-		printf("FAIL: got '%s', want '%s'\n", buf, want);
+		file_print("FAIL: got '",stderr);
+		file_print(buf,stderr);
+		file_print("', want '",stderr);
+		file_print(want,stderr);
+		file_print("'\n",stderr);
 	}
 }
 
@@ -979,6 +1006,7 @@ int main(int argc, char **argv)
 	buf_end = buf + BUFMAX;
 	spTop = mem + TOP - 1;
 	tab = calloc(TABMAX, sizeof(unsigned));
+	buf = calloc(BUFMAX, sizeof(char));
 
 	if(argc > 1)
 	{
