@@ -1,5 +1,5 @@
 /*
- * Copyright © 2019 Ben Lynn
+ * Copyright (c) 2019 Ben Lynn
  * This file is part of blynn-compiler.
  *
  * blynn-compiler is free software: you can redistribute it and/or
@@ -610,7 +610,16 @@ void testCaseMore(char *prog, char *more, char *inp, char *want)
 	testCmp(inp, want);
 }
 
-char *parenthetically =
+
+/* Big ugly RAW data */
+char* parenthetically;
+char* exponentially;
+char* practically;
+char* singularity;
+
+void setup_raws()
+{
+	parenthetically =
     /*
     uncurry x y = y x;
     (.) x y z = x (y z);
@@ -646,7 +655,7 @@ char *parenthetically =
     "`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@\"`B`:#;;"
     ;
 
-char *exponentially =
+	exponentially =
     /*
     id x = x;
     const x _ = x;
@@ -708,7 +717,8 @@ char *exponentially =
     "Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));"
     "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"
     ;
-char *practically =
+
+	practically =
     /* Same as above, except: */
     /*
     occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
@@ -742,7 +752,8 @@ char *practically =
     "Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));"
     "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));"
     ;
-char *singularity =
+
+	singularity =
     "\\a.\\b.\\c.\\d.ac(bcd);"
     "Y\\a.\\b.\\c.\\d.\\e.b(cd\\f.\\g.e)\\f.\\g.ce\\h.\\i.f(h=)(agide)e;"
     "Y\\a.\\b.\\c.bc\\d.\\e.:d(aec);"
@@ -787,6 +798,7 @@ char *singularity =
     "Y\\a.\\b.\\c.cK\\d.\\e.@\"(@Eb(@H(d(KI))))(:#;(abe));"
     "\\a.@Ca(:#?K)(B(\\b.@Ibb)(TK));"
     ;
+}
 
 void runTests()
 {
@@ -794,33 +806,33 @@ void runTests()
 	testCase("I;", "Hello, World!\n", "Hello, World!\n");
 	testCase("``C`T?`KI;", "tail", "ail");
 	testCase("`K``:#O``:#KK;", "", "OK");
-	// xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys }
-	// f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))
-	//   = Y(B(CS)(B(B(C(BB(:))))C))
-	// because B(B(C(BB(:))))C = \r ys -> \x xt -> (:) x (r xt ys)
+	/* xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys } */
+	/* f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))        */
+	/*   = Y(B(CS)(B(B(C(BB(:))))C))                               */
+	/* because B(B(C(BB(:))))C = \r ys -> \x xt -> (:) x (r xt ys) */
 	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  // (++)
+	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
 	    "`K``@ " "``:#B``:#eK" "``:#nK;",
 	    "",
 	    "Ben");
 	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-	    "``SS``B`BK``B`BK``B`B`:#`@ ;"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
+	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
+	    "``SS``B`BK``B`BK``B`B`:#`@ ;"  /* \acc p = acc p (\_ _ -> '`':acc ++ p) */
 	    "`@!``:#xK;",
 	    "y",
 	    "`xy");
 	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  // (++)
-	    "``SS``B`BK``B`BK``B`B`:#`[0];"  // \acc p = acc p (\_ _ -> '`':acc ++ p)
+	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
+	    "``SS``B`BK``B`BK``B`B`:#`[0];"  /* \acc p = acc p (\_ _ -> '`':acc ++ p) */
 	    "`[1]``:#xK;",
 	    "y",
 	    "`xy");
 	testCase("`K``:#f``:#xK;", "", "fx");
-	// atom id 'x' "f"
+	/* atom id 'x' "f" */
 	testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx");
-	// if3 ')' "1" "2" "3"
+	/* if3 ')' "1" "2" "3" */
 	testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1");
-	// fst . term
+	/* fst . term */
 	testCaseMore(parenthetically, "``B`TK`@,K;",
 	             "just(one);not(two);", "````just``one");
 	testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;");
@@ -849,18 +861,19 @@ unsigned fp_get()
 	return c;
 }
 
-const char iocccshim[] = "infixr 5 ++;(<=) = intLE;";
-const char *iocccp;
+
+char* iocccp;
 void ioccc_reset(char *f)
 {
 	fp_reset(f);
-	iocccp = iocccshim;
+	iocccp = "infixr 5 ++;(<=) = intLE;";
 }
+
 unsigned ioccc_get()
 {
-	if(0 == *iocccp)
+	if(0 == iocccp[0])
 	{
-		unsigned r = *iocccp;
+		unsigned r = iocccp[0];
 		iocccp = iocccp + 1;
 		return r;
 	}
@@ -870,13 +883,13 @@ unsigned ioccc_get()
 
 unsigned pc(unsigned c)
 {
-	putchar(c);
+	fputc(c, stdout);
 	fflush(stdout);
 	return 0;
 }
 unsigned ioget()
 {
-	int c = getchar();
+	int c = fgetc(stdin);
 
 	if(c == EOF)
 	{
@@ -892,27 +905,31 @@ void lvlup(char *prog)
 	str = prog;
 	buf_reset();
 	run(str_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 }
 
 void lvlup_file(char *filename)
 {
-	fprintf(stderr, "loading %s...\n", filename);
+	file_print("loading ", stderr);
+	file_print(filename, stderr);
+	file_print("...\n", stderr);
 	parse(buf);
 	fp_reset(filename);
 	buf_reset();
 	run(fp_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 }
 
 void lvlup_file_raw(char *filename)
 {
-	fprintf(stderr, "loading %s...\n", filename);
+	file_print("loading ", stderr);
+	file_print(filename, stderr);
+	file_print("...\n", stderr);
 	parseRaw(buf);
 	fp_reset(filename);
 	buf_reset();
 	run(fp_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 }
 
 void rpg()
@@ -947,7 +964,9 @@ void dis(char *file)
 	run(fp_get, buf_put);
 	parseRaw(buf);
 	fp_reset(file);
-	fprintf(stderr, "disassembling %s\n", file);
+	file_print("disassembling ", stderr);
+	file_print(file, stderr);
+	file_print("\n", stderr);
 	run(fp_get, pc);
 }
 
@@ -958,7 +977,7 @@ void runFile(char *f)
 	fp_reset(f);
 	buf_reset();
 	run(fp_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 	parseRaw(buf);
 	run(ioget, pc);
 }
@@ -970,7 +989,7 @@ void ioccc(char *f)
 	ioccc_reset(f);
 	buf_reset();
 	run(ioccc_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 	parseRaw(buf);
 	run(ioget, pc);
 }
@@ -992,15 +1011,16 @@ void iotest()
 	    ;
 	buf_reset();
 	run(str_get, buf_put);
-	*bufptr = 0;
+	bufptr[0] = 0;
 	parseRaw(buf);
-	*sp = app(app(root_memo, '?'), '.');
+	sp[0] = app(app(root_memo, '?'), '.');
 	str = "";
 	run(str_get, pc);
 }
 
 int main(int argc, char **argv)
 {
+	setup_raws();
 	mem = malloc(TOP * sizeof(unsigned));
 	altmem = malloc(TOP * sizeof(unsigned));
 	buf_end = buf + BUFMAX;
@@ -1012,12 +1032,14 @@ int main(int argc, char **argv)
 	{
 		if(match(argv[1], "test"))
 		{
-			return runTests(), 0;
+			runTests();
+			return 0;
 		}
 
 		if(match(argv[1], "iotest"))
 		{
-			return iotest(), 0;
+			iotest();
+			return 0;
 		}
 
 		if(match(argv[1], "rawck"))
@@ -1032,28 +1054,32 @@ int main(int argc, char **argv)
 					die("raw check failed!");
 				}
 
-			puts("OK");
+			file_print("OK", stdout);
 			return 0;
 		}
 
 		if(match(argv[1], "run"))
 		{
-			return runFile(argv[2]), 0;
+			runFile(argv[2]);
+			return 0;
 		}
 
 		if(match(argv[1], "ioccc"))
 		{
-			return ioccc(argv[2]), 0;
+			ioccc(argv[2]);
+			return 0;
 		}
 
 		if(match(argv[1], "testdis"))
 		{
-			return dis("disassembly.hs"), 0;
+			dis("disassembly.hs");
+			return 0;
 		}
 
 		if(match(argv[1], "dis"))
 		{
-			return dis(argv[2]), 0;
+			dis(argv[2]);
+			return 0;
 		}
 
 		if(match(argv[1], "asm"))
@@ -1072,10 +1098,12 @@ int main(int argc, char **argv)
 			return EXIT_SUCCESS;
 		}
 
-		return puts("bad command"), 0;
+		file_print("bad command", stdout);
+		return 0;
 	}
 
 	rpg();
-	puts(buf);
+	file_print(buf, stdout);
+	file_print("\n", stdout);
 	return EXIT_SUCCESS;
 }
