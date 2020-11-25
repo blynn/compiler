@@ -25,8 +25,8 @@ CFLAGS:=$(CFLAGS) -D_GNU_SOURCE -std=c99 -ggdb -D WITH_GLIBC=1 -O2
 
 ALL: precisely
 
-vm: vm.c functions/match.c functions/file_print.c | bin
-	$(CC) $(CFLAGS) vm.c functions/file_print.c functions/match.c -o bin/vm
+vm: vm.c functions/match.c functions/in_set.c functions/numerate_number.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) vm.c functions/file_print.c functions/match.c functions/in_set.c functions/numerate_number.c -o bin/vm
 
 raw: vm | bin
 	./bin/vm > bin/raw

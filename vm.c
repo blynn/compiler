@@ -37,8 +37,12 @@
 //CONSTANT BUFMAX 1048576
 #define BUFMAX    1048576
 
+//CONSTANT CELL_SIZE sizeof(unsigned)
+#define CELL_SIZE 1
+
 int match(char* a, char* b);
 void file_print(char* s, FILE* f);
+char* numerate_number(int a);
 
 void die(char *s)
 {
@@ -144,7 +148,7 @@ void gc()
 	hp = 128;
 	unsigned di = hp;
 	/* Set the stack pointer to point to the top of altmem */
-	sp = altmem + TOP - 1;
+	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
 	sp[0] = evac(spTop[0]);
 
 	/* fprintf(stderr, "GC %u\n", hp - 128); */
@@ -305,11 +309,12 @@ void parseMore(FUNCTION get)
 }
 
 char *str;
+unsigned str_get_c;
 unsigned str_get()
 {
-	unsigned c = str[0] & 0xFF;
+	str_get_c = str[0] & 0xFF;
 	str = str + 1;
-	return c;
+	return str_get_c;
 }
 
 void parse(char *s)
@@ -342,11 +347,12 @@ unsigned num(unsigned n)
 
 void lazy(unsigned height, unsigned f, unsigned x)
 {
-	unsigned* p = mem + sp[height];
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
 	p[0] = f;
-	p = p + 1;
+	p = p + CELL_SIZE;
 	p[0] = x;
-	sp = sp + height - 1;
+	sp = sp + (height * CELL_SIZE) - CELL_SIZE;
 	sp[0] = f;
 }
 
@@ -379,7 +385,7 @@ void run(FUNCTION get, FUNCTION put)
 	{
 		/* int ctr; if (++ctr == (1<<25)) stats(), ctr = 0; */
 		/* int gctr; if ((*sp == 'Y' || *sp == 'S') && ++gctr == (1<<20)) gc(), gctr = 0; */
-		if(mem + hp > sp - 8)
+		if(mem + (hp * CELL_SIZE) > sp - (8 * CELL_SIZE))
 		{
 			gc();
 		}
@@ -388,7 +394,7 @@ void run(FUNCTION get, FUNCTION put)
 
 		if(isAddr(x))
 		{
-			sp = sp - 1;
+			sp = sp - CELL_SIZE;
 			sp[0] = mem[x];
 		}
 		else if(FORWARD == x)
@@ -435,7 +441,7 @@ void run(FUNCTION get, FUNCTION put)
 		else if('I' == x)
 		{
 			sp[1] = arg(1);
-			sp = sp + 1;
+			sp = sp + CELL_SIZE;
 		}
 		/* (&) */
 		/* T x y = y x */
@@ -531,17 +537,17 @@ void run(FUNCTION get, FUNCTION put)
 			m = mnt >> 16;
 			n = (mnt >> 8) & 255;
 			t = mnt & 255;
-			sp = sp + 2;
+			sp = sp + (2 * CELL_SIZE);
 			f = arg(m);
 
 			while(n)
 			{
-				sp = sp + 1;
+				sp = sp + CELL_SIZE;
 				f = app(f, mem[(sp[1])]);
 				n = n - 1;
 			}
 
-			sp = sp + t;
+			sp = sp + (t * CELL_SIZE);
 			mem[sp[0]] = 'I';
 			mem[sp[1]] = f;
 		}
@@ -552,7 +558,7 @@ void run(FUNCTION get, FUNCTION put)
 		else
 		{
 			file_print("?", stderr);
-			file_print("$x",stderr);
+			fputc(x,stderr);
 			file_print("\n",stderr);
 			die("unknown combinator");
 		}
@@ -567,6 +573,7 @@ void buf_reset()
 {
 	bufptr = buf;
 }
+
 unsigned buf_put(unsigned c)
 {
 	if(bufptr == buf_end)
@@ -843,24 +850,25 @@ void fp_reset(char *f)
 {
 	fp = fopen(f, "r");
 
-	if(!fp)
+	if(fp == NULL)
 	{
 		die("fopen failed");
 	}
 }
+
+int fp_c;
 unsigned fp_get()
 {
-	int c = fgetc(fp);
+	fp_c = fgetc(fp);
 
-	if(c == EOF)
+	if(fp_c == EOF)
 	{
 		fclose(fp);
 		return 0;
 	}
 
-	return c;
+	return fp_c;
 }
-
 
 char* iocccp;
 void ioccc_reset(char *f)
@@ -1024,7 +1032,7 @@ int main(int argc, char **argv)
 	mem = malloc(TOP * sizeof(unsigned));
 	altmem = malloc(TOP * sizeof(unsigned));
 	buf_end = buf + BUFMAX;
-	spTop = mem + TOP - 1;
+	spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 	tab = calloc(TABMAX, sizeof(unsigned));
 	buf = calloc(BUFMAX, sizeof(char));
 

@@ -1,0 +1,42 @@
+## Copyright (C) 2016 Jeremiah Orians
+## This file is part of M2-Planet.
+##
+## M2-Planet is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## M2-Planet is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with M2-Planet.  If not, see <http://www.gnu.org/licenses/>.
+
+:_start
+
+	COPY_esp_to_ebp             ; Protect esp
+
+	;; Prepare argv
+	LOAD_BASE_ADDRESS_eax %4    ; ARGV_address = EBP + 4
+	PUSH_eax                    ; Put argv on the stack
+
+	;; Prepare envp
+	COPY_ebp_to_eax             ; Address we need to load from
+	LOAD_INTEGER                ; Get ARGC
+	ADD_IMMEDIATE_to_eax %2     ; OFFSET = ARGC + 2
+	SAL_eax_Immediate8 !2       ; OFFSET = OFFSET * WORDSIZE
+	ADD_ebp_to_eax              ; ENVP_address = ESP + OFFSET
+	PUSH_eax                    ; Put envp on the stack
+
+	;; Stack offset
+	ADD_IMMEDIATE_to_ebp %4     ; Fix ebp
+
+	;; Perform the main loop
+	CALL_IMMEDIATE %FUNCTION_main
+
+	;; Exit to kernel
+	COPY_eax_to_ebx             ; Using the return code given by main
+	LOAD_IMMEDIATE_eax %1       ; Syscall exit
+	INT_80                      ; Exit with that code

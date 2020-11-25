@@ -1,0 +1,97 @@
+## Copyright (C) 2017 Jeremiah Orians
+## This file is part of M2-Planet.
+##
+## M2-Planet is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## M2-Planet is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with M2-Planet.  If not, see <http://www.gnu.org/licenses/>.
+
+
+DEFINE ADD_IMMEDIATE_to_eax 81C0
+DEFINE ADD_IMMEDIATE_to_ebp 81C5
+DEFINE ADD_eax_to_ebx 01C3
+DEFINE ADD_ebp_to_eax 01E8
+DEFINE ADD_ebx_to_eax 01D8
+DEFINE AND_eax_ebx 21D8
+DEFINE CALL_IMMEDIATE E8
+DEFINE CALL_eax FFD0
+DEFINE CMP 39C3
+DEFINE COPY_eax_to_ebx 89C3
+DEFINE COPY_eax_to_ecx 89C1
+DEFINE COPY_ebp_to_eax 89E8
+DEFINE COPY_ebx_to_eax 89D8
+DEFINE COPY_ebx_to_edx 89DA
+DEFINE COPY_ecx_to_ebp 89CD
+DEFINE COPY_edi_to_ebp 89fd
+DEFINE COPY_esp_to_ebp 89E5
+DEFINE COPY_esp_to_ecx 89E1
+DEFINE COPY_esp_to_edi 89E7
+DEFINE CDTQ 99
+DEFINE DIVIDE_eax_by_ebx_into_eax F7FB
+DEFINE DIVIDES_eax_by_ebx_into_eax F7F3
+DEFINE INT_80 CD80
+DEFINE JUMP E9
+DEFINE JUMP_EQ 0F84
+DEFINE JUMP_NE 0F85
+DEFINE JUMP_EQ8 74
+DEFINE JUMP_NE8 75
+DEFINE LOAD_BASE_ADDRESS_eax 8D85
+DEFINE LOAD_BYTE 0FBE00
+DEFINE LOAD_EFFECTIVE_ADDRESS 8D8424
+DEFINE LOAD_EFFECTIVE_ADDRESS_ebx 8D9C24
+DEFINE LOAD_EFFECTIVE_ADDRESS_ecx 8D8C24
+DEFINE LOAD_EFFECTIVE_ADDRESS_edx 8D9424
+DEFINE LOAD_ESP_IMMEDIATE_into_eax 8B8424
+DEFINE LOAD_IMMEDIATE_eax B8
+DEFINE LOAD_IMMEDIATE_ebx BB
+DEFINE LOAD_IMMEDIATE_ecx B9
+DEFINE LOAD_IMMEDIATE_edx BA
+DEFINE LOAD_INTEGER 8B00
+DEFINE LOAD_INTEGER_ebx 8B1B
+DEFINE LOAD_INTEGER_ecx 8B09
+DEFINE LOAD_INTEGER_edx 8B12
+DEFINE MODULUS_eax_from_ebx_into_ebx F7FB
+DEFINE MODULUSS_eax_from_ebx_into_ebx F7F3
+DEFINE MOVEZBL 0FB6C0
+DEFINE MOVE_ebx_to_eax 89D8
+DEFINE MOVE_ecx_to_eax 89C8
+DEFINE MOVE_edx_to_eax 89D0
+DEFINE MULTIPLY_eax_by_ebx_into_eax F7EB
+DEFINE MULTIPLYS_eax_by_ebx_into_eax F7E3
+DEFINE NULL 00000000
+DEFINE NOT_eax F7D0
+DEFINE OR_eax_ebx 09D8
+DEFINE POP_eax 58
+DEFINE POP_ebx 5B
+DEFINE POP_ebp 5D
+DEFINE POP_edi 5F
+DEFINE PUSH_eax 50
+DEFINE PUSH_ebx 53
+DEFINE PUSH_ebp 55
+DEFINE PUSH_edi 57
+DEFINE RETURN C3
+DEFINE SAL_eax_Immediate8 C1E0
+DEFINE SHL_eax_cl D3E0
+DEFINE SAL_eax_cl D3F0
+DEFINE SHR_eax_cl D3E8
+DEFINE SAR_eax_cl D3F8
+DEFINE SETE 0F94C0
+DEFINE SETLE 0F9EC0
+DEFINE SETL 0F9CC0
+DEFINE SETGE 0F9DC0
+DEFINE SETG 0F9FC0
+DEFINE SETNE 0F95C0
+DEFINE STORE_CHAR 8803
+DEFINE STORE_INTEGER 8903
+DEFINE SUBTRACT_eax_from_ebx_into_ebx 29C3
+DEFINE TEST 85C0
+DEFINE XCHG_eax_ebx 93
+DEFINE XOR_ebx_eax_into_eax 31D8
