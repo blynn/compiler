@@ -895,16 +895,18 @@ unsigned pc(unsigned c)
 	fflush(stdout);
 	return 0;
 }
+
+int ioget_c;
 unsigned ioget()
 {
-	int c = fgetc(stdin);
+	ioget_c = fgetc(stdin);
 
-	if(c == EOF)
+	if(ioget_c == EOF)
 	{
 		return 0;
 	}
 
-	return c;
+	return ioget_c;
 }
 
 void lvlup(char *prog)
