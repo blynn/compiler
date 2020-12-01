@@ -203,9 +203,9 @@ void loadRaw(FUNCTION get)
 		do
 		{
 			c = get(0);
-		} while(c && (c < '0' || c > '9'));
+		} while(c != 0 && (c < '0' || c > '9'));
 
-		if(!c)
+		if(c == 0)
 		{
 			break;
 		}
