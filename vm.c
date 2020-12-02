@@ -309,10 +309,10 @@ void parseMore(FUNCTION get)
 }
 
 char *str;
-unsigned str_get_c;
-unsigned str_get()
+
+unsigned str_get(unsigned f)
 {
-	str_get_c = str[0] & 0xFF;
+	unsigned str_get_c = str[0] & 0xFF;
 	str = str + 1;
 	return str_get_c;
 }
@@ -856,10 +856,10 @@ void fp_reset(char *f)
 	}
 }
 
-int fp_c;
-unsigned fp_get()
+
+unsigned fp_get(unsigned f)
 {
-	fp_c = fgetc(fp);
+	int fp_c = fgetc(fp);
 
 	if(fp_c == EOF)
 	{
@@ -877,7 +877,7 @@ void ioccc_reset(char *f)
 	iocccp = "infixr 5 ++;(<=) = intLE;";
 }
 
-unsigned ioccc_get()
+unsigned ioccc_get(unsigned f)
 {
 	if(0 == iocccp[0])
 	{
@@ -886,7 +886,7 @@ unsigned ioccc_get()
 		return r;
 	}
 
-	return fp_get();
+	return fp_get(f);
 }
 
 unsigned pc(unsigned c)
@@ -896,10 +896,9 @@ unsigned pc(unsigned c)
 	return 0;
 }
 
-int ioget_c;
-unsigned ioget()
+unsigned ioget(unsigned f)
 {
-	ioget_c = fgetc(stdin);
+	int ioget_c = fgetc(stdin);
 
 	if(ioget_c == EOF)
 	{
@@ -1059,10 +1058,10 @@ int main(int argc, char **argv)
 			str = buf;
 			unsigned c;
 
-			while((c = str_get())) if(c != fp_get())
-				{
-					die("raw check failed!");
-				}
+			while((c = str_get(0)))
+			{
+				if(c != fp_get(0))die("raw check failed!");
+			}
 
 			file_print("OK", stdout);
 			return 0;
