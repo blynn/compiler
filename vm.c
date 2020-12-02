@@ -43,14 +43,7 @@
 int match(char* a, char* b);
 void file_print(char* s, FILE* f);
 char* numerate_number(int a);
-
-void die(char *s)
-{
-	file_print("error: ", stderr);
-	file_print(s, stderr);
-	file_print(" \n", stderr);
-	exit(EXIT_FAILURE);
-}
+void require(int bool, char* error);
 
 unsigned* mem;
 unsigned* altmem;
@@ -293,18 +286,12 @@ void parseMore(FUNCTION get)
 			return;
 		}
 
-		if(tabn == TABMAX)
-		{
-			die("table overflow");
-		}
+		require(tabn < TABMAX, "error: table overflow\n");
 
 		tab[tabn] = c;
 		tabn = tabn + 1;
 
-		if(get(0) != ';')
-		{
-			die("expected ';'");
-		}
+		require(get(0) == ';', "error: expected ';'\n");
 	}
 }
 
@@ -400,7 +387,7 @@ void run(FUNCTION get, FUNCTION put)
 		else if(FORWARD == x)
 		{
 			stats();
-			die("stray forwarding pointer");
+			require(FALSE, "error: stray forwarding pointer\n");
 		}
 		else if('.' == x)
 		{
@@ -560,7 +547,7 @@ void run(FUNCTION get, FUNCTION put)
 			file_print("?", stderr);
 			fputc(x,stderr);
 			file_print("\n",stderr);
-			die("unknown combinator");
+			require(FALSE, "error: unknown combinator\n");
 		}
 	}
 }
@@ -576,10 +563,7 @@ void buf_reset()
 
 unsigned buf_put(unsigned c)
 {
-	if(bufptr == buf_end)
-	{
-		die("buffer overflow");
-	}
+	require(bufptr != buf_end, "error: buffer overflow\n");
 
 	bufptr[0] = c;
 	bufptr = bufptr + 1;
@@ -849,11 +833,7 @@ FILE *fp;
 void fp_reset(char *f)
 {
 	fp = fopen(f, "r");
-
-	if(fp == NULL)
-	{
-		die("fopen failed");
-	}
+	require(fp != NULL, "error: fopen failed\n");
 }
 
 
@@ -941,44 +921,6 @@ void lvlup_file_raw(char *filename)
 	bufptr[0] = 0;
 }
 
-void rpg()
-{
-	buf[0] = 'I';
-	buf[1] = ';';
-	bufptr = buf + 2;
-	lvlup(parenthetically);
-	lvlup(exponentially);
-	lvlup(practically);
-	lvlup(singularity);
-	lvlup_file("singularity");
-	lvlup_file("semantically");
-	lvlup_file("stringy");
-	lvlup_file("binary");
-	lvlup_file("algebraically");
-	lvlup_file("parity.hs");
-	lvlup_file("fixity.hs");
-	lvlup_file("typically.hs");
-	lvlup_file("classy.hs");
-	lvlup_file("barely.hs");
-	lvlup_file("barely.hs");
-	lvlup_file_raw("barely.hs");
-}
-
-void dis(char *file)
-{
-	fp_reset("bin/raw");
-	loadRaw(fp_get);
-	fp_reset("disassembly.hs");
-	buf_reset();
-	run(fp_get, buf_put);
-	parseRaw(buf);
-	fp_reset(file);
-	file_print("disassembling ", stderr);
-	file_print(file, stderr);
-	file_print("\n", stderr);
-	run(fp_get, pc);
-}
-
 void runFile(char *f)
 {
 	fp_reset("bin/raw");
@@ -1036,83 +978,114 @@ int main(int argc, char **argv)
 	spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 	tab = calloc(TABMAX, sizeof(unsigned));
 	buf = calloc(BUFMAX, sizeof(char));
+	unsigned c;
 
-	if(argc > 1)
+	int i = 1;
+	while(i <= argc)
 	{
-		if(match(argv[1], "test"))
+		if(NULL == argv[i])
+		{
+			i = i + 1;
+		}
+		else if(match(argv[i], "test"))
 		{
 			runTests();
-			return 0;
+			i = i + 1;
 		}
-
-		if(match(argv[1], "iotest"))
+		else if(match(argv[i], "iotest"))
 		{
 			iotest();
-			return 0;
+			i = i + 1;
 		}
-
-		if(match(argv[1], "rawck"))
+		else if(match(argv[i], "rawck"))
 		{
-			rpg();
+			buf[0] = 'I';
+			buf[1] = ';';
+			bufptr = buf + 2;
+			lvlup(parenthetically);
+			lvlup(exponentially);
+			lvlup(practically);
+			lvlup(singularity);
+			lvlup_file("singularity");
+			lvlup_file("semantically");
+			lvlup_file("stringy");
+			lvlup_file("binary");
+			lvlup_file("algebraically");
+			lvlup_file("parity.hs");
+			lvlup_file("fixity.hs");
+			lvlup_file("typically.hs");
+			lvlup_file("classy.hs");
+			lvlup_file("barely.hs");
+			lvlup_file("barely.hs");
+			lvlup_file_raw("barely.hs");
 			fp_reset("bin/raw");
 			str = buf;
-			unsigned c;
-
-			while((c = str_get(0)))
+			c = str_get(0);
+			while(0 != c)
 			{
-				if(c != fp_get(0))die("raw check failed!");
+				require(c == fp_get(0), "error: raw check failed!\n");
+				c = str_get(0);
 			}
 
 			file_print("OK", stdout);
-			return 0;
+			i = i + 1;
 		}
-
-		if(match(argv[1], "run"))
+		else if(match(argv[i], "run"))
 		{
-			runFile(argv[2]);
-			return 0;
+			runFile(argv[i+1]);
+			i = i + 2;
 		}
-
-		if(match(argv[1], "ioccc"))
+		else if(match(argv[i], "ioccc"))
 		{
-			ioccc(argv[2]);
-			return 0;
+			ioccc(argv[i+1]);
+			i = i + 2;
 		}
-
-		if(match(argv[1], "testdis"))
-		{
-			dis("disassembly.hs");
-			return 0;
-		}
-
-		if(match(argv[1], "dis"))
-		{
-			dis(argv[2]);
-			return 0;
-		}
-
-		if(match(argv[1], "asm"))
+		else if(match(argv[i], "asm"))
 		{
 			fp_reset("bin/raw");
 			loadRaw(fp_get);
 			run(ioget, pc);
-			return EXIT_SUCCESS;
+			i = i + 1;
 		}
-
-		if(match(argv[1], "asmWith"))
+		else if(match(argv[i], "asmWith"))
 		{
-			fp_reset(argv[2]);
+			fp_reset(argv[i+1]);
 			loadRaw(fp_get);
 			run(ioget, pc);
-			return EXIT_SUCCESS;
+			i = i + 2;
 		}
-
-		file_print("bad command", stdout);
-		return 0;
+		else if(match(argv[i], "rpg"))
+		{
+			buf[0] = 'I';
+			buf[1] = ';';
+			bufptr = buf + 2;
+			lvlup(parenthetically);
+			lvlup(exponentially);
+			lvlup(practically);
+			lvlup(singularity);
+			lvlup_file("singularity");
+			lvlup_file("semantically");
+			lvlup_file("stringy");
+			lvlup_file("binary");
+			lvlup_file("algebraically");
+			lvlup_file("parity.hs");
+			lvlup_file("fixity.hs");
+			lvlup_file("typically.hs");
+			lvlup_file("classy.hs");
+			lvlup_file("barely.hs");
+			lvlup_file("barely.hs");
+			lvlup_file_raw("barely.hs");
+			file_print(buf, stdout);
+			file_print("\n", stdout);
+			i = i + 1;
+		}
+		else
+		{
+			file_print("bad command: ", stdout);
+			file_print(argv[i], stdout);
+			file_print("\n", stdout);
+			exit(EXIT_FAILURE);
+		}
 	}
-
-	rpg();
-	file_print(buf, stdout);
-	file_print("\n", stdout);
 	return EXIT_SUCCESS;
 }
