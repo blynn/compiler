@@ -1013,16 +1013,16 @@ compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (asm $ lambF []) \tab mem ->
     (concatMap ffiDeclare ffis ++) .
-    ("static void foreign(u n) {\n  switch(n) {\n" ++) .
+    ("unsigned foreign(unsigned n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
-    ("static const u prog[]={" ++) .
+    ("unsigned prog[]={" ++) .
     foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
-    ("};\nstatic const u prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
-    ("static u root[]={" ++) .
+    ("};\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
+    ("unsigned root[]={" ++) .
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
-    ("static const u root_size=" ++) . showInt (length exs) . (";\n" ++) .
+    ("unsigned root_size=" ++) . showInt (length exs) . (";\n" ++) .
     (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
     maybe "" genMain (mlookup "main" tab)
   };
