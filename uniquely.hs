@@ -1093,9 +1093,9 @@ compile s = case untangle s of
     ("unsigned foreign(unsigned n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
-    ("unsigned prog[]={" ++) .
+    ("char *prog=\"" ++) .
     foldr (.) id (map (\n -> showInt n . (',':)) mem) .
-    ("};\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
+    ("\";\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
     ("unsigned root[]={" ++) .
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .
