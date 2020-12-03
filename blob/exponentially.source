@@ -1,0 +1,79 @@
+##
+## Copyright © 2019 Ben Lynn
+## This file is part of blynn-compiler.
+##
+## blynn-compiler is free software: you can redistribute it and/or
+## modify it under the terms of the GNU General Public License as
+## published by the Free Software Foundation, only under version 3 of
+## the License.
+##
+## blynn-compiler is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+## General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with blynn-compiler.  If not, see
+## <https://www.gnu.org/licenses/>.
+##
+
+# What it is supposed to mean
+# id x = x;
+# const x _ = x;
+# (&) x f = f x;
+# flip f x y = f y x;
+# fix x = x (fix x);
+# Nothing x _ = x;
+# Just x f g = g x;
+# P x y f = f x y;
+# (||) f g x y = f x (g x y);
+# (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
+# pure x inp = Just (P x inp);
+# bind f m = m Nothing (\x -> x f);
+# (<*>) x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+# (<$>) f x = pure f <*> x;
+# (*>) p q = (\_ x -> x) <$> p <*> q;
+# (<*) p q = (\x _ -> x) <$> p <*> q;
+# (<|>) x y = \inp -> (x inp) (y inp) Just;
+# R s   = \a b c d -> a s;
+# V v   = \a b c d -> b v;
+# A x y = \a b c d -> c x y;
+# L x y = \a b c d -> d x y;
+# sat f inp = inp Nothing (\h t -> f h (pure h t) Nothing);
+# char c = sat (\x -> x(c(==)));
+# var = sat (\c -> flip (c(';'(==)) || c(')'(==))));
+# pre = (:) <$> (char '#' <|> char '@') <*> (flip (:) const <$> sat (const const));
+# atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (R <$> pre) <|> (V <$> var);
+# apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
+# expr = ((&) <$> atom expr) <*> apps expr;
+# show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) undefined;
+# unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
+# babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
+# main s = (expr <* char ';') s "" (\p -> p (\x t -> show (babs x) ++ ";" ++ main t)));
+
+"BKT;"
+"BCT;"
+"BS(BB);"
+"Y(B(CS)(B(B(C(BB:)))C));"
+"B(B@ )@!;"
+"B(C(TK))T;"
+"C(BB(B@%(C(BB(B@%(B@$))))));"
+"B@&@$;"
+"B@&(@'(KI));"
+"B@&(@'K);"
+"B(B(R@ ))S;"
+"B(BK)(B(BK)(B(BK)T));"
+"BK(B(BK)(B(BK)T));"
+"B(BK)(B(BK)(B(B(BK))(BCT)));"
+"B(BK)(B(BK)(B(BK)(BCT)));"
+"B(C(TK))(B(B(RK))(C(BS(BB))@$));"
+"B@/(BT(T=));"
+"@/(BC(S(B@\"(T(#;=)))(T(#)=))));"
+"@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));"
+"C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);"
+"Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));"
+"Y(S(B@&(B(@'T)@3))@4);"
+"Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));"
+"BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT(T=))))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));"
+"Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));"
+"Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"

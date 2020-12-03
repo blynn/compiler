@@ -28,15 +28,47 @@ ALL: precisely
 vm: vm.c functions/match.c functions/in_set.c functions/numerate_number.c functions/file_print.c functions/require.c | bin
 	$(CC) $(CFLAGS) vm.c functions/file_print.c functions/require.c functions/match.c functions/in_set.c functions/numerate_number.c -o bin/vm
 
-raw: vm | bin
-	./bin/vm rpg > bin/raw
+pack_blobs: pack_blobs.c functions/match.c functions/file_print.c functions/require.c | bin
+	$(CC) $(CFLAGS) pack_blobs.c functions/match.c functions/file_print.c functions/require.c -o bin/pack_blobs
+
+parenthetically: pack_blobs | generated
+	./bin/pack_blobs -f blob/parenthetically.source -o generated/parenthetically
+
+exponentially: pack_blobs | generated
+	./bin/pack_blobs -f blob/exponentially.source -o generated/exponentially
+
+practically: pack_blobs | generated
+	./bin/pack_blobs -f blob/practically.source -o generated/practically
+
+singularity_blob: pack_blobs | generated
+	./bin/pack_blobs -f blob/singularity.source -o generated/singularity_blob
+
+raw: vm parenthetically exponentially practically singularity_blob | bin
+	./bin/vm --bootstrap \
+		-lf generated/parenthetically \
+		-lf generated/exponentially \
+		-lf generated/practically \
+		-lf generated/singularity_blob \
+		-lf singularity \
+		-lf semantically \
+		-lf stringy \
+		-lf binary \
+		-lf algebraically \
+		-lf parity.hs \
+		-lf fixity.hs \
+		-lf typically.hs \
+		-lf classy.hs \
+		-lf barely.hs \
+		-lf barely.hs \
+		-lfr barely.hs \
+		-o bin/raw
 
 lonely:lonely.c | bin
 	$(CC) $(CFLAGS) generated/lonely.c -o bin/lonely
 
 lonely.c: vm effectively.hs lonely.hs rts.c raw | generated
 	cp rts.c generated/lonely.c
-	./bin/vm run effectively.hs < lonely.hs >> generated/lonely.c
+	./bin/vm -f lonely.hs -l bin/raw run effectively.hs >> generated/lonely.c
 
 patty: patty.c | bin
 	$(CC) $(CFLAGS) generated/patty.c -o bin/patty

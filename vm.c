@@ -52,6 +52,11 @@ unsigned* spTop;
 unsigned hp;
 unsigned* tab;
 unsigned tabn;
+FILE* destination_file;
+FILE* input_file;
+
+/* Stupid global to shutup warnings; should be removed when readers are unified */
+unsigned failure;
 
 void stats()
 {
@@ -131,12 +136,9 @@ unsigned evac(unsigned n)
 	return z;
 }
 
-unsigned gccount;
-
 /* Garbage collection */
 void gc()
 {
-	gccount = gccount + 1;
 	/* Reset the heap pointer */
 	hp = 128;
 	unsigned di = hp;
@@ -220,7 +222,7 @@ void loadRaw(FUNCTION get)
 		hp = hp + 1;
 	}
 
-	reset(mem[128 - 1]);
+	reset(mem[127]);
 }
 
 unsigned parseTerm(FUNCTION get)
@@ -299,6 +301,7 @@ char *str;
 
 unsigned str_get(unsigned f)
 {
+	failure = f;
 	unsigned str_get_c = str[0] & 0xFF;
 	str = str + 1;
 	return str_get_c;
@@ -310,12 +313,6 @@ void parse(char *s)
 	tabn = 0;
 	str = s;
 	parseMore(str_get);
-}
-
-void parseRaw(char *s)
-{
-	str = s;
-	loadRaw(str_get);
 }
 
 /* Since application nodes are stored in adjacent memory locations, we
@@ -359,7 +356,6 @@ void foreign(unsigned n)
 
 void run(FUNCTION get, FUNCTION put)
 {
-	gccount = 0;
 	unsigned c;
 	unsigned x;
 	unsigned mnt;
@@ -601,196 +597,6 @@ void testCaseMore(char *prog, char *more, char *inp, char *want)
 	testCmp(inp, want);
 }
 
-
-/* Big ugly RAW data */
-char* parenthetically;
-char* exponentially;
-char* practically;
-char* singularity;
-
-void setup_raws()
-{
-	parenthetically =
-    /*
-    uncurry x y = y x;
-    (.) x y z = x (y z);
-
-    pair x y f = f x y;
-    (||) f g x y = f x (g x y);
-    (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
-    ifNull xs a b = xs a (\_ _ -> b);
-    add r acc p = r (ifNull acc p ('`':(acc ++ p)));
-    isPre h = h('#'(==)) || h('@'(==));
-    suffix f h t = isPre h (t undefined (\a b -> pair (a:[]) b)) (pair [] t) (\x y -> f (h:x) y);
-    atom r h acc t = suffix (add r acc) h t;
-    sub r acc = uncurry (add r acc) . r "";
-    closes h = h(';'(==)) || h(')'(==));
-    if3 h x y z = closes h x (h('('(==)) y z);
-    switch r a h t = if3 h pair (sub r) (atom r h) a t;
-    term acc s = s undefined (\h t -> switch term acc h t);
-    parse s = s "" (\_ _ -> term "" s (\p t -> p ++ (';':parse t)));
-    */
-    "``BCT;"
-    "``BS`BB;"
-    "`Y``B`CS``B`B`C``BB:C;"
-    "``B`R``BKK`BB;"
-    "``C``BBB``S``BS@#``B`B`:#`@\";"
-    "``S``B@!`T`##=`T`#@=;"
-    "``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;"
-    "``BC``B`B@&@$;"
-    "``S``BC``B`BB``B`BT@$`TK;"
-    "``S``B@!`T`#;=`T`#)=;"
-    "``S``BC``B`BB``B`BB@)`T`#(=;"
-    "``BC``S``BS``B`C``C@*@ @(@';"
-    "`Y``B`B`C`T?@+;"
-    "`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@\"`B`:#;;"
-    ;
-
-	exponentially =
-    /*
-    id x = x;
-    const x _ = x;
-    (&) x f = f x;
-    flip f x y = f y x;
-    fix x = x (fix x);
-    Nothing x _ = x;
-    Just x f g = g x;
-    P x y f = f x y;
-    (||) f g x y = f x (g x y);
-    (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
-    pure x inp = Just (P x inp);
-    bind f m = m Nothing (\x -> x f);
-    (<*>) x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
-    (<$>) f x = pure f <*> x;
-    (*>) p q = (\_ x -> x) <$> p <*> q;
-    (<*) p q = (\x _ -> x) <$> p <*> q;
-    (<|>) x y = \inp -> (x inp) (y inp) Just;
-    R s   = \a b c d -> a s;
-    V v   = \a b c d -> b v;
-    A x y = \a b c d -> c x y;
-    L x y = \a b c d -> d x y;
-    sat f inp = inp Nothing (\h t -> f h (pure h t) Nothing);
-    char c = sat (\x -> x(c(==)));
-    var = sat (\c -> flip (c(';'(==)) || c(')'(==))));
-    pre = (:) <$> (char '#' <|> char '@') <*> (flip (:) const <$> sat (const const));
-    atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (R <$> pre) <|> (V <$> var);
-    apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
-    expr = ((&) <$> atom expr) <*> apps expr;
-    show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) undefined;
-    unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
-    babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
-    main s = (expr <* char ';') s "" (\p -> p (\x t -> show (babs x) ++ ";" ++ main t)));
-    */
-    "BKT;"
-    "BCT;"
-    "BS(BB);"
-    "Y(B(CS)(B(B(C(BB:)))C));"
-    "B(B@ )@!;"
-    "B(C(TK))T;"
-    "C(BB(B@%(C(BB(B@%(B@$))))));"
-    "B@&@$;"
-    "B@&(@'(KI));"
-    "B@&(@'K);"
-    "B(B(R@ ))S;"
-    "B(BK)(B(BK)(B(BK)T));"
-    "BK(B(BK)(B(BK)T));"
-    "B(BK)(B(BK)(B(B(BK))(BCT)));"
-    "B(BK)(B(BK)(B(BK)(BCT)));"
-    "B(C(TK))(B(B(RK))(C(BS(BB))@$));"
-    "B@/(BT(T=));"
-    "@/(BC(S(B@\"(T(#;=)))(T(#)=))));"
-    "@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));"
-    "C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);"
-    "Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));"
-    "Y(S(B@&(B(@'T)@3))@4);"
-    "Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));"
-    "BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT(T=))))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));"
-    "Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));"
-    "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"
-    ;
-
-	practically =
-    /* Same as above, except: */
-    /*
-    occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
-    unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
-    */
-    "BKT;"
-    "BCT;"
-    "BS(BB);"
-    "Y(B(CS)(B(B(C(BB:)))C));"
-    "B(B@ )@!;"
-    "B(C(TK))T;"
-    "C(BB(B@%(C(BB(B@%(B@$))))));"
-    "B@&@$;"
-    "B@&(@'(KI));"
-    "B@&(@'K);"
-    "B(B(R@ ))S;"
-    "B(BK)(B(BK)(B(BK)T));"
-    "BK(B(BK)(B(BK)T));"
-    "B(BK)(B(BK)(B(B(BK))(BCT)));"
-    "B(BK)(B(BK)(B(BK)(BCT)));"
-    "B(C(TK))(B(B(RK))(C(BS(BB))@$));"
-    "B@/(BT(T=));"
-    "@/(BC(S(B@\"(T(#;=)))(T(#)=))));"
-    "@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));"
-    "C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);"
-    "Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));"
-    "Y(S(B@&(B(@'T)@3))@4);"
-    "Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));"
-    "Y\\a.\\b.\\c.c(\\d.KI)(\\d.d(b=))(\\d.\\e.@\"(abd)(abe))?;"
-    "Y\\a.\\b.\\c.@7bc(c?(K(@,#I))(\\d.\\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);"
-    "Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));"
-    "Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));"
-    ;
-
-	singularity =
-    "\\a.\\b.\\c.\\d.ac(bcd);"
-    "Y\\a.\\b.\\c.\\d.\\e.b(cd\\f.\\g.e)\\f.\\g.ce\\h.\\i.f(h=)(agide)e;"
-    "Y\\a.\\b.\\c.bc\\d.\\e.:d(aec);"
-    "\\a.\\b.\\c.cab;"
-    "\\a.\\b.\\c.ca;"
-    "\\a.\\b.@$(@#ab);"
-    "\\a.\\b.bK\\c.\\d.ac(@%cd)K;"
-    "\\a.\\b.bK\\c.ca;"
-    "\\a.\\b.\\c.@'(\\d.\\e.@'(\\f.\\g.@%(df)g)(be))(ac);"
-    "\\a.\\b.@((@%a)b;"
-    "\\a.\\b.\\c.ac(bc)@$;"
-    "Y\\a.\\b.\\c.\\d.dc\\e.\\f.be(abcf);"
-    "\\a.\\b.\\c.@((@)ab)c;"
-    "Y\\a.\\b.@*(@,:b(ab))(@%K);"
-    "\\a.@,:a(@-a);"
-    "\\a.@&\\b.b(a=);"
-    "@,(KI);"
-    "@,K;"
-    "@0(@/#-)(@0(@/#-)(@0(@-(@&\\a.C(a(#\n=))))(@/#\n)));"
-    "@-(@*(@&\\a.@ (a(# =))(a(#\n=)))@2);"
-    "\\a.@1a@3;"
-    "B@4@/;"
-    "\\a.\\b.\\c.\\d.Cad(bcd);"
-    "@4(@.(@&\\a.@6(#z(aL))(a(#aL))));"
-    "\\a.\\b.\\c.\\d.\\e.ba;"
-    "\\a.\\b.\\c.\\d.\\e.ca;"
-    "\\a.\\b.\\c.\\d.\\e.\\f.eab;"
-    "\\a.\\b.\\c.\\d.\\e.\\f.fab;"
-    "@)(C:K)(@4(@&(KK)));"
-    "@*(@0(@/#@)@<)(@,:(@/##)@<);"
-    "\\a.@0(@5#\\)(@,(C(@+@;))(@.@7)(@0(@/#-)(@0(@5#>)a)));"
-    "\\a.@*(@*(@*(@0(@5#()(@1a(@5#))))(@>a))(@)@8@=))(@)@9@7);"
-    "Y\\a.\\b.@*(@,T(@?b)(@)(\\c.\\d.\\e.c(@:ed))(ab)))(@%I);"
-    "Y\\a.@,T(@?a)(@@a);"
-    "@,@#@7(@,(C(@+@;))(@-@7)(@0(@5#=)@A));"
-    "@0@3(@.(@1@B(@5#;)));"
-    "\\a.\\b.@+(\\c.\\d.@!a(cK)(\\e.:#@(:eK))(Bd\\e.# (#!-)(e+)))(Ka)b# ;"
-    "Y\\a.\\b.\\c.cI(\\d.@Ddb)(\\d.\\e.:#`(@\"(abd)(abe)))?;"
-    "Y\\a.\\b.\\c.c(\\d.KI)(\\d.@!bd)(\\d.\\e.@ (abd)(abe))\\d.\\e.C(@ (@!bd)(C(abe)));"
-    "Y\\a.\\b.\\c.@Fbc(c?(K(@8(:#IK)))(\\d.\\e.@:(@:(@9(:#SK))(abd))(abe))?)(@:(@9(:#KK))c);"
-    "Y\\a.\\b.b@8@9(\\c.\\d.@:(ac)(ad))\\c.\\d.@Gc(ad);"
-    "Y\\a.\\b.\\c.cK\\d.\\e.@\"(@Eb(@H(d(KI))))(:#;(abe));"
-    "\\a.@Ca(:#?K)(B(\\b.@Ibb)(TK));"
-    ;
-}
-
 void runTests()
 {
 	testCase("`KK;", "ignoreme", "");
@@ -820,13 +626,13 @@ void runTests()
 	    "`xy");
 	testCase("`K``:#f``:#xK;", "", "fx");
 	/* atom id 'x' "f" */
-	testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx");
+	/* testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx"); */
 	/* if3 ')' "1" "2" "3" */
-	testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1");
+	/* testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1"); */
 	/* fst . term */
-	testCaseMore(parenthetically, "``B`TK`@,K;",
-	             "just(one);not(two);", "````just``one");
-	testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;");
+	/* testCaseMore(parenthetically, "``B`TK`@,K;", */
+	/*              "just(one);not(two);", "````just``one"); */
+	/* testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;"); */
 }
 
 FILE *fp;
@@ -839,6 +645,7 @@ void fp_reset(char *f)
 
 unsigned fp_get(unsigned f)
 {
+	failure = f;
 	int fp_c = fgetc(fp);
 
 	if(fp_c == EOF)
@@ -871,14 +678,15 @@ unsigned ioccc_get(unsigned f)
 
 unsigned pc(unsigned c)
 {
-	fputc(c, stdout);
-	fflush(stdout);
+	fputc(c, destination_file);
+	fflush(destination_file);
 	return 0;
 }
 
 unsigned ioget(unsigned f)
 {
-	int ioget_c = fgetc(stdin);
+	failure = f;
+	int ioget_c = fgetc(input_file);
 
 	if(ioget_c == EOF)
 	{
@@ -888,33 +696,14 @@ unsigned ioget(unsigned f)
 	return ioget_c;
 }
 
-void lvlup(char *prog)
+void lvlup_file(char *filename, int raw)
 {
-	parse(buf);
-	str = prog;
-	buf_reset();
-	run(str_get, buf_put);
-	bufptr[0] = 0;
-}
-
-void lvlup_file(char *filename)
-{
-	file_print("loading ", stderr);
-	file_print(filename, stderr);
-	file_print("...\n", stderr);
-	parse(buf);
-	fp_reset(filename);
-	buf_reset();
-	run(fp_get, buf_put);
-	bufptr[0] = 0;
-}
-
-void lvlup_file_raw(char *filename)
-{
-	file_print("loading ", stderr);
-	file_print(filename, stderr);
-	file_print("...\n", stderr);
-	parseRaw(buf);
+	if(raw)
+	{
+		str = buf;
+		loadRaw(str_get);
+	}
+	else parse(buf);
 	fp_reset(filename);
 	buf_reset();
 	run(fp_get, buf_put);
@@ -923,32 +712,28 @@ void lvlup_file_raw(char *filename)
 
 void runFile(char *f)
 {
-	fp_reset("bin/raw");
-	loadRaw(fp_get);
 	fp_reset(f);
 	buf_reset();
 	run(fp_get, buf_put);
 	bufptr[0] = 0;
-	parseRaw(buf);
+	str = buf;
+	loadRaw(str_get);
 	run(ioget, pc);
 }
 
 void ioccc(char *f)
 {
-	fp_reset("bin/raw");
-	loadRaw(fp_get);
 	ioccc_reset(f);
 	buf_reset();
 	run(ioccc_get, buf_put);
 	bufptr[0] = 0;
-	parseRaw(buf);
+	str = buf;
+	loadRaw(str_get);
 	run(ioget, pc);
 }
 
 void iotest()
 {
-	fp_reset("bin/raw");
-	loadRaw(fp_get);
 	str =
 	    "ioBind2 m k = ioBind m (\\_ -> k);"
 	    "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
@@ -963,7 +748,8 @@ void iotest()
 	buf_reset();
 	run(str_get, buf_put);
 	bufptr[0] = 0;
-	parseRaw(buf);
+	str = buf;
+	loadRaw(str_get);
 	sp[0] = app(app(root_memo, '?'), '.');
 	str = "";
 	run(str_get, pc);
@@ -971,121 +757,86 @@ void iotest()
 
 int main(int argc, char **argv)
 {
-	setup_raws();
 	mem = malloc(TOP * sizeof(unsigned));
 	altmem = malloc(TOP * sizeof(unsigned));
 	buf_end = buf + BUFMAX;
 	spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 	tab = calloc(TABMAX, sizeof(unsigned));
 	buf = calloc(BUFMAX, sizeof(char));
-	unsigned c;
+	destination_file = stdout;
+	input_file = stdin;
 
-	int i = 1;
-	while(i <= argc)
+	int option_index = 1;
+	while(option_index <= argc)
 	{
-		if(NULL == argv[i])
+		if(NULL == argv[option_index])
 		{
-			i = i + 1;
+			option_index = option_index + 1;
 		}
-		else if(match(argv[i], "test"))
+		else if(match(argv[option_index], "-l") || match(argv[option_index], "--load-rom"))
 		{
-			runTests();
-			i = i + 1;
+			fp_reset(argv[option_index+1]);
+			loadRaw(fp_get);
+			option_index = option_index + 2;
 		}
-		else if(match(argv[i], "iotest"))
+		else if(match(argv[option_index], "run"))
 		{
-			iotest();
-			i = i + 1;
+			runFile(argv[option_index+1]);
+			option_index = option_index + 2;
+			exit(EXIT_SUCCESS);
 		}
-		else if(match(argv[i], "rawck"))
+		else if(match(argv[option_index], "--bootstrap"))
 		{
 			buf[0] = 'I';
 			buf[1] = ';';
 			bufptr = buf + 2;
-			lvlup(parenthetically);
-			lvlup(exponentially);
-			lvlup(practically);
-			lvlup(singularity);
-			lvlup_file("singularity");
-			lvlup_file("semantically");
-			lvlup_file("stringy");
-			lvlup_file("binary");
-			lvlup_file("algebraically");
-			lvlup_file("parity.hs");
-			lvlup_file("fixity.hs");
-			lvlup_file("typically.hs");
-			lvlup_file("classy.hs");
-			lvlup_file("barely.hs");
-			lvlup_file("barely.hs");
-			lvlup_file_raw("barely.hs");
-			fp_reset("bin/raw");
-			str = buf;
-			c = str_get(0);
-			while(0 != c)
-			{
-				require(c == fp_get(0), "error: raw check failed!\n");
-				c = str_get(0);
-			}
+			option_index = option_index + 1;
+		}
+		else if(match(argv[option_index], "-lf") || match(argv[option_index], "--levelup-file"))
+		{
+			lvlup_file(argv[option_index + 1], FALSE);
+			option_index = option_index + 2;
+		}
+		else if(match(argv[option_index], "-lfr") || match(argv[option_index], "--levelup-file-raw"))
+		{
+			lvlup_file(argv[option_index + 1], TRUE);
+			option_index = option_index + 2;
+		}
+		else if(match(argv[option_index], "-o") || match(argv[option_index], "--output"))
+		{
+			destination_file = fopen(argv[option_index + 1], "w");
 
-			file_print("OK", stdout);
-			i = i + 1;
+			if(NULL == destination_file)
+			{
+				file_print("The file: ", stderr);
+				file_print(argv[option_index + 1], stderr);
+				file_print(" can not be opened!\n", stderr);
+				exit(EXIT_FAILURE);
+			}
+			option_index = option_index + 2;
 		}
-		else if(match(argv[i], "run"))
+		else if(match(argv[option_index], "-f") || match(argv[option_index], "--file"))
 		{
-			runFile(argv[i+1]);
-			i = i + 2;
-		}
-		else if(match(argv[i], "ioccc"))
-		{
-			ioccc(argv[i+1]);
-			i = i + 2;
-		}
-		else if(match(argv[i], "asm"))
-		{
-			fp_reset("bin/raw");
-			loadRaw(fp_get);
-			run(ioget, pc);
-			i = i + 1;
-		}
-		else if(match(argv[i], "asmWith"))
-		{
-			fp_reset(argv[i+1]);
-			loadRaw(fp_get);
-			run(ioget, pc);
-			i = i + 2;
-		}
-		else if(match(argv[i], "rpg"))
-		{
-			buf[0] = 'I';
-			buf[1] = ';';
-			bufptr = buf + 2;
-			lvlup(parenthetically);
-			lvlup(exponentially);
-			lvlup(practically);
-			lvlup(singularity);
-			lvlup_file("singularity");
-			lvlup_file("semantically");
-			lvlup_file("stringy");
-			lvlup_file("binary");
-			lvlup_file("algebraically");
-			lvlup_file("parity.hs");
-			lvlup_file("fixity.hs");
-			lvlup_file("typically.hs");
-			lvlup_file("classy.hs");
-			lvlup_file("barely.hs");
-			lvlup_file("barely.hs");
-			lvlup_file_raw("barely.hs");
-			file_print(buf, stdout);
-			file_print("\n", stdout);
-			i = i + 1;
+			input_file = fopen(argv[option_index + 1], "r");
+			if(NULL == input_file)
+			{
+				file_print("The file: ", stderr);
+				file_print(argv[option_index + 1], stderr);
+				file_print(" can not be opened!\n", stderr);
+				exit(EXIT_FAILURE);
+			}
+			option_index = option_index + 2;
 		}
 		else
 		{
 			file_print("bad command: ", stdout);
-			file_print(argv[i], stdout);
+			file_print(argv[option_index], stdout);
 			file_print("\n", stdout);
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	file_print(buf, destination_file);
+	file_print("\n", destination_file);
 	return EXIT_SUCCESS;
 }

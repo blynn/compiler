@@ -1,0 +1,52 @@
+##
+## Copyright © 2019 Ben Lynn
+## This file is part of blynn-compiler.
+##
+## blynn-compiler is free software: you can redistribute it and/or
+## modify it under the terms of the GNU General Public License as
+## published by the Free Software Foundation, only under version 3 of
+## the License.
+##
+## blynn-compiler is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+## General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with blynn-compiler.  If not, see
+## <https://www.gnu.org/licenses/>.
+##
+
+# What it is supposed to mean
+# uncurry x y = y x;
+# (.) x y z = x (y z);
+#
+# pair x y f = f x y;
+# (||) f g x y = f x (g x y);
+# (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
+# ifNull xs a b = xs a (\_ _ -> b);
+# add r acc p = r (ifNull acc p ('`':(acc ++ p)));
+# isPre h = h('#'(==)) || h('@'(==));
+# suffix f h t = isPre h (t undefined (\a b -> pair (a:[]) b)) (pair [] t) (\x y -> f (h:x) y);
+# atom r h acc t = suffix (add r acc) h t;
+# sub r acc = uncurry (add r acc) . r "";
+# closes h = h(';'(==)) || h(')'(==));
+# if3 h x y z = closes h x (h('('(==)) y z);
+# switch r a h t = if3 h pair (sub r) (atom r h) a t;
+# term acc s = s undefined (\h t -> switch term acc h t);
+# parse s = s "" (\_ _ -> term "" s (\p t -> p ++ (';':parse t)));
+
+"``BCT;"
+"``BS`BB;"
+"`Y``B`CS``B`B`C``BB:C;"
+"``B`R``BKK`BB;"
+"``C``BBB``S``BS@#``B`B`:#`@\";"
+"``S``B@!`T`##=`T`#@=;"
+"``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;"
+"``BC``B`B@&@$;"
+"``S``BC``B`BB``B`BT@$`TK;"
+"``S``B@!`T`#;=`T`#)=;"
+"``S``BC``B`BB``B`BB@)`T`#(=;"
+"``BC``S``BS``B`C``C@*@ @(@';"
+"`Y``B`B`C`T?@+;"
+"`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@\"`B`:#;;"
