@@ -17,31 +17,39 @@
  * <https://www.gnu.org/licenses/>.
  */
 void *malloc(unsigned long);
-typedef unsigned u;
 
-static const u prog[];
-static const u prog_size;
-static u root[];
-static const u root_size;
+unsigned prog[];
+unsigned prog_size;
+unsigned root[];
+unsigned root_size;
 
-enum { FORWARD = 27, REDUCING = 9 };
+// CONSTANT FORWARD 27
+#define FORWARD 27
+// CONSTANT REDUCING 9
+#define REDUCING 9
 
-enum { TOP = 1 << 24 };
-u *mem, *altmem, *sp, *spTop, hp;
+// CONSTANT TOP 16777216
+#define TOP 16777216
 
-static inline u isAddr(u n)
+unsigned* mem;
+unsigned* altmem;
+unsigned* sp;
+unsigned* spTop;
+unsigned hp;
+
+unsigned isAddr(unsigned n)
 {
 	return n >= 128;
 }
 
-static u evac(u n)
+unsigned evac(unsigned n)
 {
 	if(!isAddr(n))
 	{
 		return n;
 	}
 
-	u x = mem[n];
+	unsigned x = mem[n];
 
 	while(isAddr(x) && mem[x] == 'T')
 	{
@@ -56,7 +64,7 @@ static u evac(u n)
 		x = mem[n] = 'I';
 	}
 
-	u y = mem[n + 1];
+	unsigned y = mem[n + 1];
 
 	switch(x)
 	{
@@ -90,7 +98,7 @@ static u evac(u n)
 			break;
 	}
 
-	u z = hp;
+	unsigned z = hp;
 	hp += 2;
 	mem[n] = FORWARD;
 	mem[n + 1] = z;
@@ -102,10 +110,10 @@ static u evac(u n)
 static void gc()
 {
 	hp = 128;
-	u di = hp;
+	unsigned di = hp;
 	sp = altmem + TOP - 1;
 
-	for(u i = 0; i < root_size; i++)
+	for(unsigned i = 0; i < root_size; i++)
 	{
 		root[i] = evac(root[i]);
 	}
@@ -114,7 +122,7 @@ static void gc()
 
 	while(di < hp)
 	{
-		u x = altmem[di] = evac(altmem[di]);
+		unsigned x = altmem[di] = evac(altmem[di]);
 		di++;
 
 		if(x != 'F' && x != '#')
@@ -126,12 +134,12 @@ static void gc()
 	}
 
 	spTop = sp;
-	u *tmp = mem;
+	unsigned *tmp = mem;
 	mem = altmem;
 	altmem = tmp;
 }
 
-static inline u app(u f, u x)
+unsigned app(unsigned f, unsigned x)
 {
 	mem[hp] = f;
 	mem[hp + 1] = x;
@@ -139,40 +147,43 @@ static inline u app(u f, u x)
 	return hp - 2;
 }
 
-static inline u arg(u n)
+unsigned arg(unsigned n)
 {
 	return mem[sp [n] + 1];
 }
-static inline u num(u n)
+
+unsigned num(unsigned n)
 {
 	return mem[arg(n) + 1];
 }
 
-static inline void lazy(u height, u f, u x)
+unsigned lazy(unsigned height, unsigned f, unsigned x)
 {
-	u *p = mem + sp[height];
+	unsigned *p = mem + sp[height];
 	*p = f;
 	*++p = x;
 	sp += height - 1;
 	*sp = f;
+	return 0;
 }
 
-static void lazy3(u height, u x1, u x2, u x3)
+unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 {
-	u*p = mem + sp[height];
+	unsigned *p = mem + sp[height];
 	sp[height - 1] = *p = app(x1, x2);
 	*++p = x3;
 	*(sp += height - 2) = x1;
+	return 0;
 }
 
-static inline u apparg(u i, u j)
+unsigned apparg(unsigned i, unsigned j)
 {
 	return app(arg(i), arg(j));
 }
 
-static void foreign(u n);
+unsigned foreign(unsigned n);
 
-static void run()
+unsigned run()
 {
 	for(;;)
 	{
@@ -181,7 +192,7 @@ static void run()
 			gc();
 		}
 
-		u x = *sp;
+		unsigned x = *sp;
 
 		if(isAddr(x))
 		{
@@ -271,32 +282,31 @@ static void run()
 					break;
 
 				case '.':
-					return;
+					return 0;
 
 				case FORWARD:
-					return;  // die("stray forwarding pointer");
+					return 0;  // die("stray forwarding pointer");
 
 				default:
-					return;  // printf("?%u\n", x); die("unknown combinator");
+					return 0;  // printf("?%u\n", x); die("unknown combinator");
 			}
 	}
 }
 
-void rts_reduce(u) __attribute__((visibility("default")));
-void rts_reduce(u n)
+unsigned rts_reduce(unsigned n)
 {
 	*(sp = spTop) = app(app(n, '?'), '.');
 	run();
+	return 0;
 }
 
-void rts_init() __attribute__((visibility("default")));
-void rts_init()
+unsigned rts_init()
 {
-	mem = malloc(TOP * sizeof(u));
-	altmem = malloc(TOP * sizeof(u));
+	mem = malloc(TOP * sizeof(unsigned));
+	altmem = malloc(TOP * sizeof(unsigned));
 	hp = 128;
 
-	for(u i = 0; i < prog_size; i++)
+	for(unsigned i = 0; i < prog_size; i++)
 	{
 		mem[hp++] = prog[i];
 	}
@@ -304,12 +314,12 @@ void rts_init()
 	spTop = mem + TOP - 1;
 }
 
-static int env_argc;
+int env_argc;
 int getargcount()
 {
 	return env_argc;
 }
-static char **env_argv;
+char **env_argv;
 char getargchar(int n, int k)
 {
 	return env_argv[n][k];
