@@ -55,6 +55,11 @@ unsigned tabn;
 FILE* destination_file;
 FILE* input_file;
 
+/* Trying to get vm.c and rts.c syncronized */
+unsigned root_size;
+unsigned* root;
+int rts_c;
+
 /* Stupid global to shutup warnings; should be removed when readers are unified */
 unsigned failure;
 
@@ -144,7 +149,17 @@ void gc()
 	unsigned di = hp;
 	/* Set the stack pointer to point to the top of altmem */
 	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
-	sp[0] = evac(spTop[0]);
+
+
+	if(!rts_c) sp[0] = evac(spTop[0]);
+	else
+	{
+		unsigned i;
+		for(i = 0; i < root_size; i = i + 1)
+		{
+			root[i] = evac(root[i]);
+		}
+	}
 
 	/* fprintf(stderr, "GC %u\n", hp - 128); */
 	unsigned x;
@@ -154,9 +169,19 @@ void gc()
 		altmem[di] = evac(altmem[di]);
 		di = di + 1;
 
-		if(x != 'a' && x != '#')
+		if(!rts_c)
 		{
-			altmem[di] = evac(altmem[di]);
+			if(x != 'a' && x != '#')
+			{
+				altmem[di] = evac(altmem[di]);
+			}
+		}
+		else
+		{
+			if(x != 'F' && x != '#')
+			{
+				altmem[di] = evac(altmem[di]);
+			}
 		}
 
 		di = di + 1;
@@ -329,7 +354,7 @@ unsigned num(unsigned n)
 	return mem[arg(n) + 1];
 }
 
-void lazy(unsigned height, unsigned f, unsigned x)
+unsigned lazy(unsigned height, unsigned f, unsigned x)
 {
 	unsigned* p;
 	p = mem + (sp[height] * CELL_SIZE);
@@ -338,6 +363,19 @@ void lazy(unsigned height, unsigned f, unsigned x)
 	p[0] = x;
 	sp = sp + (height * CELL_SIZE) - CELL_SIZE;
 	sp[0] = f;
+	return 0;
+}
+
+unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
+{
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
+	p[0] = app(x1, x2);
+	sp[height - 1] = p[0];
+	p[1] = x3;
+	sp = sp + (height * CELL_SIZE) - (2 * CELL_SIZE);
+	sp[0] = x1;
+	return 0;
 }
 
 unsigned apparg(unsigned i, unsigned j)
@@ -347,10 +385,23 @@ unsigned apparg(unsigned i, unsigned j)
 
 void foreign(unsigned n)
 {
+	if(!rts_c)
+	{
+		if(1 == n)
+		{
+			fputc(num(2), stdout);
+			lazy(4, app(arg(4), 'K'), arg(3));
+		}
+		return;
+	}
+
 	if(1 == n)
 	{
-		fputc(num(2), stdout);
-		lazy(4, app(arg(4), 'K'), arg(3));
+		lazy(4, app(arg(4), app('#', fputc(num(2), stdout))), arg(3));
+	}
+	else if(0 == n)
+	{
+		lazy(3, app(arg(3), app('#', fgetc(stdin))), arg(2));
 	}
 }
 
@@ -382,8 +433,13 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if(FORWARD == x)
 		{
+			if(rts_c) return;
 			stats();
 			require(FALSE, "error: stray forwarding pointer\n");
+		}
+		else if('Q' == x)
+		{
+			lazy(3, arg(3), apparg(2, 1));
 		}
 		else if('.' == x)
 		{
@@ -399,7 +455,8 @@ void run(FUNCTION get, FUNCTION put)
 		/* S x y z = x z (y z) */
 		else if('S' == x)
 		{
-			lazy(3, apparg(1, 3), apparg(2, 3));
+			if(rts_c) lazy3(3, arg(1), arg(3), apparg(2, 3));
+			else lazy(3, apparg(1, 3), apparg(2, 3));
 		}
 		/* (.) */
 		/* B x y z = x (y z) */
@@ -411,13 +468,20 @@ void run(FUNCTION get, FUNCTION put)
 		/* C x y z = x z y */
 		else if('C' == x)
 		{
-			lazy(3, apparg(1, 3), arg(2));
+			if(rts_c) lazy3(3, arg(1), arg(3), arg(2));
+			else lazy(3, apparg(1, 3), arg(2));
 		}
 		/* flip flip */
 		/* R x y z = y z x */
 		else if('R' == x)
 		{
-			lazy(3, apparg(2, 3), arg(1));
+			if(rts_c) lazy3(3, arg(2), arg(3), arg(1));
+			else lazy(3, apparg(2, 3), arg(1));
+		}
+		else if('V' == x)
+		{
+			if(rts_c) lazy3(3, arg(3), arg(1), arg(2));
+			else lazy(3, apparg(3,1), arg(2));
 		}
 		/* id */
 		/* I x = x */
@@ -442,13 +506,14 @@ void run(FUNCTION get, FUNCTION put)
 		/* : a b c d = (d a) b */
 		else if(':' == x)
 		{
-			lazy(4, apparg(4, 1), arg(2));
+			if(rts_c) lazy3(4, arg(4), arg(1), arg(2));
+			else lazy(4, apparg(4, 1), arg(2));
 		}
 		/* Read a character c from the input */
 		/* If c == 0, then I K (represents nil) */
 		/* else : (# c) (0 ?)  (represents a list of the first */
 		/*                      character and the rest of the input) */
-		else if('0' == x)
+		else if(!rts_c && ('0' == x))
 		{
 			c = get(0);
 
@@ -467,7 +532,7 @@ void run(FUNCTION get, FUNCTION put)
 		{
 			lazy(2, arg(2), sp[1]);
 		}
-		else if('1' == x)
+		else if(!rts_c && ('1' == x))
 		{
 			put(num(1));
 			lazy(2, app(arg(2), '.'), app('T', '1'));
@@ -541,7 +606,7 @@ void run(FUNCTION get, FUNCTION put)
 		else
 		{
 			file_print("?", stderr);
-			fputc(x,stderr);
+			file_print(numerate_number(x),stderr);
 			file_print("\n",stderr);
 			require(FALSE, "error: unknown combinator\n");
 		}
@@ -552,9 +617,21 @@ char* buf;
 char* bufptr;
 char* buf_end;
 
-void buf_reset()
+void load(char* blob)
 {
-	bufptr = buf;
+	FILE* f = fopen(blob, "r");
+	require(NULL != f, "failed to load file\n");
+
+	int i = 0;
+	int c;
+	do
+	{
+		c = fgetc(f);
+		if(EOF != c) buf[i] = c;
+		i = i + 1;
+	} while(EOF != c);
+
+	fclose(f);
 }
 
 unsigned buf_put(unsigned c)
@@ -564,75 +641,6 @@ unsigned buf_put(unsigned c)
 	bufptr[0] = c;
 	bufptr = bufptr + 1;
 	return 0;
-}
-
-void testCmp(char *inp, char *want)
-{
-	str = inp;
-	buf_reset();
-	run(str_get, buf_put);
-	bufptr[0] = 0;
-
-	if(!match(buf, want))
-	{
-		file_print("FAIL: got '",stderr);
-		file_print(buf,stderr);
-		file_print("', want '",stderr);
-		file_print(want,stderr);
-		file_print("'\n",stderr);
-	}
-}
-
-void testCase(char *prog, char *inp, char *want)
-{
-	parse(prog);
-	testCmp(inp, want);
-}
-
-void testCaseMore(char *prog, char *more, char *inp, char *want)
-{
-	parse(prog);
-	str = more;
-	parseMore(str_get);
-	testCmp(inp, want);
-}
-
-void runTests()
-{
-	testCase("`KK;", "ignoreme", "");
-	testCase("I;", "Hello, World!\n", "Hello, World!\n");
-	testCase("``C`T?`KI;", "tail", "ail");
-	testCase("`K``:#O``:#KK;", "", "OK");
-	/* xs ++ ys = case xs of { [] -> ys ; (x:xt) -> x : xt ++ ys } */
-	/* f = fix \r xs ys -> xs ys (\x xt -> (:) x (r xt ys))        */
-	/*   = Y(B(CS)(B(B(C(BB(:))))C))                               */
-	/* because B(B(C(BB(:))))C = \r ys -> \x xt -> (:) x (r xt ys) */
-	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
-	    "`K``@ " "``:#B``:#eK" "``:#nK;",
-	    "",
-	    "Ben");
-	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
-	    "``SS``B`BK``B`BK``B`B`:#`@ ;"  /* \acc p = acc p (\_ _ -> '`':acc ++ p) */
-	    "`@!``:#xK;",
-	    "y",
-	    "`xy");
-	testCase(
-	    "`Y``B`CS``B`B`C``BB:C;"  /* (++) */
-	    "``SS``B`BK``B`BK``B`B`:#`[0];"  /* \acc p = acc p (\_ _ -> '`':acc ++ p) */
-	    "`[1]``:#xK;",
-	    "y",
-	    "`xy");
-	testCase("`K``:#f``:#xK;", "", "fx");
-	/* atom id 'x' "f" */
-	/* testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx"); */
-	/* if3 ')' "1" "2" "3" */
-	/* testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1"); */
-	/* fst . term */
-	/* testCaseMore(parenthetically, "``B`TK`@,K;", */
-	/*              "just(one);not(two);", "````just``one"); */
-	/* testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;"); */
 }
 
 FILE *fp;
@@ -657,23 +665,55 @@ unsigned fp_get(unsigned f)
 	return fp_c;
 }
 
-char* iocccp;
-void ioccc_reset(char *f)
+unsigned rts_reduce(unsigned n)
 {
-	fp_reset(f);
-	iocccp = "infixr 5 ++;(<=) = intLE;";
+	sp = spTop;
+	spTop[0] = app(app(n, '?'), '.');
+	run(fp_get, buf_put);
+	return 0;
 }
 
-unsigned ioccc_get(unsigned f)
+void rts_init(FUNCTION get)
 {
-	if(0 == iocccp[0])
+	mem = calloc(TOP, sizeof(unsigned));
+	altmem = calloc(TOP, sizeof(unsigned));
+	hp = 128;
+	unsigned c;
+	unsigned n;
+	unsigned i = 0;
+
+	while(TRUE)
 	{
-		unsigned r = iocccp[0];
-		iocccp = iocccp + 1;
-		return r;
+		do
+		{
+			c = get(0);
+			i = i + 1;
+		} while(c != 0 && (c < '0' || c > '9'));
+
+		if(c == 0)
+		{
+			break;
+		}
+
+		n = 0;
+
+		while(TRUE)
+		{
+			if(c < '0' || c > '9')
+			{
+				break;
+			}
+
+			n = 10 * n + c - '0';
+			c = get(0);
+			i = i + 1;
+		}
+
+		mem[hp] = n;
+		hp = hp + 1;
 	}
 
-	return fp_get(f);
+	spTop = mem + TOP - CELL_SIZE;
 }
 
 unsigned pc(unsigned c)
@@ -705,31 +745,9 @@ void lvlup_file(char *filename, int raw)
 	}
 	else parse(buf);
 	fp_reset(filename);
-	buf_reset();
+	bufptr = buf;
 	run(fp_get, buf_put);
 	bufptr[0] = 0;
-}
-
-void runFile(char *f)
-{
-	fp_reset(f);
-	buf_reset();
-	run(fp_get, buf_put);
-	bufptr[0] = 0;
-	str = buf;
-	loadRaw(str_get);
-	run(ioget, pc);
-}
-
-void ioccc(char *f)
-{
-	ioccc_reset(f);
-	buf_reset();
-	run(ioccc_get, buf_put);
-	bufptr[0] = 0;
-	str = buf;
-	loadRaw(str_get);
-	run(ioget, pc);
 }
 
 void iotest()
@@ -745,7 +763,7 @@ void iotest()
 	    "mapM_ f = foldr (ioBind2 . f) (ioPure Unit);"
 	    "main = mapM_ putChar \"Hello, World!\\n\""
 	    ;
-	buf_reset();
+	bufptr = buf;
 	run(str_get, buf_put);
 	bufptr[0] = 0;
 	str = buf;
@@ -765,6 +783,8 @@ int main(int argc, char **argv)
 	buf = calloc(BUFMAX, sizeof(char));
 	destination_file = stdout;
 	input_file = stdin;
+	rts_c = FALSE;
+	root_size = 0;
 
 	int option_index = 1;
 	while(option_index <= argc)
@@ -781,9 +801,24 @@ int main(int argc, char **argv)
 		}
 		else if(match(argv[option_index], "run"))
 		{
-			runFile(argv[option_index+1]);
+			fp_reset(argv[option_index+1]);
+			bufptr = buf;
+			run(fp_get, buf_put);
+			bufptr[0] = 0;
+			str = buf;
+			loadRaw(str_get);
+			bufptr = buf;
+			run(ioget, buf_put);
 			option_index = option_index + 2;
-			exit(EXIT_SUCCESS);
+		}
+		else if(match(argv[option_index], "--rts_c"))
+		{
+			rts_c = TRUE;
+			load(argv[option_index+1]);
+			str = buf;
+			rts_init(str_get);
+			rts_reduce(21816);
+			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "--bootstrap"))
 		{
