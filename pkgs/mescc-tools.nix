@@ -1,4 +1,4 @@
-{ stdenv, fetchgit, gdb, kaem }:
+{ stdenv, fetchgit, kaem }:
 
 stdenv.mkDerivation {
   name = "mescc-tools";
