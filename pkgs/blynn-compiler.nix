@@ -14,7 +14,7 @@ stdenv.mkDerivation {
   '';
 
   installPhase = ''
-    mkdir -p $out
+    mkdir -p $out/share
     cp bin/vm $out/share
   '';
 }
