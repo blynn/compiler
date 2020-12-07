@@ -14,3 +14,11 @@ jobs:
       run: nix-build -A blynn-compiler
     - name: Test
       run: echo "9732a8852bf92b4097f275da4ceba3b718138a5e16190cbef43bbd4be42a27dd result/share/raw" | sha256sum -c
+    - run: cp result/bin/vm vm && cp result/share/raw raw
+    - name: Upload vm and raw
+      uses: actions/upload-artifact@v2
+      with:
+        name: build result
+        path: |
+          raw
+          vm
