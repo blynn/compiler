@@ -548,7 +548,11 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('L' == x)
 		{
-			if(num(1) <= num(2))
+			if (num(1) == -1)
+			{
+				lazy(2, 'K', 'I');
+			}
+			else if(num(1) <= num(2))
 			{
 				lazy(2, 'I', 'K');
 			}
@@ -674,7 +678,7 @@ unsigned pc(unsigned c)
 unsigned ioget(unsigned f)
 {
 	failure = f;
-	unsigned c = fgetc(input_file);
+	int c = fgetc(input_file);
 
 	return c;
 }
