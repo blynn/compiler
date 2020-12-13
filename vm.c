@@ -59,6 +59,7 @@ FILE* input_file;
 unsigned root_size;
 unsigned* root;
 int rts_c;
+unsigned starting_address;
 
 /* Stupid global to shutup warnings; should be removed when readers are unified */
 unsigned failure;
@@ -710,8 +711,18 @@ void rts_init(FUNCTION get)
 {
 	hp = 128;
 	unsigned c;
-	unsigned n;
+	unsigned n = 0;
 	unsigned i = 0;
+
+	while(TRUE)
+	{
+		c = get(0);
+		if (c == 0 || (c < '0' || c > '9'))
+			break;
+		n = 10 * n + c - '0';
+	}
+
+	starting_address = n;
 
 	while(TRUE)
 	{
@@ -814,7 +825,7 @@ int main(int argc, char **argv)
 			load(argv[option_index+1]);
 			str = buf;
 			rts_init(str_get);
-			rts_reduce(21846);
+			rts_reduce(starting_address);
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "--bootstrap"))
