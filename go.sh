@@ -128,3 +128,7 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 # Make virtually
 ./filter_haskell_output generated/uniquely.c generated/uniquely_raw.txt
 ./bin/vm -f virtually.hs --foreign 2 --rts_c generated/uniquely_raw.txt -o generated/virtually.c
+
+# Make marginally
+./filter_haskell_output generated/virtually.c generated/virtually_raw.txt
+./bin/vm -f marginally.hs --foreign 2 --rts_c generated/virtually_raw.txt -o generated/marginally.c
