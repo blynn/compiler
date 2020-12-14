@@ -884,6 +884,5 @@ int main(int argc, char **argv)
 	}
 
 	file_print(buf, destination_file);
-	file_print("\n", destination_file);
 	return EXIT_SUCCESS;
 }
