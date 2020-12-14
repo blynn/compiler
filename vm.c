@@ -704,6 +704,7 @@ unsigned rts_reduce(unsigned n)
 	spTop[0] = app(app(n, '?'), '.');
 	bufptr = buf;
 	run(ioget, buf_put);
+	bufptr[0] = 0;
 	return 0;
 }
 
