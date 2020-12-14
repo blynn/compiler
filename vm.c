@@ -43,6 +43,7 @@
 int match(char* a, char* b);
 void file_print(char* s, FILE* f);
 char* numerate_number(int a);
+int numerate_string(char* a);
 void require(int bool, char* error);
 
 unsigned* mem;
@@ -54,6 +55,7 @@ unsigned* tab;
 unsigned tabn;
 FILE* destination_file;
 FILE* input_file;
+unsigned foreign_version;
 
 /* Trying to get vm.c and rts.c syncronized */
 unsigned root_size;
@@ -382,6 +384,27 @@ unsigned apparg(unsigned i, unsigned j)
 	return app(arg(i), arg(j));
 }
 
+void foreign2(FUNCTION get, FUNCTION put, unsigned n)
+{
+	if(3 == n)
+	{
+		lazy(4, app(arg(4), app('#', put(num(2)))), arg(3));
+	}
+	else if (2 == n)
+	{
+		lazy(3, app(arg(3), app('#', get(0))), arg(2));
+	}
+	else if (1 == n)
+	{
+		/* lazy(3, app(arg(3), app('#', getargcount())), arg(2)); */
+		lazy(3, app(arg(3), app('#', 1)), arg(2));
+	}
+	else if (0 == n)
+	{
+		lazy(5, app(arg(5), app('#', 0)), arg(4));
+	}
+}
+
 void foreign(FUNCTION get, FUNCTION put, unsigned n)
 {
 	if(!rts_c)
@@ -604,7 +627,10 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('F' == x)
 		{
-			foreign(get, put, arg(1));
+			if (foreign_version == 1)
+				foreign(get, put, arg(1));
+			else if (foreign_version == 2)
+				foreign2(get, put, arg(1));
 		}
 		else
 		{
@@ -792,6 +818,7 @@ int main(int argc, char **argv)
 	buf = calloc(BUFMAX, sizeof(char));
 	destination_file = stdout;
 	input_file = stdin;
+	foreign_version = 1;
 	rts_c = FALSE;
 	root_size = 0;
 
@@ -872,6 +899,11 @@ int main(int argc, char **argv)
 				file_print(" can not be opened!\n", stderr);
 				exit(EXIT_FAILURE);
 			}
+			option_index = option_index + 2;
+		}
+		else if(match(argv[option_index], "--foreign"))
+		{
+			foreign_version = numerate_string(argv[option_index + 1]);
 			option_index = option_index + 2;
 		}
 		else
