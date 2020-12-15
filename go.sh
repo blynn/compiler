@@ -103,31 +103,25 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 		-o bin/raw
 
 # Make lonely
-./bin/vm -f lonely.hs -l bin/raw run effectively.hs -o generated/lonely.c
+./bin/vm -f lonely.hs -l bin/raw run effectively.hs -o generated/lonely_raw.txt
 
 # Make patty
-./bin/vm -f patty.hs --rts_c generated/lonely.c -o generated/patty.c
+./bin/vm -f patty.hs --rts_c generated/lonely_raw.txt -o generated/patty_raw.txt
 
 # Make guardedly
-./filter_haskell_output generated/patty.c generated/patty_raw.txt
-./bin/vm -f guardedly.hs --rts_c generated/patty_raw.txt -o generated/guardedly.c
+./bin/vm -f guardedly.hs --rts_c generated/patty_raw.txt -o generated/guardedly_raw.txt
 
 # Make assembly
-./filter_haskell_output generated/guardedly.c generated/guardedly_raw.txt
-./bin/vm -f assembly.hs --rts_c generated/guardedly_raw.txt -o generated/assembly.c
+./bin/vm -f assembly.hs --rts_c generated/guardedly_raw.txt -o generated/assembly_raw.txt
 
 # Make mutually
-./filter_haskell_output generated/assembly.c generated/assembly_raw.txt
-./bin/vm -f mutually.hs --foreign 2 --rts_c generated/assembly_raw.txt -o generated/mutually.c
+./bin/vm -f mutually.hs --foreign 2 --rts_c generated/assembly_raw.txt -o generated/mutually_raw.txt
 
 # Make uniquely
-./filter_haskell_output generated/mutually.c generated/mutually_raw.txt
-./bin/vm -f uniquely.hs --foreign 2 --rts_c generated/mutually_raw.txt -o generated/uniquely.c
+./bin/vm -f uniquely.hs --foreign 2 --rts_c generated/mutually_raw.txt -o generated/uniquely_raw.txt
 
 # Make virtually
-./filter_haskell_output generated/uniquely.c generated/uniquely_raw.txt
-./bin/vm -f virtually.hs --foreign 2 --rts_c generated/uniquely_raw.txt -o generated/virtually.c
+./bin/vm -f virtually.hs --foreign 2 --rts_c generated/uniquely_raw.txt -o generated/virtually_raw.txt
 
 # Make marginally
-./filter_haskell_output generated/virtually.c generated/virtually_raw.txt
 ./bin/vm -f marginally.hs --foreign 2 --rts_c generated/virtually_raw.txt -o generated/marginally.c

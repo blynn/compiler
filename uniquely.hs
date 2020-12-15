@@ -1089,19 +1089,9 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambF), (ffis, exs)) -> fpair (hashcons $ optiComb $ lambF []) \tab mem ->
-    (concatMap ffiDeclare ffis ++) .
-    ("unsigned foreign(unsigned n) {\n  switch(n) {\n" ++) .
-    ffiDefine (length ffis - 1) ffis .
-    ("\n  }\n}\n" ++) .
-    ("unsigned prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) mem) .
-    ("};\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
-    ("unsigned root[]={" ++) .
-    foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
-    ("};\n" ++) .
-    ("unsigned root_size=" ++) . showInt (length exs) . (";\n" ++) .
-    (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
-    maybe "" genMain (mlookup "main" tab)
+    flst exs (maybe undefined showInt (mlookup "main" tab) "") (\_ _ -> "")
+    ++ "\n"
+    ++ foldr (.) id (map (\n -> showInt n . (',':)) mem) "\n"
   };
 
 showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);

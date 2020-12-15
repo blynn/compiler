@@ -63,60 +63,32 @@ raw: vm parenthetically exponentially practically singularity_blob | bin
 		-lfr barely.hs \
 		-o bin/raw
 
-lonely:lonely.c | bin
-	$(CC) $(CFLAGS) generated/lonely.c -o bin/lonely
+lonely_raw.txt: vm effectively.hs lonely.hs raw | generated
+	./bin/vm -f lonely.hs -l bin/raw run effectively.hs -o generated/lonely_raw.txt
 
-lonely.c: vm effectively.hs lonely.hs rts.c raw | generated
-	cp rts.c generated/lonely.c
-	./bin/vm -f lonely.hs -l bin/raw run effectively.hs >> generated/lonely.c
+patty_raw.txt: patty.hs lonely_raw.txt | generated
+	./bin/vm -f patty.hs --rts_c generated/lonely_raw.txt -o generated/patty_raw.txt
 
-patty: patty.c | bin
-	$(CC) $(CFLAGS) generated/patty.c -o bin/patty
+guardedly_raw.txt: guardedly.hs patty_raw.txt | generated
+	./bin/vm -f guardedly.hs --rts_c generated/patty_raw.txt -o generated/guardedly_raw.txt
 
-patty.c: patty.hs lonely | generated
-	cp rts.c generated/patty.c
-	./bin/lonely < patty.hs >> generated/patty.c
+assembly_raw.txt: assembly.hs guardedly_raw.txt | generated
+	./bin/vm -f assembly.hs --rts_c generated/guardedly_raw.txt -o generated/assembly_raw.txt
 
-guardedly: guardedly.c | bin
-	$(CC) $(CFLAGS) generated/guardedly.c -o bin/guardedly
+mutually_raw.txt: mutually.hs assembly_raw.txt | generated
+	./bin/vm -f mutually.hs --foreign 2 --rts_c generated/assembly_raw.txt -o generated/mutually_raw.txt
 
-guardedly.c: guardedly.hs patty | generated
-	cp rts.c generated/guardedly.c
-	./bin/patty < guardedly.hs >> generated/guardedly.c
+uniquely_raw.txt: uniquely.hs mutually_raw.txt | generated
+	./bin/vm -f uniquely.hs --foreign 2 --rts_c generated/mutually_raw.txt -o generated/uniquely_raw.txt
 
-assembly: assembly.c | bin
-	$(CC) $(CFLAGS) generated/assembly.c -o bin/assembly
-
-assembly.c: assembly.hs guardedly | generated
-	cp rts.c generated/assembly.c
-	./bin/guardedly < assembly.hs >> generated/assembly.c
-
-mutually: mutually.c | bin
-	$(CC) $(CFLAGS) generated/mutually.c -o bin/mutually
-
-mutually.c: mutually.hs assembly | generated
-	cp rts.c generated/mutually.c
-	./bin/assembly < mutually.hs >> generated/mutually.c
-
-uniquely: uniquely.c | bin
-	$(CC) $(CFLAGS) generated/uniquely.c -o bin/uniquely
-
-uniquely.c: uniquely.hs mutually | generated
-	cp rts.c generated/uniquely.c
-	./bin/mutually < uniquely.hs >> generated/uniquely.c
-
-virtually: virtually.c | bin
-	$(CC) $(CFLAGS) generated/virtually.c -o bin/virtually
-
-virtually.c: virtually.hs uniquely | generated
-	cp rts.c generated/virtually.c
-	./bin/uniquely < virtually.hs >> generated/virtually.c
+virtually_raw.txt: virtually.hs uniquely_raw.txt | generated
+	./bin/vm -f virtually.hs --foreign 2 --rts_c generated/uniquely_raw.txt -o generated/virtually_raw.txt
 
 marginally: marginally.c | bin
 	$(CC) $(CFLAGS) generated/marginally.c -o bin/marginally
 
-marginally.c:marginally.hs virtually | generated
-	./bin/virtually < marginally.hs > generated/marginally.c
+marginally.c:marginally.hs virtually_raw.txt | generated
+	./bin/vm -f marginally.hs --foreign 2 --rts_c generated/virtually_raw.txt -o generated/marginally.c
 
 methodically: methodically.c | bin
 	$(CC) $(CFLAGS) generated/methodically.c -o bin/methodically

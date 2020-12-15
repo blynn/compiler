@@ -955,19 +955,9 @@ compile s = fmaybe (program s) "parse error" \(prog, rest) -> fneat (untangle pr
   \ienv fs typed dcs ffis exs -> case inferDefs ienv fs dcs typed of
   { Left err -> err
   ; Right qas -> fpair (asm qas) \tab mem ->
-    (concatMap ffiDeclare ffis ++) .
-    ("unsigned foreign(unsigned n) {\n  switch(n) {\n" ++) .
-    ffiDefine (length ffis - 1) ffis .
-    ("\n  }\n}\n" ++) .
-    ("unsigned prog[]={" ++) .
-    foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
-    ("};\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
-    ("unsigned root[]={" ++) .
-    foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
-    ("};\n" ++) .
-    ("unsigned root_size=" ++) . showInt (length exs) . (";\n" ++) $
-    (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0)) $
-    maybe "" genMain (mlookup "main" tab)
+    flst exs (maybe undefined showInt (mlookup (fst $ last qas) tab) "") (\_ _ -> "")
+    ++ "\n"
+    ++ foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) "\n"
   };
 
 main = getContents >>= putStr . compile;
