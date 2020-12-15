@@ -7,6 +7,7 @@ stdenvNoCC.mkDerivation {
 
   postPatch = ''
     patchShebangs go.sh
+    patchShebangs filter_haskell_output
   '';
 
   buildPhase = ''
