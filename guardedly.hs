@@ -959,9 +959,9 @@ compile s = fmaybe (program s) "parse error" \(prog, rest) -> fneat (untangle pr
     ("unsigned foreign(unsigned n) {\n  switch(n) {\n" ++) .
     ffiDefine (length ffis - 1) ffis .
     ("\n  }\n}\n" ++) .
-    ("char *prog=\"" ++) .
+    ("unsigned prog[]={" ++) .
     foldr (.) id (map (\n -> showInt n . (',':)) $ snd mem []) .
-    ("\";\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
+    ("};\nunsigned prog_size=sizeof(prog)/sizeof(*prog);\n" ++) .
     ("unsigned root[]={" ++) .
     foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs .
     ("};\n" ++) .

@@ -30,8 +30,8 @@
 //CONSTANT REDUCING 9
 #define REDUCING 9
 
-//CONSTANT TOP    8388608
-#define TOP       8388608
+//CONSTANT TOP    16777216
+#define TOP       16777216
 //CONSTANT TABMAX 1024
 #define TABMAX    1024
 //CONSTANT BUFMAX 1048576
@@ -43,6 +43,7 @@
 int match(char* a, char* b);
 void file_print(char* s, FILE* f);
 char* numerate_number(int a);
+int numerate_string(char* a);
 void require(int bool, char* error);
 
 unsigned* mem;
@@ -54,11 +55,13 @@ unsigned* tab;
 unsigned tabn;
 FILE* destination_file;
 FILE* input_file;
+unsigned foreign_version;
 
 /* Trying to get vm.c and rts.c syncronized */
 unsigned root_size;
 unsigned* root;
 int rts_c;
+unsigned starting_address;
 
 /* Stupid global to shutup warnings; should be removed when readers are unified */
 unsigned failure;
@@ -151,22 +154,20 @@ void gc()
 	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
 
 
-	if(!rts_c) sp[0] = evac(spTop[0]);
-	else
+	unsigned i;
+	for(i = 0; i < root_size; i = i + 1)
 	{
-		unsigned i;
-		for(i = 0; i < root_size; i = i + 1)
-		{
-			root[i] = evac(root[i]);
-		}
+		root[i] = evac(root[i]);
 	}
+
+	sp[0] = evac(spTop[0]);
 
 	/* fprintf(stderr, "GC %u\n", hp - 128); */
 	unsigned x;
 	while(di < hp)
 	{
-		x = altmem[di];
 		altmem[di] = evac(altmem[di]);
+		x = altmem[di];
 		di = di + 1;
 
 		if(!rts_c)
@@ -383,7 +384,28 @@ unsigned apparg(unsigned i, unsigned j)
 	return app(arg(i), arg(j));
 }
 
-void foreign(unsigned n)
+void foreign2(FUNCTION get, FUNCTION put, unsigned n)
+{
+	if(3 == n)
+	{
+		lazy(4, app(arg(4), app('#', put(num(2)))), arg(3));
+	}
+	else if (2 == n)
+	{
+		lazy(3, app(arg(3), app('#', get(0))), arg(2));
+	}
+	else if (1 == n)
+	{
+		/* lazy(3, app(arg(3), app('#', getargcount())), arg(2)); */
+		lazy(3, app(arg(3), app('#', 1)), arg(2));
+	}
+	else if (0 == n)
+	{
+		lazy(5, app(arg(5), app('#', 0)), arg(4));
+	}
+}
+
+void foreign(FUNCTION get, FUNCTION put, unsigned n)
 {
 	if(!rts_c)
 	{
@@ -397,11 +419,11 @@ void foreign(unsigned n)
 
 	if(1 == n)
 	{
-		lazy(4, app(arg(4), app('#', fputc(num(2), stdout))), arg(3));
+		lazy(4, app(arg(4), app('#', put(num(2)))), arg(3));
 	}
 	else if(0 == n)
 	{
-		lazy(3, app(arg(3), app('#', fgetc(stdin))), arg(2));
+		lazy(3, app(arg(3), app('#', get(0))), arg(2));
 	}
 }
 
@@ -550,7 +572,11 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('L' == x)
 		{
-			if(num(1) <= num(2))
+			if (num(1) == -1)
+			{
+				lazy(2, 'K', 'I');
+			}
+			else if(num(1) <= num(2))
 			{
 				lazy(2, 'I', 'K');
 			}
@@ -579,7 +605,7 @@ void run(FUNCTION get, FUNCTION put)
 		{
 			lazy(2, '#', num(1) - num(2));
 		}
-		else if('a' == x)
+		else if(!rts_c && ('a' == x))
 		{
 			mnt = arg(1);
 			m = mnt >> 16;
@@ -601,7 +627,10 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('F' == x)
 		{
-			foreign(arg(1));
+			if (foreign_version == 1)
+				foreign(get, put, arg(1));
+			else if (foreign_version == 2)
+				foreign2(get, put, arg(1));
 		}
 		else
 		{
@@ -665,22 +694,62 @@ unsigned fp_get(unsigned f)
 	return fp_c;
 }
 
+
+unsigned pc(unsigned c)
+{
+	fputc(c, destination_file);
+	/* fflush(destination_file); */
+	return 0;
+}
+
+unsigned ioget(unsigned f)
+{
+	failure = f;
+	int c = fgetc(input_file);
+
+	return c;
+}
+
+void lvlup_file(char *filename, int raw)
+{
+	if(raw)
+	{
+		str = buf;
+		loadRaw(str_get);
+	}
+	else parse(buf);
+	fp_reset(filename);
+	bufptr = buf;
+	run(fp_get, buf_put);
+	bufptr[0] = 0;
+}
+
 unsigned rts_reduce(unsigned n)
 {
 	sp = spTop;
 	spTop[0] = app(app(n, '?'), '.');
-	run(fp_get, buf_put);
+	bufptr = buf;
+	run(ioget, buf_put);
+	bufptr[0] = 0;
 	return 0;
 }
 
 void rts_init(FUNCTION get)
 {
-	mem = calloc(TOP, sizeof(unsigned));
-	altmem = calloc(TOP, sizeof(unsigned));
 	hp = 128;
 	unsigned c;
-	unsigned n;
+	unsigned n = 0;
 	unsigned i = 0;
+
+	while(TRUE)
+	{
+		c = get(0);
+		if (c == 0 || (c < '0' || c > '9'))
+			break;
+		n = 10 * n + c - '0';
+	}
+
+	starting_address = n;
 
 	while(TRUE)
 	{
@@ -713,41 +782,7 @@ void rts_init(FUNCTION get)
 		hp = hp + 1;
 	}
 
-	spTop = mem + TOP - CELL_SIZE;
-}
-
-unsigned pc(unsigned c)
-{
-	fputc(c, destination_file);
-	fflush(destination_file);
-	return 0;
-}
-
-unsigned ioget(unsigned f)
-{
-	failure = f;
-	int ioget_c = fgetc(input_file);
-
-	if(ioget_c == EOF)
-	{
-		return 0;
-	}
-
-	return ioget_c;
-}
-
-void lvlup_file(char *filename, int raw)
-{
-	if(raw)
-	{
-		str = buf;
-		loadRaw(str_get);
-	}
-	else parse(buf);
-	fp_reset(filename);
-	bufptr = buf;
-	run(fp_get, buf_put);
-	bufptr[0] = 0;
+	spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 }
 
 void iotest()
@@ -783,6 +818,7 @@ int main(int argc, char **argv)
 	buf = calloc(BUFMAX, sizeof(char));
 	destination_file = stdout;
 	input_file = stdin;
+	foreign_version = 1;
 	rts_c = FALSE;
 	root_size = 0;
 
@@ -817,7 +853,7 @@ int main(int argc, char **argv)
 			load(argv[option_index+1]);
 			str = buf;
 			rts_init(str_get);
-			rts_reduce(21816);
+			rts_reduce(starting_address);
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "--bootstrap"))
@@ -829,6 +865,9 @@ int main(int argc, char **argv)
 		}
 		else if(match(argv[option_index], "-lf") || match(argv[option_index], "--levelup-file"))
 		{
+			file_print("loading ", stderr);
+			file_print(argv[option_index + 1], stderr);
+			file_print("...\n", stderr);
 			lvlup_file(argv[option_index + 1], FALSE);
 			option_index = option_index + 2;
 		}
@@ -862,6 +901,11 @@ int main(int argc, char **argv)
 			}
 			option_index = option_index + 2;
 		}
+		else if(match(argv[option_index], "--foreign"))
+		{
+			foreign_version = numerate_string(argv[option_index + 1]);
+			option_index = option_index + 2;
+		}
 		else
 		{
 			file_print("bad command: ", stdout);
@@ -872,6 +916,5 @@ int main(int argc, char **argv)
 	}
 
 	file_print(buf, destination_file);
-	file_print("\n", destination_file);
 	return EXIT_SUCCESS;
 }

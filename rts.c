@@ -18,15 +18,11 @@
  */
 void *malloc(unsigned long);
 
-char *prog;
+unsigned prog[];
 unsigned prog_size;
 unsigned root[];
 unsigned root_size;
 
-// CONSTANT FALSE 0
-#define FALSE 0
-// CONSTANT TRUE 1
-#define TRUE 1
 // CONSTANT FORWARD 27
 #define FORWARD 27
 // CONSTANT REDUCING 9
@@ -309,39 +305,10 @@ unsigned rts_init()
 	mem = malloc(TOP * sizeof(unsigned));
 	altmem = malloc(TOP * sizeof(unsigned));
 	hp = 128;
-	unsigned c;
-	unsigned n;
-	unsigned i = 0;
 
-	while(TRUE)
+	for(unsigned i = 0; i < prog_size; i++)
 	{
-		do
-		{
-			c = prog[i];
-			i = i + 1;
-		} while(c != 0 && (c < '0' || c > '9'));
-
-		if(c == 0)
-		{
-			break;
-		}
-
-		n = 0;
-
-		while(TRUE)
-		{
-			if(c < '0' || c > '9')
-			{
-				break;
-			}
-
-			n = 10 * n + c - '0';
-			c = prog[i];
-			i = i + 1;
-		}
-
-		mem[hp] = n;
-		hp = hp + 1;
+		mem[hp++] = prog[i];
 	}
 
 	spTop = mem + TOP - 1;
