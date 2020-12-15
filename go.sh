@@ -106,8 +106,7 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 ./bin/vm -f lonely.hs -l bin/raw run effectively.hs -o generated/lonely.c
 
 # Make patty
-./filter_haskell_output generated/lonely.c generated/lonely_raw.txt
-./bin/vm -f patty.hs --rts_c generated/lonely_raw.txt -o generated/patty.c
+./bin/vm -f patty.hs --rts_c generated/lonely.c -o generated/patty.c
 
 # Make guardedly
 ./filter_haskell_output generated/patty.c generated/patty_raw.txt
