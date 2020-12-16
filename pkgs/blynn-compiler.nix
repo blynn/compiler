@@ -1,9 +1,9 @@
-{ stdenvNoCC, lib, mescc-tools-seed }:
+{ stdenvNoCC, lib, mescc-tools, m2-planet }:
 
 stdenvNoCC.mkDerivation {
   name = "blynn-compiler";
   src = lib.cleanSource ../.;
-  nativeBuildInputs = [ mescc-tools-seed ];
+  nativeBuildInputs = [ mescc-tools m2-planet ];
 
   postPatch = ''
     patchShebangs go.sh

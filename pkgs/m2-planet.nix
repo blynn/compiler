@@ -1,13 +1,14 @@
 { stdenv, fetchFromGitHub }:
 
 stdenv.mkDerivation rec {
-  name = "m2-planet";
+  pname = "m2-planet";
+  version = "unstable-2020-12-15";
 
   src = fetchFromGitHub {
     owner = "oriansj";
-    repo = name;
-    rev = "d34ea502ccc9c2a6afc3d420dd8c5c36d7c8c6d9";
-    sha256 = "0mklakrrn7f0n57kfykv46f24d5a0spwx411067rl7qh0hyd404s";
+    repo = pname;
+    rev = "e5befc4feed411f55303c1fa014226b9d6017e29";
+    sha256 = "14v4r4c4nia3zc2r01yzlhvh0wrnh6f61xbxv7rb93fm0kmb9dfb";
   };
 
   makeFlags = [ "PREFIX=${placeholder "out"}" ];
