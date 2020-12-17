@@ -20,7 +20,7 @@ infixl 7 * , / , %;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
-infix 4 == , /= , <=;
+infix 4 == , <=;
 infixl 3 && , <|>;
 infixl 2 ||;
 infixl 1 >> , >>=;

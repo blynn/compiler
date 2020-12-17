@@ -51,4 +51,4 @@ succ :: Int -> Int
 succ = Prelude.succ
 #define ffi foreign import ccall
 #define export --
-#include "marginally.hs"
+#include "../marginally.hs"
