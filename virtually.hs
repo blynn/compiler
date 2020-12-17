@@ -1064,9 +1064,9 @@ ffiDefine n ffis = case ffis of
     ; aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
     ; longDistanceCall = name ++ "(" ++ args ++ ")"
     } in
-    ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+    ("else if (n == " ++) . showInt n . (") { " ++) . if ret == "()"
+      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); }\n") ++) . ffiDefine (n - 1) xt
+      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); }\n") ++) . ffiDefine (n - 1) xt
   };
 
 getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];
@@ -1097,26 +1097,27 @@ optiComb' (subs, combs) (s, lamb) = let
   };
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs;
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;init_prog();rts_init();rts_reduce(" ++ showInt n ");return 0;}\n";
+
+progLine p r = "  prog[" ++ showInt (fst p) "] = " ++ showInt (snd p) (";\n"++r);
+progBody mem = foldr (.) id (map progLine (zipWith (,) (upFrom 0) mem ));
 
 compile s = case untangle s of
   { Left err -> err
   ; Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      ("typedef unsigned u;\n"++)
-    . ("enum{_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
-    . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("0};\n" ++)
+      ("// CONSTANT _UNDEFINED 0\n#define _UNDEFINED 0\n"++)
+    . foldr (.) id (map (\(s, _) -> ("// CONSTANT _"++) . (s++) . (" "++) . (showInt (comEnum s))
+      . ("\n#define _"++) . (s++) . (" "++) . (showInt (comEnum s)) . ('\n':)) comdefs)
+    . ("\nvoid *malloc(unsigned long);\n" ++)
+    . ("\nunsigned *prog;\nvoid init_prog() \n{\n" ++)
+    . ("  prog = malloc(" ++) . showInt (length mem) . ("* sizeof(unsigned));\n"++)
+    . progBody mem
+    . ("}\nunsigned prog_size="++) . showInt (length mem) . (";\n"++)
     . (preamble++)
     . (concatMap ffiDeclare ffis ++)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . ("void foreign(unsigned n) {\nif (FALSE) {}\n" ++)
     . ffiDefine (length ffis - 1) ffis
-    . ("\n  }\n}\n" ++)
+    . ("}\n" ++)
     . runFun
     . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
     $ maybe "" genMain (mlookup "main" tab)
@@ -1242,7 +1243,7 @@ R x y z = y z x
 V x y z = z x y
 T x y = y x
 K x y = "_I" x
-I x = "sp[1] = arg(1); sp++;"
+I x = "sp[1] = arg(1); sp = sp + CELL_SIZE;"
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
 ADD x y = "_NUM" "num(1) + num(2)"
@@ -1250,11 +1251,11 @@ SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
 DIV x y = "_NUM" "num(1) / num(2)"
 MOD x y = "_NUM" "num(1) % num(2)"
-EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+EQ x y = "if (num(1) == num(2)) lazy2(2, _I, _K); else lazy2(2, _K, _I);"
+LE x y = "if (num(1) <= num(2)) lazy2(2, _I, _K); else lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
+WRITEREF x y z w = "mem[arg(2) + 1] = arg(1); lazy3(4,arg(4),_K,arg(3));"
 END = "return;"
 |];
 
@@ -1274,111 +1275,217 @@ comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Ti
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
 
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-void *malloc(unsigned long);
-enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<24 };
-static u *mem, *altmem, *sp, *spTop, hp;
-static inline u isAddr(u n) { return n>=128; }
-static u evac(u n) {
-  if (!isAddr(n)) return n;
-  u x = mem[n];
-  while (isAddr(x) && mem[x] == _T) {
-    mem[n] = mem[n + 1];
-    mem[n + 1] = mem[x + 1];
-    x = mem[n];
-  }
-  if (isAddr(x) && mem[x] == _K) {
-    mem[n + 1] = mem[x + 1];
-    x = mem[n] = _I;
-  }
-  u y = mem[n + 1];
-  switch(x) {
-    case FORWARD: return y;
-    case REDUCING:
-      mem[n] = FORWARD;
-      mem[n + 1] = hp;
-      hp += 2;
-      return mem[n + 1];
-    case _I:
-      mem[n] = REDUCING;
-      y = evac(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = _I;
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
-    default: break;
-  }
-  u z = hp;
-  hp += 2;
-  mem[n] = FORWARD;
-  mem[n + 1] = z;
-  altmem[z] = x;
-  altmem[z + 1] = y;
-  return z;
+preamble = [r|
+#include <stdio.h>
+// CONSTANT FALSE 0
+#define FALSE 0
+// CONSTANT TRUE 1
+#define TRUE 1
+
+// CONSTANT FORWARD 127
+#define FORWARD 127
+// CONSTANT REDUCING 126
+#define REDUCING 126
+
+// CONSTANT TOP 16777216
+#define TOP 16777216
+
+//CONSTANT CELL_SIZE sizeof(unsigned)
+#define CELL_SIZE 1
+
+unsigned* mem;
+unsigned* altmem;
+unsigned* sp;
+unsigned* spTop;
+unsigned hp;
+
+unsigned isAddr(unsigned n)
+{
+	return n >= 128;
 }
 
-static void gc() {
-  hp = 128;
-  u di = hp;
-  sp = altmem + TOP - 1;
-  for(u *r = root; *r; r++) *r = evac(*r);
-  *sp = evac(*spTop);
-  while (di < hp) {
-    u x = altmem[di] = evac(altmem[di]);
-    di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
-    di++;
-  }
-  spTop = mem;
-  mem = altmem;
-  altmem = spTop;
-  spTop = sp;
+unsigned evac(unsigned n)
+{
+	if(!isAddr(n))
+	{
+		return n;
+	}
+
+	unsigned x = mem[n];
+
+	while(isAddr(x) && mem[x] == _T)
+	{
+		mem[n] = mem[n + 1];
+		mem[n + 1] = mem[x + 1];
+		x = mem[n];
+	}
+
+	if(isAddr(x) && mem[x] == 'K')
+	{
+		mem[n + 1] = mem[x + 1];
+		x = mem[n] = 'I';
+	}
+
+	unsigned y = mem[n + 1];
+
+	if(FORWARD == x)
+	{
+		return y;
+	}
+	else if(REDUCING == x)
+	{
+		mem[n] = FORWARD;
+		mem[n + 1] = hp;
+		hp = hp + 2;
+		return mem[n + 1];
+	}
+	else if(_I == x)
+	{
+		mem[n] = REDUCING;
+		y = evac(y);
+
+		if(mem[n] == FORWARD)
+		{
+			altmem[mem[n + 1]] = 'I';
+			altmem[mem[n + 1] + 1] = y;
+		}
+		else
+		{
+			mem[n] = FORWARD;
+			mem[n + 1] = y;
+		}
+
+		return mem[n + 1];
+	}
+
+	unsigned z = hp;
+	hp = hp + 2;
+	mem[n] = FORWARD;
+	mem[n + 1] = z;
+	altmem[z] = x;
+	altmem[z + 1] = y;
+	return z;
 }
 
-static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
-static inline u arg(u n) { return mem[sp [n] + 1]; }
-static inline int num(u n) { return mem[arg(n) + 1]; }
-static inline void lazy2(u height, u f, u x) {
-  u *p = mem + sp[height];
-  *p = f;
-  *++p = x;
-  sp += height - 1;
-  *sp = f;
-}
-static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
+void gc()
+{
+	/* Reset the heap pointer */
+	hp = 128;
+	unsigned di = hp;
+	/* Set the stack pointer to point to the top of altmem */
+	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
 
-static int env_argc;
+	unsigned i;
+
+	sp[0] = evac(spTop[0]);
+
+	unsigned x;
+	while(di < hp)
+	{
+		altmem[di] = evac(altmem[di]);
+		x = altmem[di];
+		di = di + 1;
+
+		if(x != _F && x != _NUM)
+		{
+			altmem[di] = evac(altmem[di]);
+		}
+
+		di = di + 1;
+	}
+
+	spTop = sp;
+	/* Swap the addresses of mem and altmem */
+	unsigned *tmp = mem;
+	mem = altmem;
+	altmem = tmp;
+}
+
+unsigned app(unsigned f, unsigned x)
+{
+	mem[hp] = f;
+	mem[hp + 1] = x;
+	hp = hp + 2;
+	return hp - 2;
+}
+
+unsigned arg(unsigned n)
+{
+	return mem[sp [n] + 1];
+}
+
+int num(unsigned n)
+{
+	return mem[arg(n) + 1];
+}
+
+unsigned lazy2(unsigned height, unsigned f, unsigned x)
+{
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
+	p[0] = f;
+	p = p + CELL_SIZE;
+	p[0] = x;
+	sp = sp + (height * CELL_SIZE) - CELL_SIZE;
+	sp[0] = f;
+	return 0;
+}
+
+unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
+{
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
+	p[0] = app(x1, x2);
+	sp[height - 1] = p[0];
+	p[1] = x3;
+	sp = sp + (height * CELL_SIZE) - (2 * CELL_SIZE);
+	sp[0] = x1;
+	return 0;
+}
+
+int putchar(int c) { return fputc(c, stdout); }
+int getchar() { return fgetc(stdin); }
+int env_argc;
 int getargcount() { return env_argc; }
-static char **env_argv;
+char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
 |];
 
-runFun = ([r|static void run() {
-  for(;;) {
-    if (mem + hp > sp - 8) gc();
-    u x = *sp;
-    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+runFun = ([r|void run() {
+  unsigned x;
+  while(TRUE)
+  {
+    if (mem + (hp * CELL_SIZE) > sp - (8 * CELL_SIZE)) 
+    {
+      gc();
+    }
+    x = sp[0];
+    if (isAddr(x)) 
+    {
+      sp = sp - CELL_SIZE;
+      sp[0] = mem[x];
+    }
 |]++)
   . foldr (.) id (genComb <$> comdefs)
   . ([r|
-    }
   }
 }
 
 void rts_init() {
-  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  mem = malloc(TOP * sizeof(unsigned)); altmem = malloc(TOP * sizeof(unsigned));
   hp = 128;
-  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
-  spTop = mem + TOP - 1;
+  unsigned i;
+  for (i = 0; i < prog_size; i = i + 1)
+  {
+    mem[hp] = prog[i];
+	hp = hp + 1;
+  }
+  spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 }
 
-void rts_reduce(u n) {
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+void rts_reduce(unsigned n) {
+  sp = spTop;
+  spTop[0] = app(app(n, _UNDEFINED), _END);
   run();
 }
 |]++)
@@ -1393,9 +1500,9 @@ genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as;
 genComb (s, (args, body)) = let
   { argc = ('(':) . showInt (length args)
   ; m = zip args $ upFrom 1
-  } in ("case _"++) . (s++) . (':':) . (case body of
-  { A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
-  ; A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-  ; E (StrCon s) -> (s++)
-  }) . ("break;\n"++)
+  } in ("  else if (x == _"++) . (s++) . (')':) . (case body of
+  { A (A x y) z -> (" { lazy3"++) . argc . genArgs m [x, y, z] . ("); }"++)
+  ; A x y -> (" { lazy2"++) . argc . genArgs m [x, y] . ("); }"++)
+  ; E (StrCon s) -> (" { "++) . (s++) . (" }"++)
+  }) . ("\n"++)
   ;
