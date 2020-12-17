@@ -84,26 +84,42 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 
 # Generate raw file needed
 ./bin/vm --bootstrap \
+-pb bootstrap \
 		-lf generated/parenthetically \
+		-pb generated/parenthetically \
 		-lf generated/exponentially \
+		-pb generated/exponentially \
 		-lf generated/practically \
+		-pb generated/practically \
 		-lf generated/singularity_blob \
+		-pb generated/singularity_blob \
 		-lf singularity \
+		-pb singularity \
 		-lf semantically \
+		-pb semantically \
 		-lf stringy \
+		-pb stringy \
 		-lf binary \
+		-pb binary \
 		-lf algebraically \
+		-pb algebraically \
 		-lf parity.hs \
+		-pb parity.hs \
 		-lf fixity.hs \
+		-pb fixity.hs \
 		-lf typically.hs \
+		-pb typically.hs \
 		-lf classy.hs \
+		-pb classy.hs \
 		-lf barely.hs \
+		-pb barely.hs \
 		-lf barely.hs \
-		-lfr barely.hs \
+		--redo \
+		-lf barely.hs \
 		-o bin/raw
 
 # Make lonely
-./bin/vm -f lonely.hs -l bin/raw run effectively.hs -o generated/lonely_raw.txt
+./bin/vm -f lonely.hs -l bin/raw -lf effectively.hs --redo run -o generated/lonely_raw.txt
 
 # Make patty
 ./bin/vm -f patty.hs --rts_c generated/lonely_raw.txt -o generated/patty_raw.txt

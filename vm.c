@@ -66,16 +66,6 @@ unsigned starting_address;
 /* Stupid global to shutup warnings; should be removed when readers are unified */
 unsigned failure;
 
-void stats()
-{
-	file_print("[HP = ",stdout);
-	file_print("$hp",stdout);
-	file_print(", stack usage = ",stdout);
-	file_print("$spTop",stdout);
-	file_print("$sp",stdout);
-	file_print("]\n",stdout);
-}
-
 unsigned isAddr(unsigned n)
 {
 	return n >= 128;
@@ -456,7 +446,6 @@ void run(FUNCTION get, FUNCTION put)
 		else if(FORWARD == x)
 		{
 			if(rts_c) return;
-			stats();
 			require(FALSE, "error: stray forwarding pointer\n");
 		}
 		else if('Q' == x)
@@ -669,11 +658,6 @@ unsigned buf_put(unsigned c)
 }
 
 FILE *fp;
-void fp_reset(char *f)
-{
-	fp = fopen(f, "r");
-	require(fp != NULL, "error: fopen failed\n");
-}
 
 
 unsigned fp_get(unsigned f)
@@ -706,15 +690,10 @@ unsigned ioget(unsigned f)
 	return c;
 }
 
-void lvlup_file(char *filename, int raw)
+void lvlup_file(char* filename)
 {
-	if(raw)
-	{
-		str = buf;
-		loadRaw(str_get);
-	}
-	else parse(buf);
-	fp_reset(filename);
+	fp = fopen(filename, "r");
+	require(fp != NULL, "error: fopen failed\n");
 	bufptr = buf;
 	run(fp_get, buf_put);
 	bufptr[0] = 0;
@@ -730,7 +709,7 @@ unsigned rts_reduce(unsigned n)
 	return 0;
 }
 
-void rts_init(FUNCTION get)
+void rts_init()
 {
 	hp = 128;
 	unsigned c;
@@ -739,7 +718,7 @@ void rts_init(FUNCTION get)
 
 	while(TRUE)
 	{
-		c = get(0);
+		c = str_get(0);
 		if (c == 0 || (c < '0' || c > '9'))
 			break;
 		n = 10 * n + c - '0';
@@ -751,7 +730,7 @@ void rts_init(FUNCTION get)
 	{
 		do
 		{
-			c = get(0);
+			c = str_get(0);
 			i = i + 1;
 		} while(c != 0 && (c < '0' || c > '9'));
 
@@ -770,7 +749,7 @@ void rts_init(FUNCTION get)
 			}
 
 			n = 10 * n + c - '0';
-			c = get(0);
+			c = str_get(0);
 			i = i + 1;
 		}
 
@@ -779,29 +758,6 @@ void rts_init(FUNCTION get)
 	}
 
 	spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
-}
-
-void iotest()
-{
-	str =
-	    "ioBind2 m k = ioBind m (\\_ -> k);"
-	    "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
-	    "foldr c n l = flst l n (\\h t -> c h(foldr c n t));"
-	    "(.) f g x = f (g x);"
-	    "data Unit = Unit;"
-	    "flip f x y = f y x;"
-	    "map = flip (foldr . ((:) .)) [];"
-	    "mapM_ f = foldr (ioBind2 . f) (ioPure Unit);"
-	    "main = mapM_ putChar \"Hello, World!\\n\""
-	    ;
-	bufptr = buf;
-	run(str_get, buf_put);
-	bufptr[0] = 0;
-	str = buf;
-	loadRaw(str_get);
-	sp[0] = app(app(root_memo, '?'), '.');
-	str = "";
-	run(str_get, pc);
 }
 
 int main(int argc, char **argv)
@@ -825,30 +781,31 @@ int main(int argc, char **argv)
 		{
 			option_index = option_index + 1;
 		}
+		else if(match(argv[option_index], "--redo"))
+		{
+			str = buf;
+			loadRaw(str_get);
+			option_index = option_index + 1;
+		}
 		else if(match(argv[option_index], "-l") || match(argv[option_index], "--load-rom"))
 		{
-			fp_reset(argv[option_index+1]);
+			fp = fopen(argv[option_index + 1], "r");
+			require(fp != NULL, "error: fopen failed\n");
 			loadRaw(fp_get);
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "run"))
 		{
-			fp_reset(argv[option_index+1]);
-			bufptr = buf;
-			run(fp_get, buf_put);
-			bufptr[0] = 0;
-			str = buf;
-			loadRaw(str_get);
 			bufptr = buf;
 			run(ioget, buf_put);
-			option_index = option_index + 2;
+			option_index = option_index + 1;
 		}
 		else if(match(argv[option_index], "--rts_c"))
 		{
 			rts_c = TRUE;
 			load(argv[option_index+1]);
 			str = buf;
-			rts_init(str_get);
+			rts_init();
 			rts_reduce(starting_address);
 			option_index = option_index + 2;
 		}
@@ -859,17 +816,17 @@ int main(int argc, char **argv)
 			bufptr = buf + 2;
 			option_index = option_index + 1;
 		}
-		else if(match(argv[option_index], "-lf") || match(argv[option_index], "--levelup-file"))
+		else if(match(argv[option_index], "-pb") || match(argv[option_index], "--parse-buffer"))
 		{
-			file_print("loading ", stderr);
+			file_print("parsing buffered ", stderr);
 			file_print(argv[option_index + 1], stderr);
 			file_print("...\n", stderr);
-			lvlup_file(argv[option_index + 1], FALSE);
+			parse(buf);
 			option_index = option_index + 2;
 		}
-		else if(match(argv[option_index], "-lfr") || match(argv[option_index], "--levelup-file-raw"))
+		else if(match(argv[option_index], "-lf") || match(argv[option_index], "--levelup-file"))
 		{
-			lvlup_file(argv[option_index + 1], TRUE);
+			lvlup_file(argv[option_index + 1]);
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "-o") || match(argv[option_index], "--output"))
