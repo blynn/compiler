@@ -83,61 +83,43 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 	-o bin/vm --exec_enable
 
 # Generate raw file needed
-./bin/vm --bootstrap \
--pb bootstrap \
-		-lf generated/parenthetically \
-		-pb generated/parenthetically \
-		-lf generated/exponentially \
-		-pb generated/exponentially \
-		-lf generated/practically \
-		-pb generated/practically \
-		-lf generated/singularity_blob \
-		-pb generated/singularity_blob \
-		-lf singularity \
-		-pb singularity \
-		-lf semantically \
-		-pb semantically \
-		-lf stringy \
-		-pb stringy \
-		-lf binary \
-		-pb binary \
-		-lf algebraically \
-		-pb algebraically \
-		-lf parity.hs \
-		-pb parity.hs \
-		-lf fixity.hs \
-		-pb fixity.hs \
-		-lf typically.hs \
-		-pb typically.hs \
-		-lf classy.hs \
-		-pb classy.hs \
-		-lf barely.hs \
-		-pb barely.hs \
-		-lf barely.hs \
-		--redo \
-		-lf barely.hs \
-		-o bin/raw
+./bin/vm --raw blob/root -pb bootstrap -lf generated/parenthetically -o bin/raw_l
+./bin/vm --raw bin/raw_l -pb generated/parenthetically -lf generated/exponentially -o bin/raw_m
+./bin/vm --raw bin/raw_m -pb generated/exponentially -lf generated/practically -o bin/raw_n
+./bin/vm --raw bin/raw_n -pb generated/practically -lf generated/singularity_blob -o bin/raw_o
+./bin/vm --raw bin/raw_o -pb generated/singularity_blob -lf singularity -o bin/raw_p
+./bin/vm --raw bin/raw_p -pb singularity -lf semantically -o bin/raw_q
+./bin/vm --raw bin/raw_q -pb semantically -lf stringy -o bin/raw_r
+./bin/vm --raw bin/raw_r -pb stringy -lf binary -o bin/raw_s
+./bin/vm --raw bin/raw_s -pb binary -lf algebraically -o bin/raw_t
+./bin/vm --raw bin/raw_t -pb algebraically -lf parity.hs -o bin/raw_u
+./bin/vm --raw bin/raw_u -pb parity.hs -lf fixity.hs -o bin/raw_v
+./bin/vm --raw bin/raw_v -pb fixity.hs -lf typically.hs -o bin/raw_w
+./bin/vm --raw bin/raw_w -pb typically.hs -lf classy.hs -o bin/raw_x
+./bin/vm --raw bin/raw_x -pb classy.hs -lf barely.hs -o bin/raw_y
+./bin/vm --raw bin/raw_y -pb barely.hs -lf barely.hs -o bin/raw_z
+./bin/vm -l bin/raw_z -lf barely.hs -o bin/raw
 
 # Make lonely
-./bin/vm -f lonely.hs -l bin/raw -lf effectively.hs --redo run -o generated/lonely_raw.txt
+./bin/vm -l bin/raw -lf effectively.hs --redo -lf lonely.hs -o generated/lonely_raw.txt
 
 # Make patty
-./bin/vm -f patty.hs --rts_c generated/lonely_raw.txt -o generated/patty_raw.txt
+./bin/vm -f patty.hs --raw generated/lonely_raw.txt --rts_c run -o generated/patty_raw.txt
 
 # Make guardedly
-./bin/vm -f guardedly.hs --rts_c generated/patty_raw.txt -o generated/guardedly_raw.txt
+./bin/vm -f guardedly.hs --raw generated/patty_raw.txt --rts_c run -o generated/guardedly_raw.txt
 
 # Make assembly
-./bin/vm -f assembly.hs --rts_c generated/guardedly_raw.txt -o generated/assembly_raw.txt
+./bin/vm -f assembly.hs --raw generated/guardedly_raw.txt --rts_c run -o generated/assembly_raw.txt
 
 # Make mutually
-./bin/vm -f mutually.hs --foreign 2 --rts_c generated/assembly_raw.txt -o generated/mutually_raw.txt
+./bin/vm -f mutually.hs --foreign 2 --raw generated/assembly_raw.txt --rts_c run -o generated/mutually_raw.txt
 
 # Make uniquely
-./bin/vm -f uniquely.hs --foreign 2 --rts_c generated/mutually_raw.txt -o generated/uniquely_raw.txt
+./bin/vm -f uniquely.hs --foreign 2 --raw generated/mutually_raw.txt --rts_c run -o generated/uniquely_raw.txt
 
 # Make virtually
-./bin/vm -f virtually.hs --foreign 2 --rts_c generated/uniquely_raw.txt -o generated/virtually_raw.txt
+./bin/vm -f virtually.hs --foreign 2 --raw generated/uniquely_raw.txt --rts_c run -o generated/virtually_raw.txt
 
 # Make marginally
-./bin/vm -f marginally.hs --foreign 2 --rts_c generated/virtually_raw.txt -o generated/marginally.c
+./bin/vm -f marginally.hs --foreign 2 --raw generated/virtually_raw.txt --rts_c run -o generated/marginally.c

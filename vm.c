@@ -66,6 +66,12 @@ unsigned starting_address;
 /* Stupid global to shutup warnings; should be removed when readers are unified */
 unsigned failure;
 
+/* Our annoying buffer */
+char* buf;
+char* bufptr;
+char* buf_end;
+
+
 unsigned isAddr(unsigned n)
 {
 	return n >= 128;
@@ -203,6 +209,23 @@ void reset(unsigned root)
 	sp[0] = app(app(app(root, app('0', '?')), '.'), app('T', '1'));
 }
 
+void load(char* filename)
+{
+	FILE* fp = fopen(filename, "r");
+	require(fp != NULL, "error: fopen failed\n");
+
+	int c = fgetc(fp);
+	int i = 0;
+	while(EOF != c)
+	{
+		buf[i] = c;
+		i = i + 1;
+		c = fgetc(fp);
+	}
+
+	fclose(fp);
+}
+
 void loadRaw(FUNCTION get)
 {
 	hp = 127;
@@ -262,7 +285,9 @@ unsigned parseTerm(FUNCTION get)
 	}
 	else if('@' == c)
 	{
-		return tab[get(0) - ' '];
+		c = get(0);
+		require(' ' <= c, "parseTerm tab underflow\n");
+		return tab[c - ' '];
 	}
 	else if('(' == c)
 	{
@@ -284,6 +309,7 @@ unsigned parseTerm(FUNCTION get)
 			n = 10 * n + c - '0';
 		}
 
+		require(n < TABMAX, "error: table overflow\n");
 		return tab[n];
 	}
 
@@ -300,6 +326,7 @@ void parseMore(FUNCTION get)
 
 		if(0 == c)
 		{
+			require(1 <= tabn, "parseMore tabn underflow\n");
 			reset(tab[tabn - 1]);
 			return;
 		}
@@ -323,13 +350,6 @@ unsigned str_get(unsigned f)
 	return str_get_c;
 }
 
-void parse(char *s)
-{
-	hp = 128;
-	tabn = 0;
-	str = s;
-	parseMore(str_get);
-}
 
 /* Since application nodes are stored in adjacent memory locations, we
    can get the nth argument. */
@@ -367,11 +387,6 @@ unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 	sp = sp + (height * CELL_SIZE) - (2 * CELL_SIZE);
 	sp[0] = x1;
 	return 0;
-}
-
-unsigned apparg(unsigned i, unsigned j)
-{
-	return app(arg(i), arg(j));
 }
 
 void foreign2(FUNCTION get, FUNCTION put, unsigned n)
@@ -450,7 +465,7 @@ void run(FUNCTION get, FUNCTION put)
 		}
 		else if('Q' == x)
 		{
-			lazy(3, arg(3), apparg(2, 1));
+			lazy(3, arg(3), app(arg(2), arg(1)));
 		}
 		else if('.' == x)
 		{
@@ -466,33 +481,33 @@ void run(FUNCTION get, FUNCTION put)
 		/* S x y z = x z (y z) */
 		else if('S' == x)
 		{
-			if(rts_c) lazy3(3, arg(1), arg(3), apparg(2, 3));
-			else lazy(3, apparg(1, 3), apparg(2, 3));
+			if(rts_c) lazy3(3, arg(1), arg(3), app(arg(2), arg(3)));
+			else lazy(3, app(arg(1), arg(3)), app(arg(2), arg(3)));
 		}
 		/* (.) */
 		/* B x y z = x (y z) */
 		else if('B' == x)
 		{
-			lazy(3, arg(1), apparg(2, 3));
+			lazy(3, arg(1), app(arg(2), arg(3)));
 		}
 		/* flip */
 		/* C x y z = x z y */
 		else if('C' == x)
 		{
 			if(rts_c) lazy3(3, arg(1), arg(3), arg(2));
-			else lazy(3, apparg(1, 3), arg(2));
+			else lazy(3, app(arg(1), arg(3)), arg(2));
 		}
 		/* flip flip */
 		/* R x y z = y z x */
 		else if('R' == x)
 		{
 			if(rts_c) lazy3(3, arg(2), arg(3), arg(1));
-			else lazy(3, apparg(2, 3), arg(1));
+			else lazy(3, app(arg(2), arg(3)), arg(1));
 		}
 		else if('V' == x)
 		{
 			if(rts_c) lazy3(3, arg(3), arg(1), arg(2));
-			else lazy(3, apparg(3,1), arg(2));
+			else lazy(3, app(arg(3),arg(1)), arg(2));
 		}
 		/* id */
 		/* I x = x */
@@ -518,7 +533,7 @@ void run(FUNCTION get, FUNCTION put)
 		else if(':' == x)
 		{
 			if(rts_c) lazy3(4, arg(4), arg(1), arg(2));
-			else lazy(4, apparg(4, 1), arg(2));
+			else lazy(4, app(arg(4), arg(1)), arg(2));
 		}
 		/* Read a character c from the input */
 		/* If c == 0, then I K (represents nil) */
@@ -627,27 +642,6 @@ void run(FUNCTION get, FUNCTION put)
 	}
 }
 
-char* buf;
-char* bufptr;
-char* buf_end;
-
-void load(char* blob)
-{
-	FILE* f = fopen(blob, "r");
-	require(NULL != f, "failed to load file\n");
-
-	int i = 0;
-	int c;
-	do
-	{
-		c = fgetc(f);
-		if(EOF != c) buf[i] = c;
-		i = i + 1;
-	} while(EOF != c);
-
-	fclose(f);
-}
-
 unsigned buf_put(unsigned c)
 {
 	require(bufptr != buf_end, "error: buffer overflow\n");
@@ -688,25 +682,6 @@ unsigned ioget(unsigned f)
 	unsigned c = fgetc(input_file);
 
 	return c;
-}
-
-void lvlup_file(char* filename)
-{
-	fp = fopen(filename, "r");
-	require(fp != NULL, "error: fopen failed\n");
-	bufptr = buf;
-	run(fp_get, buf_put);
-	bufptr[0] = 0;
-}
-
-unsigned rts_reduce(unsigned n)
-{
-	sp = spTop;
-	spTop[0] = app(app(n, '?'), '.');
-	bufptr = buf;
-	run(ioget, buf_put);
-	bufptr[0] = 0;
-	return 0;
 }
 
 void rts_init()
@@ -798,22 +773,16 @@ int main(int argc, char **argv)
 		{
 			bufptr = buf;
 			run(ioget, buf_put);
+			bufptr[0] = 0;
 			option_index = option_index + 1;
 		}
 		else if(match(argv[option_index], "--rts_c"))
 		{
 			rts_c = TRUE;
-			load(argv[option_index+1]);
 			str = buf;
 			rts_init();
-			rts_reduce(starting_address);
-			option_index = option_index + 2;
-		}
-		else if(match(argv[option_index], "--bootstrap"))
-		{
-			buf[0] = 'I';
-			buf[1] = ';';
-			bufptr = buf + 2;
+			sp = spTop;
+			spTop[0] = app(app(starting_address, '?'), '.');
 			option_index = option_index + 1;
 		}
 		else if(match(argv[option_index], "-pb") || match(argv[option_index], "--parse-buffer"))
@@ -821,12 +790,19 @@ int main(int argc, char **argv)
 			file_print("parsing buffered ", stderr);
 			file_print(argv[option_index + 1], stderr);
 			file_print("...\n", stderr);
-			parse(buf);
+			hp = 128;
+			tabn = 0;
+			str = buf;
+			parseMore(str_get);
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "-lf") || match(argv[option_index], "--levelup-file"))
 		{
-			lvlup_file(argv[option_index + 1]);
+			fp = fopen(argv[option_index + 1], "r");
+			require(fp != NULL, "error: fopen failed\n");
+			bufptr = buf;
+			run(fp_get, buf_put);
+			bufptr[0] = 0;
 			option_index = option_index + 2;
 		}
 		else if(match(argv[option_index], "-o") || match(argv[option_index], "--output"))
@@ -857,6 +833,11 @@ int main(int argc, char **argv)
 		else if(match(argv[option_index], "--foreign"))
 		{
 			foreign_version = numerate_string(argv[option_index + 1]);
+			option_index = option_index + 2;
+		}
+		else if(match(argv[option_index], "--raw"))
+		{
+			load(argv[option_index + 1]);
 			option_index = option_index + 2;
 		}
 		else
