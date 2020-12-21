@@ -1618,17 +1618,18 @@ hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
 customMods = id
 
 libc = ([r|#include<stdio.h>
-static int env_argc;
+int env_argc;
 int getargcount() { return env_argc; }
-static char **env_argv;
+char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
-static char buf[1024], *bufp;
-static FILE *fp;
+char *buf;
+char *bufp;
+FILE *fp;
 void reset_buffer() { bufp = buf; }
-void put_buffer(int n) { *bufp++ = n; }
+void put_buffer(int n) { bufp[0] = n; bufp = bufp + 1; }
 void stdin_load_buffer() { fp = fopen(buf, "r"); }
-int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
-void putchar_cast(char c) { putchar(c); }
+int getchar_fp(void) { int n = fgetc(fp); if (n < 0) fclose(fp); return n; }
+void putchar_cast(char c) { fputc(c,stdout); }
 void *malloc(unsigned long);
 |]++)
 
@@ -1656,11 +1657,14 @@ ffiDefine n ffis = case ffis of
     lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
     aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
     longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+    in ("else if (n == " ++) . showInt n . (") { " ++) . if ret == "()"
+      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); }\n") ++) . ffiDefine (n - 1) xt
+      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); }\n") ++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;init_prog();rts_reduce(" ++ showInt n ");return 0;}\n"
+
+progLine p r = "  prog[" ++ showInt (fst p) "] = " ++ showInt (snd p) (";\n"++r);
+progBody mem = foldr (.) id (map progLine (zipWith (,) [0..] mem ));
 
 data Target = Host | Wasm
 
@@ -1673,12 +1677,11 @@ void* malloc(unsigned long n) {
 }
 |]++)
 
-enumTop Host = ("enum{TOP=1<<24};"++)
+enumTop Host = ("// CONSTANT TOP 16777216\n#define TOP 16777216\n"++)
 enumTop Wasm = ("enum{TOP=1<<22};"++)
-enumComs = ("typedef unsigned u;\n"++)
-  . ("enum{_UNDEFINED=0,"++)
-  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-  . ("};\n"++)
+enumComs = ("// CONSTANT _UNDEFINED 0\n#define _UNDEFINED 0\n"++)
+  . foldr (.) id (map (\(s, _) -> ("// CONSTANT _"++) . (s++) . (" "++) . (showInt (comEnum s))
+    . ("\n#define _"++) . (s++) . (" "++) . (showInt (comEnum s)) . ('\n':)) comdefs)
 
 compile tgt s = either id id do
   ((typed, lambs), (ffis, exs)) <- untangle s
@@ -1693,12 +1696,11 @@ compile tgt s = either id id do
   pure
     $ enumTop tgt
     . enumComs
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
-    . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
-    . ("0};\n" ++)
+    . ("\nvoid *malloc(unsigned long);\n" ++)
+    . ("\nunsigned *prog;\nvoid init_prog() \n{\n" ++)
+    . ("  prog = malloc(" ++) . showInt (length mem) . ("* sizeof(unsigned));\n"++)
+    . progBody mem
+    . ("}\nunsigned prog_size="++) . showInt (length mem) . (";\n"++)
     . targetFuns tgt
     . preamble
     . (concatMap ffiDeclare ffis ++)
@@ -1737,7 +1739,7 @@ R x y z = y z x
 V x y z = z x y
 T x y = y x
 K x y = "_I" x
-I x = "sp[1] = arg(1); sp++;"
+I x = "sp[1] = arg(1); sp = sp + CELL_SIZE;"
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
 DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
@@ -1752,14 +1754,14 @@ QUOT x y = "_NUM" "num(1) / num(2)"
 REM x y = "_NUM" "num(1) % num(2)"
 DIV x y = "_NUM" "div(num(1), num(2))"
 MOD x y = "_NUM" "mod(num(1), num(2))"
-EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
-U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
-U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
+EQ x y = "if (num(1) == num(2)) lazy2(2, _I, _K); else lazy2(2, _K, _I);"
+LE x y = "if (num(1) <= num(2)) lazy2(2, _I, _K); else lazy2(2, _K, _I);"
+U_DIV x y = "_NUM" "num(1) / num(2)"
+U_MOD x y = "_NUM" "num(1) % num(2)"
+U_LE x y = "if (num(1) <= num(2)) lazy2(2, _I, _K); else lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
+WRITEREF x y z w = "mem[arg(2) + 1] = arg(1); lazy3(4,arg(4),_K,arg(3));"
 END = "return;"
 |]
 comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
@@ -1774,116 +1776,224 @@ comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 
 preamble = ([r|
-enum { FORWARD = 127, REDUCING = 126 };
-static u *mem, *altmem, *sp, *spTop, hp;
-static inline u isAddr(u n) { return n>=128; }
-static u evac(u n) {
-  if (!isAddr(n)) return n;
-  u x = mem[n];
-  while (isAddr(x) && mem[x] == _T) {
-    mem[n] = mem[n + 1];
-    mem[n + 1] = mem[x + 1];
-    x = mem[n];
-  }
-  if (isAddr(x) && mem[x] == _K) {
-    mem[n + 1] = mem[x + 1];
-    x = mem[n] = _I;
-  }
-  u y = mem[n + 1];
-  switch(x) {
-    case FORWARD: return y;
-    case REDUCING:
-      mem[n] = FORWARD;
-      mem[n + 1] = hp;
-      hp += 2;
-      return mem[n + 1];
-    case _I:
-      mem[n] = REDUCING;
-      y = evac(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = _I;
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
-    default: break;
-  }
-  u z = hp;
-  hp += 2;
-  mem[n] = FORWARD;
-  mem[n + 1] = z;
-  altmem[z] = x;
-  altmem[z + 1] = y;
-  return z;
+// CONSTANT FALSE 0
+#define FALSE 0
+// CONSTANT TRUE 1
+#define TRUE 1
+
+// CONSTANT FORWARD 127
+#define FORWARD 127
+// CONSTANT REDUCING 126
+#define REDUCING 126
+
+//CONSTANT CELL_SIZE sizeof(unsigned)
+#define CELL_SIZE 1
+
+unsigned* mem;
+unsigned* altmem;
+unsigned* sp;
+unsigned* spTop;
+unsigned hp;
+
+unsigned ready = 0;
+
+unsigned isAddr(unsigned n)
+{
+	return n >= 128;
 }
 
-static void gc() {
-  hp = 128;
-  u di = hp;
-  sp = altmem + TOP - 1;
-  for(u *r = root; *r; r++) *r = evac(*r);
-  *sp = evac(*spTop);
-  while (di < hp) {
-    u x = altmem[di] = evac(altmem[di]);
-    di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
-    di++;
-  }
-  spTop = sp;
-  u *tmp = mem;
-  mem = altmem;
-  altmem = tmp;
+unsigned evac(unsigned n)
+{
+	if(!isAddr(n))
+	{
+		return n;
+	}
+
+	unsigned x = mem[n];
+
+	while(isAddr(x) && mem[x] == _T)
+	{
+		mem[n] = mem[n + 1];
+		mem[n + 1] = mem[x + 1];
+		x = mem[n];
+	}
+
+	if(isAddr(x) && mem[x] == 'K')
+	{
+		mem[n + 1] = mem[x + 1];
+		x = mem[n] = 'I';
+	}
+
+	unsigned y = mem[n + 1];
+
+	if(FORWARD == x)
+	{
+		return y;
+	}
+	else if(REDUCING == x)
+	{
+		mem[n] = FORWARD;
+		mem[n + 1] = hp;
+		hp = hp + 2;
+		return mem[n + 1];
+	}
+	else if(_I == x)
+	{
+		mem[n] = REDUCING;
+		y = evac(y);
+
+		if(mem[n] == FORWARD)
+		{
+			altmem[mem[n + 1]] = 'I';
+			altmem[mem[n + 1] + 1] = y;
+		}
+		else
+		{
+			mem[n] = FORWARD;
+			mem[n + 1] = y;
+		}
+
+		return mem[n + 1];
+	}
+
+	unsigned z = hp;
+	hp = hp + 2;
+	mem[n] = FORWARD;
+	mem[n + 1] = z;
+	altmem[z] = x;
+	altmem[z + 1] = y;
+	return z;
 }
 
-static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
-static inline u arg(u n) { return mem[sp [n] + 1]; }
-static int num(u n) { return mem[arg(n) + 1]; }
-static inline void lazy2(u height, u f, u x) {
-  u *p = mem + sp[height];
-  *p = f;
-  *++p = x;
-  sp += height - 1;
-  *sp = f;
+void gc()
+{
+	/* Reset the heap pointer */
+	hp = 128;
+	unsigned di = hp;
+	/* Set the stack pointer to point to the top of altmem */
+	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
+
+	unsigned i;
+
+	sp[0] = evac(spTop[0]);
+
+	unsigned x;
+	while(di < hp)
+	{
+		altmem[di] = evac(altmem[di]);
+		x = altmem[di];
+		di = di + 1;
+
+		if(x != _F && x != _NUM)
+		{
+			altmem[di] = evac(altmem[di]);
+		}
+
+		di = di + 1;
+	}
+
+	spTop = sp;
+	/* Swap the addresses of mem and altmem */
+	unsigned *tmp = mem;
+	mem = altmem;
+	altmem = tmp;
 }
-static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-typedef unsigned long long uu;
-static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
-static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
+
+unsigned app(unsigned f, unsigned x)
+{
+	mem[hp] = f;
+	mem[hp + 1] = x;
+	hp = hp + 2;
+	return hp - 2;
+}
+
+unsigned arg(unsigned n)
+{
+	return mem[sp [n] + 1];
+}
+
+int num(unsigned n)
+{
+	return mem[arg(n) + 1];
+}
+
+unsigned lazy2(unsigned height, unsigned f, unsigned x)
+{
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
+	p[0] = f;
+	p = p + CELL_SIZE;
+	p[0] = x;
+	sp = sp + (height * CELL_SIZE) - CELL_SIZE;
+	sp[0] = f;
+	return 0;
+}
+
+unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
+{
+	unsigned* p;
+	p = mem + (sp[height] * CELL_SIZE);
+	p[0] = app(x1, x2);
+	sp[height - 1] = p[0];
+	p[1] = x3;
+	sp = sp + (height * CELL_SIZE) - (2 * CELL_SIZE);
+	sp[0] = x1;
+	return 0;
+}
+
+void lazyDub(unsigned n) { lazy3(4, _V, app(_NUM, n), app(_NUM, 0)); }
+unsigned dub(unsigned lo, unsigned hi) { return num(lo); }
 |]++)
 
 runFun = ([r|
-static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
-static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
-static void run() {
-  for(;;) {
-    if (mem + hp > sp - 8) gc();
-    u x = *sp;
-    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+int div(int a, int b) { return a/b; }
+int mod(int a, int b) { return a%b; }
+void run() {
+  unsigned x;
+  while(TRUE)
+  {
+    if (mem + (hp * CELL_SIZE) > sp - (8 * CELL_SIZE))
+    {
+      gc();
+    }
+    x = sp[0];
+    if (isAddr(x))
+    {
+      sp = sp - CELL_SIZE;
+      sp[0] = mem[x];
+    }
 |]++)
   . foldr (.) id (genComb <$> comdefs)
   . ([r|
-    }
   }
 }
 |]++)
 
 rtsInit tgt = ([r|
 void rts_init() {|]++) . (case tgt of
-  Host -> ("fp = stdin; bufp = buf;"++)
+  Host -> ("\n  fp = stdin;\n  buf = malloc(1024 * sizeof(char));\n  bufp = buf;\n"++)
   _ -> id) . ([r|
-  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  mem = malloc(TOP * sizeof(unsigned)); altmem = malloc(TOP * sizeof(unsigned));
   hp = 128;
-  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
-  spTop = mem + TOP - 1;
+  unsigned i;
+  for (i = 0; i < prog_size; i = i + 1)
+  {
+    mem[hp] = prog[i];
+    hp = hp + 1;
+  }
+  spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
 }
 |]++)
 
 rtsReduce = ([r|
-void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+void rts_reduce(unsigned n) {
+  if (!ready)
+  {
+    ready = 1;
+    rts_init();
+  }
+  sp = spTop;
+  spTop[0] = app(app(n, _UNDEFINED), _END);
   run();
 }
 |]++)
@@ -1896,11 +2006,11 @@ genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
   argc = ('(':) . showInt (length args)
   m = zip args [1..]
-  in ("case _"++) . (s++) . (':':) . (case body of
-    A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
-    A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-    E (StrCon s) -> (s++)
-  ) . ("break;\n"++)
+  in ("  else if (x == _"++) . (s++) . (')':) . (case body of
+    A (A x y) z -> (" { lazy3"++) . argc . genArgs m [x, y, z] . ("); }"++)
+    A x y -> (" { lazy2"++) . argc . genArgs m [x, y] . ("); }"++)
+    E (StrCon s) -> (" { "++) . (s++) . (" }"++)
+  ) . ("\n"++)
 
 declDemo = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 void putchar(int) IMPORT("env", "putchar");
@@ -1924,9 +2034,9 @@ static inline void rts_init() {
 |]++)
 
 foreignFun ffis =
-    ("void foreign(u n) {\n  switch(n) {\n" ++)
+    ("void foreign(unsigned n) {\nif (FALSE) {}\n" ++)
   . ffiDefine (length ffis - 1) ffis
-  . ("\n  }\n}\n" ++)
+  . ("}\n" ++)
 
 demoFFIs =
   [ ("putchar", arr (TC "Char") $ TAp (TC "IO") (TC "()"))
