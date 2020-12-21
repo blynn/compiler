@@ -1831,8 +1831,8 @@ unsigned dub(unsigned lo, unsigned hi) { return num(lo); }
 |]++)
 
 runFun = ([r|
-int div(int a, int b) { int q = a/b; return q - (((a^b)) >> 31)*(q*b!=a); }
-int mod(int a, int b) { int r = a%b; return r + (((a^b)) >> 31)*(!!r)*b; }
+int div(int a, int b) { return a/b; }
+int mod(int a, int b) { return a%b; }
 void run() {
   unsigned x;
   while(TRUE)
