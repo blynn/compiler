@@ -1825,11 +1825,8 @@ unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 	return 0;
 }
 
-/*
-typedef unsigned long long uu;
-static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
-static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
-*/
+void lazyDub(unsigned n) { lazy3(4, _V, app(_NUM, n), app(_NUM, 0)); }
+unsigned dub(unsigned lo, unsigned hi) { return num(lo); }
 
 |]++)
 
