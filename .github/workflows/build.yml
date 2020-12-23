@@ -12,7 +12,7 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
     - name: Build
       run: nix-build -A blynn-compiler
-      timeout-minutes: 10
+      timeout-minutes: 15
     - name: Test
       run: echo "f803e4ca8cf281ec971f76a4920767242aa8427850ffbef85f69c4d01f5f3cdd result/share/raw" | sha256sum -c
     - run: cp result/bin/vm vm && cp result/share/raw raw
