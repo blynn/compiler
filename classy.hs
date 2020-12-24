@@ -22,18 +22,8 @@ infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
 infixl 3 <|>;
 infixr 0 $;
-undefined = undefined;
-($) f x = f x;
-id x = x;
-flip f x y = f y x;
-(&) x f = f x;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
-fpair p = \f -> case p of { (,) x y -> f x y };
-fst p = case p of { (,) x y -> x };
-snd p = case p of { (,) x y -> y };
-first f p = fpair p \x y -> (f x, y);
-second f p = fpair p \x y -> (x, f y);
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
@@ -44,9 +34,12 @@ lstEq xs ys = case xs of
   { [] -> flst ys True (\h t -> False)
   ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
   };
-
+undefined = undefined;
+($) f x = f x;
+id x = x;
+flip f x y = f y x;
+(&) x f = f x;
 maybe n j m = case m of { Nothing -> n; Just x -> j x };
-
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldr1 c l = maybe undefined id (flst l undefined (\h t -> foldr (\x m -> Just (case m of { Nothing -> x ; Just y -> c x y })) Nothing l));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
@@ -56,18 +49,19 @@ find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
 (++) = flip (foldr (:));
 concat = foldr (++) [];
 wrap c = c:[];
+
+fst p = case p of { (,) x y -> x };
+snd p = case p of { (,) x y -> y };
+fpair p = \f -> case p of { (,) x y -> f x y };
+second f p = fpair p \x y -> (x, f y);
+fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+first f p = fpair p \x y -> (f x, y);
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
-fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
 lookupWith eq s = foldr (\h t -> fpair h (\k v -> ife (eq s k) (Just v) t)) Nothing;
 lstLookup = lookupWith lstEq;
 
-data Type = TC String | TV String | TAp Type Type;
-data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
-
 pure x = \inp -> Just (x, inp);
-sat' f = \h t -> ife (f h) (pure h t) Nothing;
-sat f inp = flst inp Nothing (sat' f);
 bind f m = case m of
   { Nothing -> Nothing
   ; Just x -> fpair x f
@@ -88,16 +82,17 @@ many p = liftA2 (:) p (many p) <|> pure [];
 some p = liftA2 (:) p (many p);
 sepBy1 p sep = liftA2 (:) p (many (sep *> p));
 sepBy p sep = sepBy1 p sep <|> pure [];
+between x y p = x *> (p <* y);
+satHelper f = \h t -> ife (f h) (pure h t) Nothing;
+sat f inp = flst inp Nothing (satHelper f);
 
 char c = sat \x -> x == c;
-between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
 sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
-wantWith pred f inp = bind (sat' pred) (f inp);
+wantWith pred f inp = bind (satHelper pred) (f inp);
 want f s inp = wantWith (lstEq s) f inp;
-
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
@@ -109,6 +104,9 @@ varId = spc (wantWith (\s -> not (lstEq "of" s || lstEq "where" s)) varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
+
+data Type = TC String | TV String | TAp Type Type;
+data Ast = R String | V String | A Ast Ast | L String Ast | Proof Pred;
 
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));

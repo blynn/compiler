@@ -36,13 +36,13 @@ lstEq xs ys = case xs of
   { [] -> flst ys True (\h t -> False)
   ; (:) x xt -> flst ys False (\y yt -> ife (x == y) (lstEq xt yt) False)
   };
+undefined = undefined;
 ($) f x = f x;
 id x = x;
 flip f x y = f y x;
 (&) x f = f x;
 foldr c n l = flst l n (\h t -> c h(foldr c n t));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) (\x -> x) bs a;
-undefined = undefined;
 foldl1 f bs = flst bs undefined (\h t -> foldl f h t);
 elem k xs = foldr (\x t -> ife (x == k) True t) False xs;
 find f xs = foldr (\x t -> ife (f x) (Just x) t) Nothing xs;
