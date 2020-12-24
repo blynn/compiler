@@ -15,12 +15,15 @@ foldlOne = \f bs -> bs @? (\h t -> foldl f h t);
 elem k xs = \a b -> foldr (\x t -> (x(k(@=))) a t) b xs;
 lstLookup = \s -> foldr (\h t -> h (\k v -> lstEq s k (Just v) t)) Nothing;
 
+-- data LC = R String | V String | A LC LC | L String LC
 R s   = \a b c d -> a s;
 V v   = \a b c d -> b v;
 A x y = \a b c d -> c x y;
 L x y = \a b c d -> d x y;
 
+-- Parser combinators library.
 pure x inp = Just (pair x inp);
+sat f inp = inp @K (\h t -> f h (pure h t) @K);
 bind f m = m @K (\x -> x f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 fmap f x = ap (pure f) x;
@@ -28,12 +31,12 @@ alt x y = \inp -> (x inp) (y inp) Just;
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
 some p = liftaa @: p (many p);
+
+char c = sat (\x -> x(c(@=)));
 liftKI = liftaa (@K @I);
 liftK = liftaa @K;
 between x y p = liftKI x (liftK p y);
-sat f inp = inp @K (\h t -> f h (pure h t) @K);
 
-char c = sat (\x -> x(c(@=)));
 com = liftKI (char '-') (between (char '-') (char '\n') (many (sat (\c -> @C (c('\n'(@=)))))));
 sp = many (alt (sat (\c -> or (c(' '(@=))) (c('\n'(@=))))) com);
 spc f = liftK f sp;
@@ -66,12 +69,14 @@ expr = @Y \r -> liftaa (foldl @T) (aexp r) (many (liftaa (\f b a -> A (A (V f) a
 def = liftaa pair var (liftaa (@C (foldr L)) (many var) (liftKI (spch '=') expr));
 program = liftKI sp (some (liftK def (spch ';')));
 
+-- data DB = Ze | Su DB | Pass LC | La DB | App DB DB
 Ze   = \    a b c d e -> a;
 Su   = \x   a b c d e -> b x;
 Pass = \x   a b c d e -> c x;
 La   = \x   a b c d e -> d x;
 App  = \x y a b c d e -> e x y;
 
+-- Convert to de Bruijn.
 debruijn = @Y \r n e -> e
   (\s -> Pass (R s))
   (\v -> foldr (\h m -> lstEq h v Ze (Su m)) (Pass (V v)) n)
@@ -79,10 +84,11 @@ debruijn = @Y \r n e -> e
   (\s t -> La (r (@: s n) t))
   ;
 
-Defer = \a b c d -> a;
+-- Kiselyov's bracket abstraction.
 Closed = \t a b c d -> b t;
 Need = \x a b c d -> c x;
 Weak = \x a b c d -> d x;
+Defer = \a b c d -> a;
 
 ldef = \r y -> y
   (Need (Closed (A (A (R "S") (R "I")) (R "I"))))
@@ -134,6 +140,8 @@ babs = @Y \r t -> t
 nolam x = babs (debruijn @K x) @? @I @? @?;
 primTab = @: (pair "<=" "L") (@: (pair "==" "=") @K);
 prim s = lstLookup s primTab s (append "``BT`T");
+
+-- Code generator.
 rank ds v = foldr (\d t -> lstEq v (d @K) (\n -> @: '@' (@: n @K)) (@B t \n -> ' '('!'(@-))(n(@+)) )) (@K (prim v)) ds ' ';
 show = @Y \r ds t -> t @I (rank ds) (\x y -> @:'`'(append (r ds x) (r ds y))) @?;
 dump = @Y \r tab ds -> ds "" \h t -> append (show tab (nolam (h (@K @I)))) (@: ';' (r tab t));

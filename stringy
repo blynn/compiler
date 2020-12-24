@@ -32,6 +32,7 @@ char c = sat (\x -> x(c(@=)));
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
 between x y p = liftki x (liftk p y);
+
 com = liftki (char #-) (between (char #-) (char #
 ) (many (sat (\c -> @C (c(#
 (@=)))))));
@@ -131,6 +132,7 @@ babs = @Y \r t -> t
     (babsa (closed (rawcom #K))))
   (\x y -> babsa (r x) (r y))
   ;
+
 nolam x = babs (debruijn @K x) @? @I @? @?;
 
 -- Code generator.
