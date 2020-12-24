@@ -1935,7 +1935,7 @@ unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 	p[0] = app(x1, x2);
 	p[1] = x3;
 	sp[height - 1] = p[0];
-	sp = sp + ((height - 2) * CELL_SIZE;
+	sp = sp + ((height - 2) * CELL_SIZE);
 	sp[0] = x1;
 	return 0;
 }
