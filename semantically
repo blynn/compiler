@@ -18,7 +18,6 @@ lcl x y = \a b c d -> d x y;
 
 -- Parser combinators library.
 pure x inp = just (pair x inp);
-sat f inp = inp @K (\h t -> f h (pure h t) @K);
 bind f m = m @K (\x -> x f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 fmap f x = ap (pure f) x;
@@ -26,11 +25,13 @@ alt x y = \inp -> (x inp) (y inp) just;
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
 some p = liftaa @: p (many p);
+sat f inp = inp @K (\h t -> f h (pure h t) @K);
 
 char c = sat (\x -> x(c(@=)));
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
 between x y p = liftki x (liftk p y);
+
 com = liftki (char #-) (between (char #-) (char #
 ) (many (sat (\c -> @C (c(#
 (@=)))))));
@@ -38,7 +39,7 @@ sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
 (@=))))) com);
 spc f = liftk f sp;
 spch = @B spc char;
-var = spc ( some (sat (\x -> and (#z(x(@L))) (x(#a(@L))) )));
+var = spc (some (sat (\x -> and (#z(x(@L))) (x(#a(@L))) )));
 
 anyone = fmap (@C @: @K) (spc (sat (@K @K)));
 pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);
