@@ -36,7 +36,7 @@ libc = [r|
 int env_argc;
 int getargcount() { return env_argc; }
 char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
+char getargchar(int n, int k) { char *tmp = env_argv[n]; return tmp[k]; }
 char *buf;
 char *bufp;
 FILE *fp;
