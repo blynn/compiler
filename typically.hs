@@ -55,17 +55,12 @@ snd p = case p of { (,) x y -> y };
 fpair p = \f -> case p of { (,) x y -> f x y };
 second f p = fpair p \x y -> (x, f y);
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
 first f p = fpair p \x y -> (f x, y);
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
 
-data Ast = R String | V String | A Ast Ast | L String Ast;
-
 pure x = \inp -> Just (x, inp);
-sat' f = \h t -> ife (f h) (pure h t) Nothing;
-sat f inp = flst inp Nothing (sat' f);
 bind f m = case m of
   { Nothing -> Nothing
   ; Just x -> fpair x f
@@ -86,16 +81,17 @@ many p = liftA2 (:) p (many p) <|> pure [];
 some p = liftA2 (:) p (many p);
 sepBy1 p sep = liftA2 (:) p (many (sep *> p));
 sepBy p sep = sepBy1 p sep <|> pure [];
+between x y p = x *> (p <* y);
+satHelper f = \h t -> ife (f h) (pure h t) Nothing;
+sat f inp = flst inp Nothing (satHelper f);
 
 char c = sat \x -> x == c;
-between x y p = x *> (p <* y);
 com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
 sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;
-wantWith pred f inp = bind (sat' pred) (f inp);
+wantWith pred f inp = bind (satHelper pred) (f inp);
 want f s inp = wantWith (lstEq s) f inp;
-
 paren = between (spch '(') (spch ')');
 small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_');
 large = sat \x -> (x <= 'Z') && ('A' <= x);
@@ -107,6 +103,9 @@ varId = spc (wantWith (not . lstEq "of") varLex);
 opLex = some (sat (\c -> elem c ":!#$%&*+./<=>?@\\^|-~"));
 op = spc opLex <|> between (spch '`') (spch '`') varId;
 var = varId <|> paren (spc opLex);
+
+data Ast = R String | V String | A Ast Ast | L String Ast;
+
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (V ":") h) t) (V "[]"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
@@ -141,6 +140,7 @@ letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) 
 atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
+lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
