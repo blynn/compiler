@@ -1871,7 +1871,7 @@ void gc()
 	hp = 128;
 	unsigned di = hp;
 	/* Set the stack pointer to point to the top of altmem */
-	sp = altmem + (TOP * CELL_SIZE) - CELL_SIZE;
+	sp = altmem + ((TOP - 1) * CELL_SIZE);
 
 	unsigned i;
 
@@ -1922,9 +1922,8 @@ unsigned lazy2(unsigned height, unsigned f, unsigned x)
 	unsigned* p;
 	p = mem + (sp[height] * CELL_SIZE);
 	p[0] = f;
-	p = p + CELL_SIZE;
-	p[0] = x;
-	sp = sp + (height * CELL_SIZE) - CELL_SIZE;
+	p[1] = x;
+	sp = sp + ((height - 1) * CELL_SIZE);
 	sp[0] = f;
 	return 0;
 }
@@ -1934,9 +1933,9 @@ unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 	unsigned* p;
 	p = mem + (sp[height] * CELL_SIZE);
 	p[0] = app(x1, x2);
-	sp[height - 1] = p[0];
 	p[1] = x3;
-	sp = sp + (height * CELL_SIZE) - (2 * CELL_SIZE);
+	sp[height - 1] = p[0];
+	sp = sp + ((height - 2) * CELL_SIZE;
 	sp[0] = x1;
 	return 0;
 }
@@ -1981,7 +1980,7 @@ void rts_init() {|]++) . (case tgt of
     mem[hp] = prog[i];
     hp = hp + 1;
   }
-  spTop = mem + (TOP * CELL_SIZE) - CELL_SIZE;
+  spTop = mem + ((TOP - 1) * CELL_SIZE);
 }
 |]++)
 
