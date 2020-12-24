@@ -19,11 +19,13 @@ elem k xs = \a b -> foldr (\x t -> (x == k) a t) b xs;
 concat = foldr (++) [];
 wrap c = c:[];
 
+-- data LC = R String | V String | A LC LC | L String LC
 R s   = \a b c d -> a s;
 V v   = \a b c d -> b v;
 A x y = \a b c d -> c x y;
 L x y = \a b c d -> d x y;
 
+-- Parser combinators library.
 pure x inp = Just (pair x inp);
 bind f m = m @K (\x -> x f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
@@ -103,12 +105,14 @@ second f p = p \x y -> pair x (f y);
 primTab = pair "succ" "`T`(1)+" : map (second ((++) "``BT`T")) [pair "<=" "L", pair "==" "=", pair "-" "-", pair "+" "+"];
 prim s = lstLookup s primTab s (\x -> x);
 
+-- data DB = Ze | Su DB | Pass LC | La DB | App DB DB
 Ze   = \    a b c d e -> a;
 Su   = \x   a b c d e -> b x;
 Pass = \x   a b c d e -> c x;
 La   = \x   a b c d e -> d x;
 App  = \x y a b c d e -> e x y;
 
+-- Convert to de Bruijn.
 debruijn = @Y \r n e -> e
   (\s -> Pass (R s))
   (\v -> foldr (\h m -> lstEq h v Ze (Su m)) (Pass (V v)) n)
@@ -116,10 +120,11 @@ debruijn = @Y \r n e -> e
   (\s t -> La (r (s:n) t))
   ;
 
-Defer = \a b c d -> a;
+-- Kiselyov's bracket abstraction.
 Closed = \t a b c d -> b t;
 Need = \x a b c d -> c x;
 Weak = \x a b c d -> d x;
+Defer = \a b c d -> a;
 
 ldef = \r y -> y
   (Need (Closed (A (A (R "S") (R "I")) (R "I"))))
@@ -170,6 +175,7 @@ babs = @Y \r t -> t
 
 nolam x = babs (debruijn [] x) @? @I @? @?;
 
+-- Code generator.
 rank ds v = foldr (\d t -> lstEq v (d @K) (\n -> '@':(n:[])) (@B t \n -> ' '('!'(@-))(n(@+)) )) (@K (prim v)) ds ' ';
 show = @Y \r ds t -> t @I (rank ds) (\x y -> '`':(r ds x ++ r ds y)) @?;
 dump = @Y \r tab ds -> ds "" \h t -> show tab (nolam (h (@K @I))) ++ (';':r tab t);
