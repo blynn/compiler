@@ -7,18 +7,26 @@
 ------------------------------------------------------------------------
 
 or f g x y = f x (g x y);
+and f g x y = @C f y (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
 append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
 pair x y f = f x y;
 just x f g = g x;
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+
+-- data LC = R String | V String | A LC LC | L String LC
+lcr s   = \a b c d -> a s;
+lcv v   = \a b c d -> b v;
+lca x y = \a b c d -> c x y;
+lcl x y = \a b c d -> d x y;
+
+-- Parser combinators library.
 pure x inp = just (pair x inp);
 sat f inp = inp @K (\h t -> f h (pure h t) @K);
 bind f m = m @K (\x -> x f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 fmap f x = ap (pure f) x;
 alt x y = \inp -> (x inp) (y inp) just;
-
-foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
 some p = liftaa @: p (many p);
@@ -26,19 +34,15 @@ some p = liftaa @: p (many p);
 char c = sat (\x -> x(c(@=)));
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
-com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
-(@=)))))) (char #
-)));
+between x y p = liftki x (liftk p y);
+com = liftki (char #-) (between (char #-) (char #
+) (many (sat (\c -> @C (c(#
+(@=)))))));
 sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
 (@=))))) com);
 spc f = liftk f sp;
 spch = @B spc char;
-and f g x y = @C f y (g x y);
 var = spc ( some (sat (\x -> and (#z(x(@L))) (x(#a(@L))) )));
-lcr s   = \a b c d -> a s;
-lcv v   = \a b c d -> b v;
-lca x y = \a b c d -> c x y;
-lcl x y = \a b c d -> d x y;
 
 anyone = fmap (@C @: @K) (spc (sat (@K @K)));
 pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);
@@ -50,6 +54,7 @@ expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
+-- Code generator.
 rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
 show = @Y \r ds t -> t @I (rank ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
 
