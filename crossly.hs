@@ -93,7 +93,7 @@ class Monad m where
   (>>=) :: m a -> (a -> m b) -> m b
 (<$>) = fmap
 liftA2 f x y = f <$> x <*> y
-(>>) f g = f >>= \_ -> g
+(>>) f g = f >>= const g
 class Eq a where (==) :: a -> a -> Bool
 instance Eq Int where (==) = intEq
 instance Eq Char where (==) = charEq
@@ -153,10 +153,10 @@ instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
 instance Alternative Maybe where empty = Nothing ; x <|> y = maybe y Just x
 foldr c n l = flst l n (\h t -> c h(foldr c n t))
 length = foldr (\_ n -> n + 1) 0
-mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
+mapM f = foldr (liftA2 (:) . f) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
-instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
+instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x (ioPure . g)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
 putStr = mapM_ putChar
@@ -165,10 +165,10 @@ interact f = getContents >>= putStr . f
 error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
-foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
+foldl f a bs = foldr (\b g x -> g (f x b)) id bs a
 foldl1 f (h:t) = foldl f h t
-elem k xs = foldr (\x t -> x == k || t) False xs
-find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
+elem k = foldr (\x t -> x == k || t) False
+find f = foldr (\x t -> if f x then Just x else t) Nothing
 (++) = flip (foldr (:))
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
@@ -178,14 +178,14 @@ instance Monad [] where return = (:[]); (>>=) = flip concatMap
 concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
-intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
-last xs = flst xs undefined last' where last' x xt = flst xt x \y yt -> last' y yt
+union xs = foldr (\y acc -> (if y `elem` acc then id else (y:)) acc) xs
+intersect xs ys = filter (\x -> maybe False (const True) $ find (x ==) ys) xs
+last xs = flst xs undefined last' where last' x xt = flst xt x last'
 init (x:xt) = flst xt [] \_ _ -> x : init xt
 intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
 intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
-all f = foldr (&&) True . map f
-any f = foldr (||) False . map f
+all f = foldr ((&&) . f) True
+any f = foldr ((||) . f) False
 zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))
@@ -302,7 +302,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
-arr a b = TAp (TAp (TC "->") a) b
+arr a = TAp (TAp (TC "->") a)
 data Extra = Basic Int | Const Int | ChrCon Char | StrCon String
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
@@ -361,7 +361,7 @@ patVars = \case
   PatCon _ args -> concat $ patVars <$> args
 
 fv bound = \case
-  V s | not (elem s bound) -> [s]
+  V s | not (s `elem` bound) -> [s]
   A x y -> fv bound x `union` fv bound y
   L s t -> fv (s:bound) t
   _ -> []
@@ -370,7 +370,7 @@ fvPro bound expr = case expr of
   V s | not (elem s bound) -> [s]
   A x y -> fvPro bound x `union` fvPro bound y
   L s t -> fvPro (s:bound) t
-  Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
+  Pa vsts -> foldr (union . (\ (vs, t) -> fvPro (concatMap patVars vs ++ bound) t)) [] vsts
   Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
   _ -> []
 
@@ -391,7 +391,7 @@ overFreePro s f t = case t of
 beta s t x = overFree s (const t) x
 
 showParen b f = if b then ('(':) . f . (')':) else f
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
+showInt' n = if 0 == n then id else showInt' (n `div` 10) . ((chr $ 48 + n `mod` 10) :)
 showInt n = if 0 == n then ('0':) else showInt' n
 par = showParen True
 showType t = case t of
@@ -560,7 +560,7 @@ ro = E . Basic . comEnum
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
+  ( noQual $ arr t $ foldr (arr . (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts)) (TV "case") cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
@@ -594,22 +594,21 @@ addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
       [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
-          (\f g -> A (A (V ".") f) g)
+          (A . A (V "."))
           [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
           , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
           , A (A (V "showsPrec") (E $ Const 11)) (V "2")
           ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec") $ foldr
-          (\f g -> A (A (V ".") f) g)
-          (L "s" $ A (A (V "++") (E $ StrCon con)) (V "s"))
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
+        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec") $  foldr ((\ f g -> A (A (V ".") f) g)
+               . (\ a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)))
+                 (L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")) as
+
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
     in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
-         $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
+      [ (PatCon con (mkPatVar "r" <$> as), foldr ((\ x y -> (A (A (V "&&") x) y)) . (\ n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n))) (V "True") as)
       , (PatVar "_" Nothing, V "False")])
 
 emptyTycl = Tycl [] []
@@ -682,9 +681,8 @@ nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
 addLets ls x = foldr triangle x components where
   vs = fst <$> ls
-  ios = foldr (\(s, dsts) (ins, outs) ->
-    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
-    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
+  ios = foldr ((\ (s, dsts) (ins, outs) -> (foldr (\ dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+       . (\ (s, t) -> (s, intersect (fvPro [] t) vs))) (Tip, Tip) ls
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
   triangle names expr = let
     tnames = nonemptyTails names
@@ -711,7 +709,7 @@ opFold precTab f x xs = case xs of
         [] -> pure $ f op x y
         y:yt -> parseErr "NAssoc repeat"
       LAssoc -> pure $ foldl (\a (op, y) -> f op a y) x xs
-      RAssoc -> pure $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
+      RAssoc -> pure $ foldr (\(op, y) b e -> f op e (b y)) id xs $ x
     Just y -> parseErr "Assoc clash"
 
 qconop = want f <|> between (res "`") (res "`") (want g) where
@@ -1063,7 +1061,7 @@ optiApp t = case t of
 -- Pattern compiler.
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
-    if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
+    if s == s' then x else foldr (L . const "_") (V "pjoin#") ts) cs
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") lit') b)) x) y where
   lit' = case lit of
@@ -1277,7 +1275,7 @@ insertList xs m = foldr (uncurry insert) m xs
 
 prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
-  in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
+  in (s, (Qual (map fst ps) t, foldr (L . snd) (overFree s applyDicts x) ps))
 
 ambiguous (Qual ps t) = filter (not . resolvable) ps where
   resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
@@ -1442,7 +1440,7 @@ disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
 dumpCombs s = case untangle s of
   Left err -> err
-  Right ((_, lambs), _) -> foldr ($) [] $ map disasm $ optiComb lambs
+  Right ((_, lambs), _) -> foldr (($) . disasm) [] (optiComb lambs)
 
 dumpLambs s = case untangle s of
   Left err -> err
