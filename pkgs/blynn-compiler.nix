@@ -18,5 +18,6 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/bin $out/share
     cp bin/raw $out/share
     cp bin/vm $out/bin
+    cp bin/precisely $out/bin
   '';
 }
