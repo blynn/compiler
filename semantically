@@ -30,9 +30,10 @@ some p = liftaa @: p (many p);
 char c = sat (\x -> x(c(@=)));
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
-com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
-(@=)))))) (char #
-)));
+between x y p = liftki x (liftk p y);
+com = liftki (char #-) (between (char #-) (char #
+) (many (sat (\c -> @C (c(#
+(@=)))))));
 sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
 (@=))))) com);
 spc f = liftk f sp;
