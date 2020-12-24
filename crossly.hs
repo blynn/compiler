@@ -1300,7 +1300,7 @@ defaultMagic tycl q@(Qual ps t) lamb = let
       let q' = Qual ps t
       case ambiguous q' of
         [] -> Right (q', lamb)
-        ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
+        ambis -> Left $ ("ambiguous: "++) . foldr ((.) . showPred) id ambis $ ""
 
 reconcile tycl q@(Qual ps t) lamb = \case
   Nothing -> defaultMagic tycl q lamb
@@ -1318,7 +1318,7 @@ reconcile tycl q@(Qual ps t) lamb = \case
         dicts <- mapM findAnno ps
         case ambiguous qAnno of
           [] -> pure (qAnno, foldr L (foldl A lamb dicts) vars)
-          ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
+          ambis -> Left $ ("ambiguous: "++) . foldr ((.) . showPred) id ambis $ ""
 
 inferDefs' tycl decls defmap (typeTab, lambF) syms = let
   add (tt, f) (s, (q, lamb)) = do
@@ -1377,7 +1377,7 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
               Just subx -> do
                 ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
                 if length ps2 /= length ps3
-                  then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                  then Left $ ("want context: " ++) . foldr (.) id (showPred . fst <$> ps3) $ name
                   else pure tr
         ms <- mapM perMethod sigs
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
@@ -1447,12 +1447,11 @@ dumpLambs s = case untangle s of
   Right ((_, lambs), _) -> foldr ($) [] $
     (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambs
 
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
+showQual (Qual ps t) = foldr ((.) . showPred) id ps . showType t
 
 dumpTypes s = case untangle s of
   Left err -> err
-  Right ((typed, _), _) -> ($ "") $ foldr (.) id $
-    map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+  Right ((typed, _), _) -> ($ "") $ foldr ((.) . (\ (s, q) -> (s ++) . (" :: " ++) . showQual q . ('\n' :))) id (toAscList typed)
 
 -- Hash consing.
 instance (Eq a, Eq b) => Eq (Either a b) where
@@ -1545,7 +1544,7 @@ ffiDefine n ffis = case ffis of
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;init_prog();rts_reduce(" ++ showInt n ");return 0;}\n"
 
 progLine p r = "  prog[" ++ showInt (fst p) "] = " ++ showInt (snd p) (";\n"++r);
-progBody mem = foldr (.) id (map progLine (zipWith (,) [0..] mem ));
+progBody mem = foldr ((.) . progLine) id (zipWith (,) [0 .. ] mem)
 
 data Target = Host | Wasm
 
@@ -1561,8 +1560,13 @@ void* malloc(unsigned long n) {
 enumTop Host = ("// CONSTANT TOP 16777216\n#define TOP 16777216\n"++)
 enumTop Wasm = ("enum{TOP=1<<22};"++)
 enumComs = ("// CONSTANT _UNDEFINED 0\n#define _UNDEFINED 0\n"++)
-  . foldr (.) id (map (\(s, _) -> ("// CONSTANT _"++) . (s++) . (" "++) . (showInt (comEnum s))
-    . ("\n#define _"++) . (s++) . (" "++) . (showInt (comEnum s)) . ('\n':)) comdefs)
+  . foldr ((.) . (\ (s, _) -> ("// CONSTANT _" ++)
+                 . (s ++)
+                 . (" " ++)
+                 . (showInt (comEnum s))
+                 . ("\n#define _" ++)
+                 . (s ++) . (" " ++) . (showInt (comEnum s)) . ('\n' :)))
+    id comdefs
 
 compile tgt s = either id id do
   ((typed, lambs), (ffis, exs)) <- untangle s
@@ -1881,7 +1885,7 @@ void rts_reduce(unsigned n) {
 |]++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  V s -> ("arg("++) . maybe undefined showInt (lookup s m) . (')' :)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
@@ -1927,9 +1931,9 @@ demoFFIs =
   ]
 
 main = getArgs >>= \case
-  "coms":_ -> putStr $ ("comlist = [\""++)
-    . foldr (.) id (intersperse ("\",\""++) $ (++) . fst <$> comdefs)
-    $ "\"]\n"
+  "coms":_ -> putStr $ "comlist = [\"" ++
+    (foldr
+       ($) "\"]\n" (intersperse ("\",\"" ++) $ (++) . fst <$> comdefs))
   "blah":_ -> putStr $ enumComs . declDemo . preamble . foreignFun demoFFIs . runFun . rtsInitDemo . rtsReduce $ [r|
 void fun(void) asm("fun") __attribute__((visibility("default")));
 void fun(void) { rts_reduce(*((u*)512)); }
@@ -1950,8 +1954,8 @@ interactCPP f = do
     Left e -> putStr $ "CPP error: " ++ e
     Right (r, _) -> cpp r >>= putStr . f
 data CPP = CPPPass (String -> String) | CPPInclude String
-cppLexer = many $ include <|> (CPPPass . foldr (.) ('\n':) . map (:) <$> many (sat (/= '\n')) <* char '\n')
-include = (foldr (*>) (pure ()) $ map char "#include") *> many (sat isSpace) *>
+cppLexer = many $ include <|> (CPPPass . foldr ((.) . (:)) ('\n' :) <$> many (sat (/= '\n')) <* char '\n')
+include = foldr ((*>) . char) (pure ()) "#include" *> many (sat isSpace) *>
   (CPPInclude <$> tokStr) <* char '\n'
 cpp cpps = foldr ($) "" <$> mapM go cpps where
   go (CPPPass f) = pure f
