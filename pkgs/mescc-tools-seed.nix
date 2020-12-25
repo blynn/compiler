@@ -2,17 +2,20 @@
 
 stdenv.mkDerivation {
   pname = "mescc-tools-seed";
-  version = "unstable-2020-12-16";
+  version = "unstable-2020-12-20";
 
   nativeBuildInputs = [ git ];
   src = fetchFromGitHub {
     owner = "oriansj";
     repo = "mescc-tools-seed";
-    rev = "36402ef134e0ae04b7d752b6f4dd262d2de583d1";
-    sha256 = "0lcg4dq2zhpzm8m90cbsaqhh63q6prm1hvsxap4r6q6kxmxj66nf";
+    rev = "b80accf40023bbf5f6f1d08da59256467bc6f1a0";
+    sha256 = "04nra450njaq40rs196m11nmmf64sf1zjw5ic059hqz49fvmqxz0";
     fetchSubmodules = true;
   };
   makeFlags = [ "PREFIX=${placeholder "out"}" ];
+
+  dontStrip = true;
+
   installPhase = ''
     mkdir -p $out/bin
     cp ./bin/* $out/bin
