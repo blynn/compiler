@@ -12,14 +12,18 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
     - name: Build
       run: nix-build -A blynn-compiler
-      timeout-minutes: 20
-    - name: Test
+      timeout-minutes: 15
+    - name: Check hash of raw
       run: echo "f803e4ca8cf281ec971f76a4920767242aa8427850ffbef85f69c4d01f5f3cdd result/share/raw" | sha256sum -c
-    - run: cp result/bin/vm vm && cp result/share/raw raw
-    - name: Upload vm and raw
+    - run: cp result/bin/vm vm && cp result/share/raw raw && cp result/bin/precisely precisely
+    - run: ./precisely < test/hello.hs > hello.c && gcc -O2 -o hello hello.c && ./hello > hello.txt
+    - name: Check hash of hello world test
+      run: echo "4dca0fd5f424a31b03ab807cbae77eb32bf2d089eed1cee154b3afed458de0dc  hello.txt" | sha256sum -c
+    - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
         name: build result
         path: |
           raw
           vm
+          precisely
