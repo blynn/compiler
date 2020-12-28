@@ -131,3 +131,10 @@ relevant resources are shown below.
     translation rather than the usual syntactic translation, thus
     making compositionality and correctness-preservation more
     self-evident.
+
+## Acknowledgments
+This work would not have been possible without the collaboration of
+multiple people across different areas of expertise, we would like to
+especially thank Ben Lynn for writing blynn-compiler and the
+bootstrappable developers for writing the assemblers and compilers,
+and for making blynn-compiler M2-Planet compatible.
