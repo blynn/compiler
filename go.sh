@@ -155,7 +155,7 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 	-o bin/marginally --exec_enable
 
 # Make methodically
-./bin/marginally < methodically.hs > generated/methodically.c
+./bin/marginally methodically.hs generated/methodically.c
 M2-Planet --architecture x86 \
 	-f functions/file.c \
 	-f functions/exit.c \
@@ -188,7 +188,7 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 	-o bin/methodically --exec_enable
 
 # Make crossly
-./bin/methodically < crossly.hs > generated/crossly.c
+./bin/methodically crossly.hs generated/crossly.c
 M2-Planet --architecture x86 \
 	-f functions/file.c \
 	-f functions/exit.c \
@@ -221,7 +221,7 @@ hex2 -f test/common_x86/ELF-i386-debug.hex2 \
 	-o bin/crossly --exec_enable
 
 # Make precisely
-./bin/crossly < precisely.hs > generated/precisely.c
+./bin/crossly precisely.hs generated/precisely.c
 M2-Planet --architecture x86 \
 	-f functions/file.c \
 	-f functions/exit.c \

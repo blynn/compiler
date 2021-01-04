@@ -40,11 +40,13 @@ char getargchar(int n, int k) { char *tmp = env_argv[n]; return tmp[k]; }
 char *buf;
 char *bufp;
 FILE *fp;
+FILE* input_file;
+FILE* destination_file;
 void reset_buffer() { bufp = buf; }
 void put_buffer(int n) { bufp[0] = n; bufp = bufp + 1; }
 void stdin_load_buffer() { fp = fopen(buf, "r"); }
-int getchar_fp(void) { int n = fgetc(fp); if (n < 0) fclose(fp); return n; }
-void putchar_cast(char c) { fputc(c,stdout); }
+int getchar_fp(void) { int n = fgetc(input_file); if (n < 0) fclose(fp); return n; }
+void putchar_cast(char c) { fputc(c,destination_file); }
 |]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
@@ -1349,7 +1351,7 @@ ffiDefine n ffis = case ffis of
       then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); }\n") ++) . ffiDefine (n - 1) xt
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); }\n") ++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;init_prog();rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;open_files();init_prog();rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
 
 progLine p r = "  prog[" ++ showInt (fst p) "] = " ++ showInt (snd p) (";\n"++r);
 progBody mem = foldr (.) id (map progLine (zipWith (,) (upFrom 0) mem ));
@@ -1425,6 +1427,7 @@ comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
 
 preamble = [r|
 #include <stdio.h>
+#include <stdlib.h>
 // CONSTANT FALSE 0
 #define FALSE 0
 // CONSTANT TRUE 1
@@ -1440,6 +1443,8 @@ preamble = [r|
 
 //CONSTANT CELL_SIZE sizeof(unsigned)
 #define CELL_SIZE 1
+
+void file_print(char* s, FILE* f);
 
 unsigned* mem;
 unsigned* altmem;
@@ -1590,9 +1595,6 @@ unsigned lazy3(unsigned height, unsigned x1, unsigned x2, unsigned x3)
 	return 0;
 }
 
-int putchar(int c) { return fputc(c, stdout); }
-int getchar() { return fgetc(stdin); }
-
 /*
 typedef unsigned long long uu;
 void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
@@ -1621,6 +1623,35 @@ runFun = ([r|void run() {
 |]++)
   . foldr (.) id (genComb <$> comdefs)
   . ([r|
+  }
+}
+
+void open_files() {
+  if (env_argc == 3 )
+  {
+    input_file = fopen(env_argv[1], "r");
+    if(NULL == input_file)
+    {
+      file_print("The file: ", stderr);
+      file_print(env_argv[1], stderr);
+      file_print(" can not be opened!\n", stderr);
+      exit(EXIT_FAILURE);
+    }
+    destination_file = fopen(env_argv[2], "w");
+    if(NULL == destination_file)
+    {
+      file_print("The file: ", stderr);
+      file_print(env_argv[2], stderr);
+      file_print(" can not be opened!\n", stderr);
+      exit(EXIT_FAILURE);
+    }
+  }
+  else
+  {
+    file_print("Usage: ", stderr);
+    file_print(env_argv[0], stderr);
+    file_print(" input.hs output.c\n", stderr);
+    exit(EXIT_FAILURE);
   }
 }
 

@@ -112,29 +112,29 @@ uniquely_raw.txt: uniquely.hs mutually_raw.txt | generated
 virtually_raw.txt: virtually.hs uniquely_raw.txt | generated
 	./bin/vm -f virtually.hs --foreign 2 --raw generated/uniquely_raw.txt --rts_c run -o generated/virtually_raw.txt
 
-marginally: marginally.c | bin
-	$(CC) $(CFLAGS) generated/marginally.c -o bin/marginally
+marginally: marginally.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) generated/marginally.c functions/file_print.c -o bin/marginally
 
-marginally.c:marginally.hs virtually_raw.txt | generated
+marginally.c: marginally.hs virtually_raw.txt | generated
 	./bin/vm -f marginally.hs --foreign 2 --raw generated/virtually_raw.txt --rts_c run -o generated/marginally.c
 
-methodically: methodically.c | bin
-	$(CC) $(CFLAGS) generated/methodically.c -o bin/methodically
+methodically: methodically.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) generated/methodically.c functions/file_print.c -o bin/methodically
 
-methodically.c:methodically.hs marginally | generated
-	./bin/marginally < methodically.hs > generated/methodically.c
+methodically.c: methodically.hs marginally | generated
+	./bin/marginally methodically.hs generated/methodically.c
 
-crossly: crossly.c | bin
-	$(CC) $(CFLAGS) generated/crossly.c -o bin/crossly
+crossly: crossly.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) generated/crossly.c functions/file_print.c -o bin/crossly
 
-crossly.c:crossly.hs methodically | generated
-	./bin/methodically < crossly.hs > generated/crossly.c
+crossly.c: crossly.hs methodically | generated
+	./bin/methodically crossly.hs generated/crossly.c
 
-precisely: precisely.c | bin
-	$(CC) $(CFLAGS) generated/precisely.c -o bin/precisely
+precisely: precisely.c functions/file_print.c | bin
+	$(CC) $(CFLAGS) generated/precisely.c functions/file_print.c -o bin/precisely
 
-precisely.c:precisely.hs crossly | generated
-	./bin/crossly < precisely.hs > generated/precisely.c
+precisely.c: precisely.hs crossly | generated
+	./bin/crossly precisely.hs generated/precisely.c
 
 # Directories
 bin:
