@@ -760,8 +760,8 @@ davisPutnam = herbrand conjCNF (not . dpll) simpCNF where
 
 We can efficiently translate any formula to an equisatisfiable CNF formula with
 a definitional approach. Logical equivalence may not be preserved, but only
-satisfiability matters, and in any case we may lose it anyway when we
-Skolemize.
+satisfiability matters, and in any case Skolemization may not preserve
+equivalence.
 
 We need a variant of NNF that preserves equivalences:
 

@@ -139,13 +139,19 @@ demoOddXs :: Bool
 demoOddXs = runDfa oddXs "xxxxx"
 \end{code}
 
-We could extend the above to spit out characters as it computes. See
-https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
-https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines]. But we've seen
-enough. We quickly find
+How many states should we allow? We could say there is one state for every
+possible configuration of the computer save the input, but then we'd simply be
+pushing a problem elsewhere. How can we reason about a automaton with so
+many states? Thus the number of states should be relatively small.
+
+We quickly find
 https://en.wikipedia.org/wiki/Pumping_lemma_for_regular_languages[DFAs are
 incapable of elementary tasks] such as checking if a bunch of parentheses are
 balanced, or if some number of As has been followed by an equal number of Bs.
+
+By the way, we can extend the above to spit out characters as it computes. See
+https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
+https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines].
 
 == Deterministic Push-Down Automata ==
 
@@ -337,10 +343,20 @@ formal semantics; see Backhouse,
 'https://link.springer.com/content/pdf/10.1007/3-540-46002-0_11.pdf[A
 Functional Semantics of Attribute Grammars]' for a modern take.)
 
-Incredibly, formal semantics exist for a substantial subset of C (provided
-we ignore https://blog.regehr.org/archives/232[parts of the C standard that are
-abject nonsense]), and there is even http://compcert.inria.fr/[a certified C
-compiler], that is, a C compiler that a computer can prove is correct.
+Incredibly, formal semantics exist for a substantial subset of C.
+Attempting to formalize all of C is a fool's errand. For example:
+
+  * Officially, https://blog.regehr.org/archives/232[it is illegal to optimize
+  `x=0; x=0;`] but this rule is flouted in practice.
+  * https://www.cl.cam.ac.uk/research/security/ctsrd/pdfs/201901-popl-cerberus.pdf[Pointer
+  semantics are ill-defined].
+  We sympathize with: "...the ISO standard is a prose document, as is typical
+  for industry standards. The lack of mathematical precision, while also
+  typical for industry standards, has surely contributed to the accumulated
+  confusion..."
+
+There is even http://compcert.inria.fr/[a certified C compiler], that is, a C
+compiler that a computer can prove is correct.
 
 Cryptographers eventually joined the fun in 1982, when Goldwasser and Micali
 defined https://en.wikipedia.org/wiki/Semantic_security[semantic security].

@@ -300,9 +300,9 @@ testSpec = spec (basic "f:(Num->Num) z:Num") (assume $ basic "!x:Num.(x = y)")
 
 == Tactics ==
 
-In practice, to prove a theorem, sometimes we work backwards. For example,
-we may suspect induction is the right approach. then work on the base case
-while leaving the inductive case for later.
+In practice, to prove a theorem, sometimes we work backwards. For example, when
+attempting a proof by induction, we might first work on the base case and leave
+the inductive case for later.
 
 We introduce data structures to help organize such efforts. A `Goal` is a
 theorem we wish to prove from given assumptions. Each assumption of a `Goal`
@@ -317,8 +317,8 @@ recursion following the crumbs we've left behind proves our original goal.
 
 Hence, each node of a `GoalTree` represents a single theorem. Leaf nodes are
 either theorems we have succesfully proved (`Thm`) or theorems we are still
-working on (`Goal`), while each internal node contains a function (`Crumb`)
-that returns a theorem given the proved theorems that its children represent.
+working on (`Goal`). Each internal node contains a function (`Crumb`) that
+produces its theorem from its child theorems.
 
 A `Tactic` is a function taking a `Goal` to `Either String GoalTree`.
 It might prove a goal, turning it from a `Goal` to a `Thm` in a leaf node.

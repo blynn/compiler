@@ -15,6 +15,23 @@ http://www.paulgraham.com/rootsoflisp.html[Paul Graham's 'The Roots of Lisp']
 dubs the LISP self-interpreter "The Surprise" because of its supposed brevity.
 What, then, should one call a one-line lambda calculus self-interpereter?
 
+(Aside: on the other hand, the analogy with Maxwell's equations is apt, because
+if Maxwell had used link:../haskell/ga.html[geometric algebra] instead of
+vector algebra, he could have been less verbose and we would be celebrating
+Maxwell's 'equation', that is, one equation instead of four:
+
+\[
+(\partial_t + \nabla)(\mathbf{e} + \mathbf{B}) = 0
+\]
+
+in a vacuum, and more generally:
+
+\[
+(\partial_t + \nabla)(\mathbf{e} + \mathbf{B}) = \rho + \mathbf{j}
+\]
+
+where bivectors represent the magnetic field $\mathbf{B}$.)
+
 https://tromp.github.io/cl/LC.pdf[John Tromp's reworking of Chaitin's ideas in
 lambda calculus and combinatory logic] is a fascinating read. Much of the fun
 involves tiny self-interpreters that read binary encodings of themselves.

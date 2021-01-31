@@ -74,9 +74,10 @@ node must be a descendant of a `Lam` node with a matching `VarId`.
 
 Normally, we next talk about variable substitution (or 'beta reduction') to
 describe the 'dynamic semantics', that is, how to compute with a lambda term.
-We leave that for the textbooks. For our purposes, a closed lambda term to be
-notation for a 'combinatory logic' term, which is a full binary tree whose
-leaves can be one of 6 different values:
+We leave that for the textbooks (or see link:../lambda[my notes on lambda
+calculus]). For our purposes, a closed lambda term is merely notation for a
+'combinatory logic' term, which is a full binary tree whose leaves can be one
+of 6 different values:
 
 ++++++++++
 <script>
