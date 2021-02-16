@@ -265,6 +265,9 @@ translate to expressions involving booleans.
 
 == Guardedly ==
 
+[Turns out I've oversimplified guards, and my compiler produces bad code
+for certain cases. I need to revisit this problem!]
+
 Our last compiler passed an unfortunate milestone: it's over 1000 lines long.
 
 We use language features we just added to shrink the code. At the same time, we

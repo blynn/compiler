@@ -18,9 +18,9 @@ How about our link:fol.html[MESON prover for first-order logic]? Are there
 really no bugs in our code?
 
 https://en.wikipedia.org/wiki/Logic_for_Computable_Functions[The LCF theorem
-prover] pioneered a solution to this problem: first develop a core module that
-exports a few functions which provide the only ways to create or modify
-theorems. These functions correspond to the laws of logic.
+prover] pioneered a solution to this problem: develop a core module that
+exports a few functions which provide the only ways to create theorems. These
+functions correspond to the laws of logic.
 
 If this core module is correctly implemented, the rest of our program can be
 buggy, yet still produce only correct theorems because ultimately it is forced
@@ -147,7 +147,7 @@ data FO = Top | Bot | Atom String [Term]
 
 A value of type `Theorem` should only exist if it contains a valid formula.
 Only functions corresponding to the rules of inference or axiom schema should
-be able to create or change `Theorem` values.
+be able to create `Theorem` values.
 
 \begin{code}
 data Theorem = Theorem FO
@@ -220,7 +220,7 @@ gen x (Theorem t) = Theorem $ Forall x t
 
 Now for the axioms (cf.
 https://en.wikipedia.org/wiki/Hilbert_system#Logical_axioms[Wikipedia's article
-on Hilbert systems]).  Our propositional fragment is built from implication and
+on Hilbert systems]). Our propositional fragment is built from implication and
 falsehood, so we start with the S and K combinators, and the law of the
 excluded middle (LEM). Then we add a few rules for quantified variables and a
 few for equality.

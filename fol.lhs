@@ -70,7 +70,7 @@ code].
 
 https://github.com/ninegua/reduxer/blob/master/src/Lambda/Term.hs[Paul Hai Liu
 showed me how to avoid code duplication]. The trick is to use recursion schemes
-along with certain helper functions. With GHC's pattern synonynms extension,
+along with certain helper functions. With GHC's pattern synonyms extension,
 our code resembles ordinary recursion.
 
 We demonstrate by building classic theorem provers for first-order logic, by
@@ -174,7 +174,7 @@ package].
 
 Variables start with lowercase letters, while constants, functions, and
 predicates start with uppercase letters. We treat `(<=)` as an infix binary
-predicate.
+predicate for the sake of some of our examples below.
 
 ++++++++++
 <p><a onclick='hideshow("parse");'>&#9654; Toggle parser and pretty-printer</a></p>

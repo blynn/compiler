@@ -301,3 +301,5 @@ http://www.cantab.net/users/antoni.diller/brackets/intro.html[Antoni Diller has 
 
 https://www.joachim-breitner.de/blog/748-Thoughts_on_bootstrapping_GHC[Joachim
 Breitner frets about the difficulty of bootstrapping GHC].
+
+https://cakeml.org/[CakeML] is a formally verified bootstrappable ML compiler.

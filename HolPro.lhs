@@ -506,7 +506,7 @@ a <&&> (b <||> c) = (a <&&> b) <||> (a <&&> c)
 
 It looks like we have a
 https://en.wikipedia.org/wiki/Near-semiring[near-semiring] with
-(mulitplicative) identity that satisfies the distributive law on both sides.
+(multiplicative) identity that satisfies the distributive law on both sides.
 
 Similar definitions of `(<&&>)` have the same properties. For example, we could
 tweak the meaning so `t <&&> u` succeeds if `u` succeeds on any `Goal`.

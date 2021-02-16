@@ -391,7 +391,7 @@ rules:
 
 \[
 \frac
-  {(A\rightarrow B)\rightarrow C,\Gamma\Rightarrow G}
+  {A\rightarrow (B\rightarrow C),\Gamma\Rightarrow G}
   {(A\wedge B)\rightarrow C,\Gamma\Rightarrow G}
 \]
 

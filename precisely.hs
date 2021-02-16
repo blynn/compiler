@@ -23,7 +23,7 @@ fromIntegral = fromInteger . toInteger
 
 -- Integer literals in `fromInt`, `fromInteger` or any of their dependencies
 -- cause infinite loops, because our compilers apply `fromInt` or `fromInteger`
--- to integer literal. We get `0 :: Int` in a roundabout way:
+-- to integer literals. We get `0 :: Int` in a roundabout way:
 zeroInt = ord '\0'
 
 fromInt x
