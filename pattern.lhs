@@ -198,12 +198,8 @@ We rewrite this to:
   Foo 1# -> Pa [(Left 42) -> expr1, (Right a) -> expr3]
   Bar    -> Pa [x "bar" -> expr4]
   Baz    -> Pa [ -> expr2]
-) $ (\cjoin# -> case v of
-  6# -> expr5[6#/z]
-  _  -> cjoin#
-) $ (\cjoin# -> case v of
-  7# -> expr6[7#/z]
-  _  -> cjoin#
+) $ (\pjoin# -> expr5[v/z]
+) $ (\pjoin# -> expr6[v/z]
 ) $ (\cjoin# -> case  v of
   Foo _ -> cjoin#
   Bar   -> [x y -> expr8]
@@ -221,12 +217,8 @@ We then apply the first rewrite algorithm to get:
     Right 3# -> expr3[3#/a]
   Bar 4# 5# -> if 5# == "bar" then expr 4 else cjoin#
   Baz -> expr2
-) $ (\cjoin# -> case v of
-  6# -> expr5[6#/z]
-  _ -> cjoin#
-) $ (\cjoin# -> case v of
-  7# -> expr6[7#/z]
-  _ -> cjoin#
+) $ (\pjoin# -> expr5[v/z]
+) $ (\pjoin# -> expr6[v/z]
 ) $ (\cjoin# -> case v of
   Foo 8# -> cjoin#
   Bar 9# 10# -> expr8[9#/x 10#/y]
@@ -235,10 +227,12 @@ We then apply the first rewrite algorithm to get:
 ) scrutinee
 \end{code}
 
-We use two different names for the join points because when rewriting a case
-expression, we may place a subexpression in a `Pa` value. If we used the same
-name for the join points, then variable capture could ensue when rewriting the
-`Pa` value.
+Our pattern rewriting algorithm sets `pjoin#` to `fail#`, that is, if none of
+the given patterns match, then the program exits. Our case rewriting algorithm
+subverts this by inserting a catch-all case that calls `cjoin#` before calling
+the pattern rewriting algorithm, so that instead of exiting, we examine the
+next batch of case patterns. We can probably refactor so that only one type of
+join point is needed, but for now we press on.
 
 We try to avoid dead code with the `optiApp` helper which beta-reduces
 applications of lambdas where the bound variable appears at most once in the
@@ -264,9 +258,6 @@ We predefine the `Bool` type, as our next compiler will handle guards, which
 translate to expressions involving booleans.
 
 == Guardedly ==
-
-[Turns out I've oversimplified guards, and my compiler produces bad code
-for certain cases. I need to revisit this problem!]
 
 Our last compiler passed an unfortunate milestone: it's over 1000 lines long.
 

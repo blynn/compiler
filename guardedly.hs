@@ -721,7 +721,7 @@ rewritePats dcs vsxs@((vs0, _):_) n = let
 
 classifyAlt v x = case v of
   { PatPred pre -> Left $ A (A (A pre $ V "of") x)
-  ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ A (L s x) $ V "of"
+  ; PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
   ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, [(V "True", x)]):))
   };
 

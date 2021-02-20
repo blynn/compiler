@@ -235,9 +235,13 @@ combinators, which we hardly explain.
 This is a pity, because my textbooks omitted several fascinating facts, partly
 due to their vintage:
 
-  * Many recommend Thompson's construction algorithm for regular expression
-  engines. In fact, link:../haskell/re.html[regular expression derivatives]
-  are superior. See also http://stedolan.net/research/semirings.pdf['Fun with Semirings'] for lesser-known connections between regular languages and other parts of computer science.
+  * Many recommend Thompson's construction algorithm for building DFAs from
+  regular expressions. In fact, link:../haskell/re.html[regular expression
+  derivatives] are superior. (In practice, NFAs may be better to
+  because conversion to DFAs may blow up exponentially.)
+  See also http://stedolan.net/research/semirings.pdf['Fun with Semirings'] for
+  lesser-known connections between regular languages and other parts of
+  computer science.
 
   * link:../haskell/parse.html[Parsing combinators] take the tedium out of recursive descent parsers, at least in languages like Haskell.
 

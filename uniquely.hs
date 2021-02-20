@@ -367,13 +367,11 @@ pat = patP 0;
 
 maybeWhere p = (&) <$> p <*> (tok "where" *> (addLets . coalesce <$> braceSep def) <|> pure id);
 
-guards s v = maybeWhere $ tok s *> expr <|> foldr ($) v <$> some ((\x y -> case x of
+guards s = maybeWhere $ tok s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   { V "True" -> \_ -> y
   ; _ -> A (A (A (V "if") x) y)
   }) <$> (spch '|' *> expr) <*> (tok s *> expr));
-eqGuards = guards "=" $ V "pjoin#";
-caseGuards = guards "->" $ V "cjoin#";
-alt = (,) <$> pat <*> caseGuards;
+alt = (,) <$> pat <*> guards "->";
 braceSep f = between (spch '{') (spch '}') (sepBy f (spch ';'));
 alts = braceSep alt;
 cas = Ca <$> between (tok "case") (tok "of") expr <*> alts;
@@ -445,8 +443,8 @@ leftyPat p expr = case patVars p of
     (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
   };
 
-def = liftA2 (\l r -> [(l, r)]) var (onePat <$> many apat <*> eqGuards)
-  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> eqGuards <|> leftyPat x <$> eqGuards);
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
 
 nonemptyTails [] = [];
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
@@ -914,7 +912,7 @@ rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
 
 classifyAlt v x = case v of
   { PatLit lit -> Left $ patEq lit (V "of") x
-  ; PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ A (L s x) $ V "of"
+  ; PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
   ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
   };
 

@@ -651,7 +651,7 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> caseGuards
+alts = braceSep $ (,) <$> pat <*> guards "->"
 cas = Ca <$> between (res "case") (res "of") expr <*> alts
 lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts)
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
@@ -727,20 +727,19 @@ pat = patP 0
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
 
-guards s v = maybeWhere $ res s *> expr <|> foldr ($) v <$> some ((\x y -> case x of
+guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
   _ -> A (A (A (V "if") x) y)
   ) <$> (res "|" *> expr) <*> (res s *> expr))
-eqGuards = guards "=" $ V "pjoin#"
-caseGuards = guards "->" $ V "cjoin#"
+
 onePat vs x = Pa [(vs, x)]
 opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case patVars p of
   [] -> []
   (h:t) -> let gen = '@':h in
     (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
-def = liftA2 (\l r -> [(l, r)]) var (onePat <$> many apat <*> eqGuards)
-  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> eqGuards <|> leftyPat x <$> eqGuards)
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -965,7 +964,7 @@ rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
 
 classifyAlt v x = case v of
   PatLit lit -> Left $ patEq lit (V "of") x
-  PatVar s m -> maybe (Left . A . L "cjoin#") classifyAlt m $ A (L s x) $ V "of"
+  PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
   PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
