@@ -30,14 +30,24 @@ compilers, because we must process functions and instance methods in the order
 they appear. This is particularly annoying when the two are interleaved.
 
 Supporting arbitrary orderings of definitions requires changing multiple stages
-of our compiler. Before type inference, we must first construct a dependency
-graph (that is, we determine the symbols required by each symbol) then find its
-strongly connected components.
+of our compiler.
 
-Each member of a component mutually depends on each other member, and we infer
-their types together. Our `inferno` function continually piles on more type
-constraints for each member of a component, and only resolves them after all
-have been processed.
+We break type inference into 3 steps:
+
+  1. As we parse, we generate the type and abstract syntax tree of each data
+  constructor and each typeclass method, adding them to pre-defined primitives.
+
+  2. We infer the types of top-level definitions. For this stage, we construct
+  a dependency graph (that is, we determine the symbols required by each
+  symbol) then find its strongly connected components. Each member of a
+  component mutually depends on each other member, and we infer their types
+  together. Our `inferno` function continually piles on more type constraints
+  for each member of a component, and only resolves them after all have been
+  processed.
+
+  3. We infer the type of instance method definitions, and check they are
+  correct. A later compiler supports default class method definitions, which
+  are also handled in this phase.
 
 During code generation, we no longer necessarily know the address of a
 dependent symbol. Instead, we must leave space for an address and fill it in

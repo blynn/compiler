@@ -233,6 +233,10 @@ instance Enum Char where
 
 -- Map.
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
+instance Functor (Map k) where
+  fmap f m = case m of
+    Tip -> Tip
+    Bin sz k x l r -> Bin sz k (f x) (fmap f l) (fmap f r)
 size m = case m of Tip -> 0 ; Bin sz _ _ _ _ -> sz
 node k x l r = Bin (1 + size l + size r) k x l r
 singleton k x = Bin 1 k x Tip Tip
@@ -283,6 +287,7 @@ foldrWithKey f = go where
     Bin _ kx x l r -> go (f kx x (go z r)) l
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
+keys = map fst . toAscList
 
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
@@ -331,7 +336,7 @@ data Neat = Neat
   ([(String, Ast)], [(String, Qual)])
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  [(String, (Qual, Ast))]
+  (Map String (Qual, Ast))
   -- | Data constructor table.
   (Map String [Constr])  -- AdtTab
   -- | FFI declarations.
@@ -565,7 +570,7 @@ mkFFIHelper n t acc = case t of
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
-  ast = Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs
+  ast = Neat tycl fs (insertList (mkAdtDefs t cs) typed) (updateDcs cs dcs) ffis exs
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
     [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
     )]
@@ -601,10 +606,10 @@ addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs) = let
   vars = (`showInt` "") <$> [1..size sigs]
   selectors = zipWith (\var (s, Qual ps t) -> (s, (Qual (Pred classId v:ps) t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
-  methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
+  methods = map (\s -> (s, mlookup s defs)) $ keys sigs
   Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl methods is) tycl
-  in Neat tycl' fs (selectors ++ typed) dcs ffis exs
+  in Neat tycl' fs (insertList selectors typed) dcs ffis exs
 
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
@@ -613,7 +618,7 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   in Neat tycl' fs typed dcs ffis exs
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs
+  Neat tycl fs (insert ourname (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis)) typed) dcs ((foreignname, t):ffis) exs
 addTopDecl decl (Neat tycl (fs, decls) typed dcs ffis exs) =
   Neat tycl (fs, decl:decls) typed dcs ffis exs
 addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (first (ds++) fs) typed dcs ffis exs
@@ -897,7 +902,7 @@ prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
   wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
-  in map (second (first noQual)) $
+  in fromList $ map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
     , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
@@ -1229,7 +1234,7 @@ prove' tycl psn a = case a of
   _ -> Right (psn, a)
 
 depGraph typed (s, t) (vs, es) = (insert s t vs, foldr go es $ fv [] t) where
-  go k ios@(ins, outs) = case lookup k typed of
+  go k ios@(ins, outs) = case mlookup k typed of
     Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
     Just _ -> ios
 
@@ -1313,12 +1318,12 @@ inferDefs' tycl decls defmap (typeTab, lambF) syms = let
   in inferno (prove tycl) (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
 
 inferDefs tycl decls defs typed = let
-  typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
-  lambs = second snd <$> typed
+  typeTab = fst <$> typed
+  lambs = second snd <$> toAscList typed
   (defmap, graph) = foldr (depGraph typed) (Tip, (Tip, Tip)) defs
   ins k = maybe [] id $ mlookup k $ fst graph
   outs k = maybe [] id $ mlookup k $ snd graph
-  in foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
+  in foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
@@ -1373,9 +1378,9 @@ untangle s = case program s of
   Right (prog, ParseState s _) -> case s of
     Ell [] [] -> case foldr ($) (customMods $ Neat Tip ([], []) prims Tip [] []) $ primAdts ++ prog of
       Neat tycl (defs, decls) typed dcs ffis exs -> do
-        (qas, lambF) <- inferDefs tycl decls (second (patternCompile dcs) <$> coalesce defs) typed
-        mets <- inferTypeclasses tycl qas dcs
-        pure ((qas, lambF mets), (ffis, exs))
+        (qs, lambF) <- inferDefs tycl decls (second (patternCompile dcs) <$> coalesce defs) typed
+        mets <- inferTypeclasses tycl qs dcs
+        pure ((qs, lambF mets), (ffis, exs))
     _ -> Left $ "parse error: " ++ case ell s of
       Left e -> e
       Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
