@@ -1,5 +1,4 @@
--- Can target wasm.
--- Top-level type annotations.
+-- Modules.
 
 ffi "putchar_cast" putChar :: Char -> IO ()
 ffi "getargcount" getArgCount :: IO Int
@@ -115,6 +114,7 @@ snd (x, y) = y
 uncurry f (x, y) = f x y
 first f (x, y) = (f x, y)
 second f (x, y) = (x, f y)
+f *** g = \(x, y) -> (f x, g y)
 not a = if a then False else True
 x /= y = not $ x == y
 (.) f g x = f (g x)
@@ -279,7 +279,7 @@ mlookup kx t = case t of
     EQ -> Just y
 fromList = foldl (\t (k, x) -> insert k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
-t ! k = maybe undefined id $ mlookup k t
+t ! k = maybe (error "!") id $ mlookup k t
 
 foldrWithKey f = go where
   go z t = case t of
@@ -292,7 +292,7 @@ keys = map fst . toAscList
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic Int | Const Int | ChrCon Char | StrCon String
+data Extra = Basic Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
@@ -331,29 +331,26 @@ data Tycl = Tycl
   [Instance]
 
 data Neat = Neat
-  (Map String Tycl)
+  { typeclasses :: Map String Tycl
   -- | Top-level definitions. Top-level type annotations.
-  ([(String, Ast)], [(String, Qual)])
+  , tops :: ([(String, Ast)], [(String, Qual)])
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  (Map String (Qual, Ast))
+  , typedAsts :: Map String (Qual, Ast)
   -- | Data constructor table.
-  (Map String [Constr])  -- AdtTab
-  -- | FFI declarations.
-  [(String, Type)]
-  -- | Exports.
-  [(String, String)]
+  , dataCons :: Map String [Constr]
+  -- | Foreign imports.
+  , ffiImps :: [(String, Type)]
+  -- | Foreign exports.
+  , ffiExps :: [(String, String)]
+  -- | Module imports.
+  , modImps :: [String]
+  }
 
 patVars = \case
   PatLit _ -> []
   PatVar s m -> s : maybe [] patVars m
   PatCon _ args -> concat $ patVars <$> args
-
-fv bound = \case
-  V s | not (elem s bound) -> [s]
-  A x y -> fv bound x `union` fv bound y
-  L s t -> fv (s:bound) t
-  _ -> []
 
 fvPro bound expr = case expr of
   V s | not (elem s bound) -> [s]
@@ -479,6 +476,7 @@ beginLayout xs = case xs of
   ((r', _), Reserved "{"):_ -> margin r' xs
   ((r', c'), _):_ -> Curly c' : margin r' xs
 
+landin ls@((_, Reserved "module"):_) = embrace ls
 landin ls@(((r, _), Reserved "{"):_) = margin r ls
 landin ls@(((r, c), _):_) = Curly c : margin r ls
 landin [] = []
@@ -569,8 +567,8 @@ mkFFIHelper n t acc = case t of
   TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
-addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
-  ast = Neat tycl fs (insertList (mkAdtDefs t cs) typed) (updateDcs cs dcs) ffis exs
+addAdt t cs ders (Neat tycl fs typed dcs ffis exs ims) = foldr derive ast ders where
+  ast = Neat tycl fs (insertList (mkAdtDefs t cs) typed) (updateDcs cs dcs) ffis exs ims
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
     [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
     )]
@@ -602,27 +600,28 @@ addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
       , (PatVar "_" Nothing, V "False")])
 
 emptyTycl = Tycl [] []
-addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs) = let
+addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs ims) = let
   vars = (`showInt` "") <$> [1..size sigs]
   selectors = zipWith (\var (s, Qual ps t) -> (s, (Qual (Pred classId v:ps) t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   methods = map (\s -> (s, mlookup s defs)) $ keys sigs
   Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl methods is) tycl
-  in Neat tycl' fs (insertList selectors typed) dcs ffis exs
+  in Neat tycl' fs (insertList selectors typed) dcs ffis exs ims
 
-addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
+addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs ims) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
   name = '{':classId ++ (' ':showType ty "") ++ "}"
-  in Neat tycl' fs typed dcs ffis exs
+  in Neat tycl' fs typed dcs ffis exs ims
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) =
-  Neat tycl fs (insert ourname (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis)) typed) dcs ((foreignname, t):ffis) exs
-addTopDecl decl (Neat tycl (fs, decls) typed dcs ffis exs) =
-  Neat tycl (fs, decl:decls) typed dcs ffis exs
-addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (first (ds++) fs) typed dcs ffis exs
-addExport e f (Neat tycl fs typed dcs ffis exs) = Neat tycl fs typed dcs ffis ((e, f):exs)
+addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs ims) =
+  Neat tycl fs (insert ourname (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis)) typed) dcs ((foreignname, t):ffis) exs ims
+addTopDecl decl (Neat tycl (fs, decls) typed dcs ffis exs ims) =
+  Neat tycl (fs, decl:decls) typed dcs ffis exs ims
+addDefs ds (Neat tycl fs typed dcs ffis exs ims) = Neat tycl (first (ds++) fs) typed dcs ffis exs ims
+addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
+addExport e f (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis ((e, f):exs) ims
 
 want f = Parser \(ParseState inp precs) -> case ell inp of
   Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
@@ -875,6 +874,8 @@ dclass = wantConId
 _deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
 adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
 
+impDecl = addImport <$> (res "import" *> wantConId)
+
 topdecls = braceSep
   (   adt
   <|> classDecl
@@ -884,12 +885,15 @@ topdecls = braceSep
   <|> res "export" *> (addExport <$> wantString <*> var)
   <|> addDefs <$> def
   <|> fixity *> pure id
+  <|> impDecl
   )
+
+haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
 
 offside xs = Ell (landin xs) []
 program s = case lex posLexemes $ LexState s (1, 1) of
   Left e -> Left e
-  Right (xs, LexState [] _) -> parse topdecls $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
+  Right (xs, LexState [] _) -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
   Right (_, st) -> Left "unlexable"
 
 -- Primitives.
@@ -1066,7 +1070,7 @@ unpat dcs as t = case as of
     go p x = case p of
       PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
       PatVar s m -> maybe (unpat dcs at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
-      PatCon con args -> case mlookup con dcs of
+      PatCon con args -> case dcs con of
         Nothing -> error "bad data constructor"
         Just cons -> unpat dcs args x >>= \y -> unpat dcs at $ singleOut con cons (V freshv) y
     in go a t
@@ -1077,7 +1081,7 @@ unpatTop dcs als x = case als of
     go p t = case p of
       PatLit lit -> unpatTop dcs alt $ patEq lit (V l) t $ V "pjoin#"
       PatVar s m -> maybe (unpatTop dcs alt) go m $ beta s (V l) t
-      PatCon con args -> case mlookup con dcs of
+      PatCon con args -> case dcs con of
         Nothing -> error "bad data constructor"
         Just cons -> unpat dcs args t >>= \y -> unpatTop dcs alt $ singleOut con cons (V l) y
     in go a x
@@ -1098,7 +1102,7 @@ classifyAlt v x = case v of
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
   firstC = flst (toAscList tab) undefined (\h _ -> fst h)
-  cs = maybe (error $ "bad constructor: " ++ firstC) id $ mlookup firstC dcs
+  cs = maybe (error $ "bad constructor: " ++ firstC) id $ dcs firstC
   in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of
       Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
@@ -1205,7 +1209,8 @@ infer typed loc ast csn@(cs, n) = let
     E x -> Right $ case x of
       Const _ -> ((TC "Int",  ast), csn)
       ChrCon _ -> ((TC "Char",  ast), csn)
-      StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
+      StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
+      Link im s q -> insta q
     V s -> maybe (Left $ "undefined: " ++ s) Right
       $ (\t -> ((t, ast), csn)) <$> lookup s loc
       <|> insta <$> mlookup s typed
@@ -1217,15 +1222,15 @@ infer typed loc ast csn@(cs, n) = let
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
   [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
-  Instance h name ps _:rest -> case match h ty of
+  (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance tycl qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
-      <$> findProof tycl (Pred cl1 $ apply subs ty1) qn1) (qn, V name) ps
+      <$> findProof tycl (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name undefined) ps
 
 findProof tycl pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
-  Nothing -> case mlookup classId tycl of
-    Nothing -> Left $ "no instance: " ++ showPred pred ""
-    Just (Tycl _ insts) -> findInstance tycl psn pred insts
+  Nothing -> case tycl classId of
+    [] -> Left $ "no instance: " ++ showPred pred ""
+    insts -> findInstance tycl psn pred insts
   Just s -> Right (psn, V s)
 
 prove' tycl psn a = case a of
@@ -1235,10 +1240,35 @@ prove' tycl psn a = case a of
   L s t -> second (L s) <$> prove' tycl psn t
   _ -> Right (psn, a)
 
-depGraph typed (s, t) (vs, es) = (insert s t vs, foldr go es $ fv [] t) where
-  go k ios@(ins, outs) = case mlookup k typed of
-    Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
-    Just _ -> ios
+data Dep a = Dep ([String] -> Either String ([String], a))
+instance Functor Dep where
+  fmap f = \(Dep mf) -> Dep \g -> do
+    (g', x) <- mf g
+    pure (g', f x)
+instance Applicative Dep where
+  pure x = Dep \g -> Right (g, x)
+  (Dep mf) <*> (Dep mx) = Dep \g -> do
+    (g', f) <- mf g
+    (g'', x) <- mx g'
+    pure (g'', f x)
+addDep s = Dep \deps -> Right (if s `elem` deps then deps else s : deps, ())
+badDep s = Dep $ const $ Left s
+runDep (Dep f) = f []
+
+astLink typed locals imps mods ast = runDep $ go [] ast where
+  go bound ast = case ast of
+    V s
+      | elem s bound -> pure ast
+      | member s locals -> case findImportSym imps mods s of
+        [] -> (if member s typed then pure () else addDep s) *> pure ast
+        _ -> badDep $ "ambiguous: " ++ s
+      | True -> case findImportSym imps mods s of
+        [] -> badDep $ "missing: " ++ s
+        [(im, t)] -> pure $ E $ Link im s t
+        _ -> badDep $ "ambiguous: " ++ s
+    A x y -> A <$> go bound x <*> go bound y
+    L s t -> L s <$> go (s:bound) t
+    _ -> pure ast
 
 depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
   if vertex `elem` visited then st else second (vertex:)
@@ -1255,7 +1285,7 @@ scc ins outs = spanning . depthFirst where
 inferno tycl typed defmap syms = let
   loc = zip syms (TV . (' ':) <$> syms)
   in foldM (\(acc, (subs, n)) s -> do
-    expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
+    let expr = defmap ! s
     ((t, a), (ms, n1)) <- either (Left . (s++) . (": "++)) Right
       $ infer typed loc expr (subs, n)
     cs <- unify (TV (' ':s)) t ms
@@ -1271,8 +1301,6 @@ prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
 
 ambiguous (Qual ps t) = filter (not . resolvable) ps where
   resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
-
-f *** g = \(x, y) -> (f x, g y)
 
 defaultMagic tycl q@(Qual ps t) lamb = let
   ambis = ambiguous q
@@ -1319,22 +1347,34 @@ inferDefs' tycl decls defmap (typeTab, lambF) syms = let
     pure (insert s q tt, f . ((s, lamb):))
   in inferno tycl (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
 
-inferDefs tycl decls defs typed = let
-  typeTab = fst <$> typed
-  lambs = second snd <$> toAscList typed
-  (defmap, graph) = foldr (depGraph typed) (Tip, (Tip, Tip)) defs
-  ins k = maybe [] id $ mlookup k $ fst graph
-  outs k = maybe [] id $ mlookup k $ snd graph
-  in foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
+findImportSym imps mods s = concat [maybe [] (\t -> [(im, t)]) $ mlookup s qs | im <- imps, let qs = fst $ fst $ mods ! im]
+
+inferDefs tycl decls defs typed = do
+  let
+    insertUnique m (s, (_, t)) = case mlookup s m of
+      Nothing -> case mlookup s typed of
+        Nothing -> Right $ insert s t m
+        _ -> Left $ "reserved: " ++ s
+      _ -> Left $ "duplicate: " ++ s
+    addEdges (sym, (deps, _)) (ins, outs) = (foldr (\dep es -> insertWith union dep [sym] es) ins deps, insertWith union sym deps outs)
+    graph = foldr addEdges (Tip, Tip) defs
+  defmap <- foldM insertUnique Tip defs
+  let
+    ins k = maybe [] id $ mlookup k $ fst graph
+    outs k = maybe [] id $ mlookup k $ snd graph
+    typeTab = fst <$> typed
+    lambs = second snd <$> toAscList typed
+  foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
-inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) where
+inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
     let
-      checkDefault (s, Just expr) = do
+      checkDefault (s, Just rawExpr) = do
+        expr <- snd <$> linker (patternCompile dcs rawExpr)
         (ta, (sub, _)) <- either (Left . (s++) . (" (class): "++)) Right
-          $ infer typed [] (patternCompile dcs expr) ([], 0)
+          $ infer typed [] expr ([], 0)
         (_, (Qual ps t, a)) <- prove tycl s $ typeAstSub sub ta
         case ps of
           [Pred cl _] | cl == classId -> Right ()
@@ -1350,9 +1390,10 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
         let
           dvs = map snd $ fst $ dictVars ps 0
           perMethod (s, mayDefault) = do
-            let Just expr = mlookup s idefs <|> mayDefault <|> pure (V "fail#")
+            let Just rawExpr = mlookup s idefs <|> mayDefault <|> pure (V "fail#")
+            expr <- snd <$> linker (patternCompile dcs rawExpr)
             (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-              $ infer typed [] (patternCompile dcs expr) ([], 0)
+              $ infer typed [] expr ([], 0)
             let
               (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
@@ -1375,14 +1416,45 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
 
+neatNew = Neat Tip ([], []) Tip Tip [] [] []
+
+neatPrim = foldr ($) (customMods $ Neat Tip ([], []) prims Tip [] [] []) primAdts
+
+soloPrim = singleton "#" ((qs, as), ([], [])) where
+  qs = fst <$> typedAsts neatPrim
+  as = second snd <$> toAscList (typedAsts neatPrim)
+
+tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
+  go (name, prog) = (name, foldr ($) neatNew prog)
+  ins tab (k, v) = case mlookup k tab of
+    Nothing -> Right $ insert k v tab
+    Just _ -> Left $ "duplicate module: " ++ k
+
+inferModule tab acc name = case mlookup name acc of
+  Nothing -> do
+    let
+      Neat ienv (rawDefs, decls) typed adtTab ffis ffes rawImps = tab ! name
+      imps = "#":rawImps
+      defs = coalesce rawDefs
+      locals = fromList $ map (, ()) $ keys typed ++ (fst <$> defs)
+      insts im (Tycl _ is) = (im,) <$> is
+      classes im = if im == "" then ienv else typeclasses $ tab ! im
+      tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
+      dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
+    acc' <- foldM (inferModule tab) acc imps
+    let linker = astLink typed locals imps acc'
+    depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
+    (qs, lambF) <- inferDefs tycl decls depdefs typed
+    mets <- inferTypeclasses tycl qs dcs linker ienv
+    Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
+  Just _ -> Right acc
+
 untangle s = case program s of
   Left e -> Left $ "parse error: " ++ e
-  Right (prog, ParseState s _) -> case s of
-    Ell [] [] -> case foldr ($) (customMods $ Neat Tip ([], []) prims Tip [] []) $ primAdts ++ prog of
-      Neat tycl (defs, decls) typed dcs ffis exs -> do
-        (qs, lambF) <- inferDefs tycl decls (second (patternCompile dcs) <$> coalesce defs) typed
-        mets <- inferTypeclasses tycl qs dcs
-        pure ((qs, lambF mets), (ffis, exs))
+  Right (mods, ParseState s _) -> case s of
+    Ell [] [] -> do
+      tab <- tabulateModules mods
+      foldM (inferModule tab) soloPrim $ keys tab
     _ -> Left $ "parse error: " ++ case ell s of
       Left e -> e
       Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
@@ -1407,6 +1479,7 @@ showExtra = \case
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)
+  Link im s _ -> (im++) . ('.':) . (s++)
 
 showPat = \case
   PatLit e -> showExtra e
@@ -1430,23 +1503,40 @@ showTree prec t = case t of
   Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
-dumpCombs s = case untangle s of
+dumpWith dumper s = case untangle s of
   Left err -> err
-  Right ((_, lambs), _) -> foldr ($) [] $ map disasm $ optiComb lambs
+  Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
 
-dumpLambs s = case untangle s of
-  Left err -> err
-  Right ((_, lambs), _) -> foldr ($) [] $
-    (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambs
+dumpCombs ((_, lambs), _) = map disasm $ optiComb lambs
+
+dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
 
 showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
 
-dumpTypes s = case untangle s of
-  Left err -> err
-  Right ((typed, _), _) -> ($ "") $ foldr (.) id $
-    map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
 -- Hash consing.
+data Obj = Local String | Global String String | Code Int
+
+instance Eq Obj where
+  Local a == Local b = a == b
+  Global m a == Global n b = m == n && a == b
+  Code a == Code b = a == b
+  _ == _ = False
+
+instance Ord Obj where
+  x <= y = case x of
+    Local a -> case y of
+      Local b -> a <= b
+      _ -> True
+    Global m a -> case y of
+      Local _ -> False
+      Global n b -> if m == n then a <= b else m <= n
+      _ -> True
+    Code a -> case y of
+      Code b -> a <= b
+      _ -> False
+
 instance (Eq a, Eq b) => Eq (Either a b) where
   (Left a) == (Left b) = a == b
   (Right a) == (Right b) = a == b
@@ -1471,19 +1561,31 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 
 enc t = case t of
   Lf n -> case n of
-    Basic c -> pure $ Right c
-    Const c -> Right <$> memget (Right $ comEnum "NUM", Right c)
+    Basic c -> pure $ Code c
+    Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-  LfVar s -> pure $ Left s
-  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (hx, hy)
+    Link m s _ -> pure $ Global m s
+  LfVar s -> pure $ Local s
+  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
+
+encTop t = enc t >>= \case
+  Code n -> pure n
+  other -> memget (Code $ comEnum "I", other)
 
 asm combs = foldM
-  (\symtab (s, t) -> either (const symtab) (flip (insert s) symtab) <$> enc t)
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
   Tip combs
 
-hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
-  \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f []
+hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
+  \symtab (_, (hp, f)) -> let
+    mem = (\case
+        Code n -> Right n
+        -- Local s -> Right $ symtab ! s
+        Local s -> Right $ maybe (error s) id $ mlookup s symtab
+        Global m s -> Left (m, s)
+      ) <$> f []
+    in (symtab, (hp, mem))
 
 -- Code generation.
 -- Fragile. We search for the above comment and replace the code below to
@@ -1553,16 +1655,34 @@ enumComs = ("typedef unsigned u;\n"++)
   . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
   . ("};\n"++)
 
+codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . (mem'++)))
+  where
+  (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
+
+ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
+
 compile tgt s = either id id do
-  ((typed, lambs), (ffis, exs)) <- untangle s
+  mods <- untangle s
   let
-    (tab, mem) = hashcons $ optiComb lambs
+    (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+    (ffis, ffes) = foldr ffcat ([], []) $ toAscList mods
+    mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
     getIOType (Qual [] (TAp (TC "IO") t)) = Right t
     getIOType q = Left $ "main : " ++ showQual q ""
-    mustType s = case mlookup s typed of
+    mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
       Just (Qual [] t) -> t
       _ -> error "TODO: report bad exports"
-  maybe (Right undefined) getIOType $ mlookup "main" typed
+    mayMain = do
+        tab <- mlookup "Main" bigmap
+        mainAddr <- mlookup "main" tab
+        mainType <- mlookup "main" $ fst $ fst $ mods ! "Main"
+        pure (mainAddr, mainType)
+  mainStr <- case mayMain of
+    Nothing -> pure ""
+    Just (a, q) -> do
+      getIOType q
+      pure $ genMain a
 
   pure
     $ enumTop tgt
@@ -1571,7 +1691,7 @@ compile tgt s = either id id do
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
     . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
+    . foldr (\(x, (modName, funName)) f -> maybe undefined showInt (mlookup funName $ bigmap ! modName) . (", " ++) . f) id ffes
     . ("0};\n" ++)
     . targetFuns tgt
     . preamble
@@ -1581,9 +1701,9 @@ compile tgt s = either id id do
     . rtsInit tgt
     . rtsReduce
     . ("#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility(\"default\")));\n"++)
-    . foldr (.) id (zipWith (\p n -> ("EXPORT(f"++) . showInt n . (", \""++) . (fst p++) . ("\")\n"++)
-      . genExport (arrCount $ mustType $ snd p) n) exs [0..])
-    $ maybe "" genMain (mlookup "main" tab)
+    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
+      . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
+    $ mainStr
 
 genExport m n = ("void f"++) . showInt n . ("("++)
   . foldr (.) id (intersperse (',':) xs)
@@ -1816,9 +1936,9 @@ main = getArgs >>= \case
 void fun(void) asm("fun") __attribute__((visibility("default")));
 void fun(void) { rts_reduce(*((u*)512)); }
 |]
-  "comb":_ -> interactCPP dumpCombs
-  "lamb":_ -> interactCPP dumpLambs
-  "type":_ -> interactCPP dumpTypes
+  "comb":_ -> interactCPP $ dumpWith dumpCombs
+  "lamb":_ -> interactCPP $ dumpWith dumpLambs
+  "type":_ -> interactCPP $ dumpWith dumpTypes
   "wasm":_ -> interactCPP $ compile Wasm
   _ -> interactCPP $ compile Host
   where

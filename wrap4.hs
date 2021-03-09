@@ -80,13 +80,16 @@ ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
 #define ffi foreign import ccall
 #define export --
-#include "crossly.hs"
+#include "party.hs"
 instance Prelude.Functor Parser where fmap = fmap
 instance Prelude.Applicative Parser where pure = pure ; (<*>) = (<*>)
 instance Prelude.Monad Parser where return = return ; (>>=) = (>>=)
 instance Prelude.Functor (Either a) where fmap = fmap
 instance Prelude.Applicative (Either a) where pure = pure ; (<*>) = (<*>)
 instance Prelude.Monad (Either a) where return = return ; (>>=) = (>>=)
+instance Prelude.Functor Maybe where fmap = fmap
+instance Prelude.Applicative Maybe where pure = pure ; (<*>) = (<*>)
+instance Prelude.Monad Maybe where return = return ; (>>=) = (>>=)
 
 -- instance Prelude.Show Pred where showsPrec _ = showPred
 -- instance Prelude.Show Type where showsPrec _ = showType

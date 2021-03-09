@@ -960,10 +960,12 @@ guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y
 
 onePat vs x = Pa [(vs, x)]
 opDef x f y rhs = [(f, onePat [x, y] rhs)]
-leftyPat p expr = case patVars p of
+leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
+    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) pvars
+  where
+  pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
 

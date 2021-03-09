@@ -734,10 +734,12 @@ guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y
 
 onePat vs x = Pa [(vs, x)]
 opDef x f y rhs = [(f, onePat [x, y] rhs)]
-leftyPat p expr = case patVars p of
+leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
+    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) pvars
+  where
+  pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
 
@@ -1122,7 +1124,7 @@ scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
 
-inferno prove typed defmap syms = let
+inferno tycl typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
   in foldM (\(acc, (subs, n)) s ->
     maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
@@ -1130,14 +1132,14 @@ inferno prove typed defmap syms = let
     \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
     \cs -> Right ((s, (t, a)):acc, (cs, n1))
   ) ([], ([], 0)) syms >>=
-  \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove s $ typeAstSub soln ta) <$> stas
+  \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove tycl s $ typeAstSub soln ta) <$> stas
 
 prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
 inferDefs' tycl defmap (typeTab, lambF) syms = let
   add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  in add <$> inferno (prove tycl) typeTab defmap syms
+  in add <$> inferno tycl typeTab defmap syms
 inferDefs tycl defs typed = let
   typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   lambs = second snd <$> typed

@@ -15,8 +15,9 @@ function hideshow(s) {
 
 What features would make our compiler friendlier? My biggest gripes are that
 symbols must be defined before use, a finicky parser that lacks support for
-indentation rules, and pathetic error handling. We work on the first two problems,
-and make a tiny dent on the third, while taking care of a few other issues.
+indentation rules, and pathetic error handling. We work on the first two
+problems, and make a tiny dent on the third, while taking care of a few other
+issues.
 
 This leads to a compiler that I found surprisingly usable, at least when I could
 mostly spot mistakes on my own.
@@ -91,6 +92,31 @@ See https://www.microsoft.com/en-us/research/publication/implementing-functional
 In brief, we order the members of each component arbitrarily and insert
 variables so they can all reach each other; we automate what we did by hand
 when writing mutually recursive functions for older versions of our compiler.
+
+The `leftyPat` function supports patterns on the left-hand side of definitions,
+for example:
+
+------------------------------------------------------------------------
+[a,b,c] = expr
+------------------------------------------------------------------------
+
+Our solution is simplistic. We find all pattern variables, such as  `a,b,c`. If
+nonempty, we prepend `@` to the first variable, for example `@a`, to generate a
+symbol unique to the current scope (a cheap trick to approximate Lisp's
+`gensym`). Then we define this generated symbol to be the expression on the
+right-hand side, for example `@a = expr`, and then we generate case expressions
+for each pattern variable to define them, for example
+
+------------------------------------------------------------------------
+@a = expr
+a = case @a of [a,b,c] -> a
+b = case @a of [a,b,c] -> b
+c = case @a of [a,b,c] -> c
+------------------------------------------------------------------------
+
+Our scheme fails to handle the wild-card pattern `_` correctly, which we'll
+fix in a later compiler. Until then, we tread carefully with patterns on the
+left.
 
 ++++++++++
 <p><a onclick='hideshow("uniquely");'>&#9654; Toggle `uniquely.hs`</a></p>
@@ -193,6 +219,9 @@ code is silently produced.
 We add support for default methods as it involves the same code.
 
 We ruthlessly remove semicolons and braces from our source.
+
+Now that coding is more pleasant, we refine `leftyPat` so it correctly handles
+the wild-card pattern `_` in the left-hand side of a definition.
 
 ++++++++++
 <p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>

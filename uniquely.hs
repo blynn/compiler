@@ -967,7 +967,7 @@ scc ins outs = let
   ; spanning   = snd . spanningSearch   ins  ([], [])
   } in spanning . depthFirst;
 
-inferno prove typed defmap syms = let
+inferno tycl typed defmap syms = let
   { loc = zip syms $ TV . (' ':) <$> syms
   } in foldM (\(acc, (subs, n)) s ->
       maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
@@ -975,14 +975,14 @@ inferno prove typed defmap syms = let
       \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
       \cs -> Right ((s, (t, a)):acc, (cs, n1))
     ) ([], ([], 0)) syms >>=
-    \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove s $ typeAstSub soln ta) <$> stas;
+    \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove tycl s $ typeAstSub soln ta) <$> stas;
 
 prove ienv s (t, a) = flip fmap (prove' ienv ([], 0) a) \((ps, _), x) ->
   let { applyDicts expr = foldl A expr $ map (V . snd) ps }
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps));
 inferDefs' ienv defmap (typeTab, lambF) syms = let
   { add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  } in add <$> inferno (prove ienv) typeTab defmap syms
+  } in add <$> inferno ienv typeTab defmap syms
   ;
 inferDefs ienv defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
