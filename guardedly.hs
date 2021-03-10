@@ -753,8 +753,8 @@ infer dcs typed loc ast csn = fpair csn \cs n ->
     { Basic b -> if b == ord 'Y'
       then insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
       else undefined
-    ; Const c -> ((TC "Int",  ast), csn)
-    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
+    ; Const c -> ((TC "Int", ast), csn)
+    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"), ast), csn)
     ; Proof _ -> undefined
     }
   ; V s -> fmaybe (lookup s loc)

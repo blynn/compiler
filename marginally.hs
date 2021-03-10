@@ -1000,9 +1000,9 @@ infer typed loc ast csn = fpair csn \cs n ->
   in case ast of
   { E x -> Right $ case x of
     { Basic n | n == comEnum "Y" -> insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a")
-    ; Const _ -> ((TC "Int",  ast), csn)
-    ; ChrCon _ -> ((TC "Char",  ast), csn)
-    ; StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
+    ; Const _ -> ((TC "Int", ast), csn)
+    ; ChrCon _ -> ((TC "Char", ast), csn)
+    ; StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     }
   ; V s -> maybe
     (maybe (error $ "depGraph bug! " ++ s) (Right . insta) $ mlookup s typed)

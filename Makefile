@@ -32,8 +32,8 @@ $(call rtsup,uniquely,mutually)
 $(call rtsup,virtually,uniquely)
 marginally.c:marginally.hs virtually;time ./virtually < $< > $@
 methodically.c:methodically.hs marginally;time ./marginally < $< > $@
+party.c:party.hs methodically;time ./methodically < $< > $@
 crossly.c:crossly.hs methodically;time ./methodically < $< > $@
-party.c:party.hs crossly;time ./crossly < $< > $@
 precisely.c:precisely.hs crossly;time ./crossly < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@

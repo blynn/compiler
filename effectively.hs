@@ -520,8 +520,8 @@ infer typed loc ast csn = fpair csn \cs n ->
     { Basic b -> ife (b == ord 'Y')
       (insta $ noQual $ arr (arr (TV "a") (TV "a")) (TV "a"))
       undefined
-    ; Const _ -> ((TC "Int",  ast), csn)
-    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"),  ast), csn)
+    ; Const _ -> ((TC "Int", ast), csn)
+    ; StrCon _ -> ((TAp (TC "[]") (TC "Int"), ast), csn)
     ; Proof _ -> undefined
     }
   ; V s -> fmaybe (lookup s loc)

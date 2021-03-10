@@ -1,13 +1,4 @@
 -- Modules.
-
-ffi "putchar_cast" putChar :: Char -> IO ()
-ffi "getargcount" getArgCount :: IO Int
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char
-ffi "getchar_fp" getChar :: IO Int
-ffi "reset_buffer" resetBuffer :: IO ()
-ffi "put_buffer" putBuffer :: Int -> IO ()
-ffi "stdin_load_buffer" stdinLoadBuffer :: IO ()
-
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -19,53 +10,17 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
 
-class Ring a where
-  (+) :: a -> a -> a
-  (-) :: a -> a -> a
-  (*) :: a -> a -> a
-  fromInt :: Int -> a
-class Integral a where
-  div :: a -> a -> a
-  mod :: a -> a -> a
-  quot :: a -> a -> a
-  rem :: a -> a -> a
+ffi "putchar" putChar :: Int -> IO Int
+ffi "getchar" getChar :: IO Int
+ffi "getargcount" getArgCount :: IO Int
+ffi "getargchar" getArgChar :: Int -> Int -> IO Char
 
-instance Ring Int where
-  (+) = intAdd
-  (-) = intSub
-  (*) = intMul
-  fromInt = id
-instance Integral Int where
-  div = intDiv
-  mod = intMod
-  quot = intQuot
-  rem = intRem
-
-instance Ring Word where
-  (+) = wordAdd
-  (-) = wordSub
-  (*) = wordMul
-  fromInt = wordFromInt
-instance Integral Word where
-  div = wordDiv
-  mod = wordMod
-  quot = wordQuot
-  rem = wordRem
-instance Eq Word where (==) = wordEq
-instance Ord Word where (<=) = wordLE
-
-data Word64 = Word64 Word Word
-instance Ring Word64 where
-  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
-  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
-  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  fromInt x = Word64 (wordFromInt x) (wordFromInt 0)
-
-instance Eq Word64 where Word64 a b == Word64 c d = a == c && b == d
-instance Ord Word64 where
-  Word64 a b <= Word64 c d
-    | b == d = a <= c
-    | True = b <= d
+libc = [r|
+static int env_argc;
+int getargcount() { return env_argc; }
+static char **env_argv;
+char getargchar(int n, int k) { return env_argv[n][k]; }
+|]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -85,18 +40,11 @@ id x = x
 const x y = x
 flip f x y = f y x
 (&) x f = f x
-data Ordering = LT | GT | EQ
-class Ord a where
-  (<=) :: a -> a -> Bool
-  x <= y = case compare x y of
-    LT -> True
-    EQ -> True
-    GT -> False
-  compare :: a -> a -> Ordering
-  compare x y = if x <= y then if y <= x then EQ else LT else GT
-
+class Ord a where (<=) :: a -> a -> Bool
+compare x y = if x <= y then if y <= x then EQ else LT else GT
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
+data Ordering = LT | GT | EQ
 instance Ord a => Ord [a] where
   xs <= ys = case xs of
     [] -> True
@@ -114,7 +62,6 @@ snd (x, y) = y
 uncurry f (x, y) = f x y
 first f (x, y) = (f x, y)
 second f (x, y) = (x, f y)
-f *** g = \(x, y) -> (f x, g y)
 not a = if a then False else True
 x /= y = not $ x == y
 (.) f g x = f (g x)
@@ -143,10 +90,10 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ putChar
+putStr = mapM_ $ putChar . ord
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
+error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
@@ -194,11 +141,6 @@ instance Applicative (Either a) where
 instance Monad (Either a) where
   return = Right
   ex >>= f = either Left f ex
-iterate f x = x : iterate f (f x)
-takeWhile _ [] = []
-takeWhile p xs@(x:xt)
-  | p x  = x : takeWhile p xt
-  | True = []
 class Alternative f where
   empty :: f a
   (<|>) :: f a -> f a -> f a
@@ -210,26 +152,6 @@ some p = liftA2 (:) p (many p)
 sepBy1 p sep = liftA2 (:) p (many (sep *> p))
 sepBy p sep = sepBy1 p sep <|> pure []
 between x y p = x *> (p <* y)
-class Enum a where
-  succ           :: a -> a
-  pred           :: a -> a
-  toEnum         :: Int -> a
-  fromEnum       :: a -> Int
-  enumFrom       :: a -> [a]
-  enumFrom = iterate succ
-  enumFromTo     :: a -> a -> [a]
-instance Enum Int where
-  succ = (+1)
-  pred = (+(0-1))
-  toEnum = id
-  fromEnum = id
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
-instance Enum Char where
-  succ = chr . (+1) . ord
-  pred = chr . (+(0-1)) . ord
-  toEnum = chr
-  fromEnum = ord
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
 -- Map.
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
@@ -279,7 +201,7 @@ mlookup kx t = case t of
     EQ -> Just y
 fromList = foldl (\t (k, x) -> insert k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
-t ! k = maybe (error "!") id $ mlookup k t
+t ! k = maybe undefined id $ mlookup k t
 
 foldrWithKey f = go where
   go z t = case t of
@@ -295,15 +217,10 @@ arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
-data Constr = Constr String [(String, Type)]
+data Constr = Constr String [Type]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
 noQual = Qual []
-
-typeVars = \case
-  TC _ -> []
-  TV v -> [v]
-  TAp x y -> typeVars x `union` typeVars y
 
 instance Eq Type where
   (TC s) == (TC t) = s == t
@@ -331,21 +248,20 @@ data Tycl = Tycl
   [Instance]
 
 data Neat = Neat
-  { typeclasses :: Map String Tycl
-  -- | Top-level definitions. Top-level type annotations.
-  , tops :: ([(String, Ast)], [(String, Qual)])
+  (Map String Tycl)
+  -- | Top-level definitions
+  [(String, Ast)]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  , typedAsts :: Map String (Qual, Ast)
+  [(String, (Qual, Ast))]
   -- | Data constructor table.
-  , dataCons :: Map String [Constr]
-  -- | Foreign imports.
-  , ffiImps :: [(String, Type)]
-  -- | Foreign exports.
-  , ffiExps :: [(String, String)]
+  (Map String [Constr])  -- AdtTab
+  -- | FFI declarations.
+  [(String, Type)]
+  -- | Exports.
+  [(String, String)]
   -- | Module imports.
-  , modImps :: [String]
-  }
+  [String]
 
 patVars = \case
   PatLit _ -> []
@@ -440,7 +356,7 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure (chr 0))
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
 tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
@@ -465,6 +381,7 @@ lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
   <|> special <|> literal
 
 whitespace = many (sat isSpace <|> comment)
+lexemes = whitespace *> many (lexeme <* whitespace)
 
 getPos = Lexer \st@(LexState _ rc) -> Right (rc, st)
 posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace)
@@ -547,19 +464,14 @@ ro = E . Basic . comEnum
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
+  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
-scottConstr t cs (Constr s sts) = (s,
+scottConstr t cs (Constr s ts) = (s,
   (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
-  : [(field, (noQual $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
-  where
-  ts = snd <$> sts
-  proj fd = foldr L (V fd) $ fst <$> sts
-  inj x = map (\(Constr s' _) -> if s' == s then x else V "undefined") cs
-mkAdtDefs t cs = mkCase t cs : concatMap (scottConstr t cs) cs
+mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
 
 mkFFIHelper n t acc = case t of
   TC s -> acc
@@ -567,61 +479,30 @@ mkFFIHelper n t acc = case t of
   TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
-addAdt t cs ders (Neat tycl fs typed dcs ffis exs ims) = foldr derive ast ders where
-  ast = Neat tycl fs (insertList (mkAdtDefs t cs) typed) (updateDcs cs dcs) ffis exs ims
-  derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
-    )]
-  derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ Ca (V "x") $ map showCase cs
-    )]
-  derive der = error $ "bad deriving: " ++ der
-  showCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
-    in (PatCon con (mkPatVar "" <$> as), case args of
-      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
-      _ -> case con of
-        ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
-          (\f g -> A (A (V ".") f) g)
-          [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
-          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
-          , A (A (V "showsPrec") (E $ Const 11)) (V "2")
-          ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec") $ foldr
-          (\f g -> A (A (V ".") f) g)
-          (L "s" $ A (A (V "++") (E $ StrCon con)) (V "s"))
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
-      )
-  mkPreds classId = Pred classId . TV <$> typeVars t
-  mkPatVar pre s = PatVar (pre ++ s) Nothing
-  eqCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
-         $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , (PatVar "_" Nothing, V "False")])
+addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
+  Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis ffes ims
 
 emptyTycl = Tycl [] []
-addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs ims) = let
-  vars = (`showInt` "") <$> [1..size sigs]
-  selectors = zipWith (\var (s, Qual ps t) -> (s, (Qual (Pred classId v:ps) t,
+addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
+  vars = take (size sigs) $ (`showInt` "") <$> [0..]
+  selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
-  methods = map (\s -> (s, mlookup s defs)) $ keys sigs
+  methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
   Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl methods is) tycl
-  in Neat tycl' fs (insertList selectors typed) dcs ffis exs ims
+  in Neat tycl' fs (selectors ++ typed) dcs ffis ffes ims
 
-addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs ims) = let
+addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
   name = '{':classId ++ (' ':showType ty "") ++ "}"
-  in Neat tycl' fs typed dcs ffis exs ims
+  in Neat tycl' fs typed dcs ffis ffes ims
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs ims) =
-  Neat tycl fs (insert ourname (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis)) typed) dcs ((foreignname, t):ffis) exs ims
-addTopDecl decl (Neat tycl (fs, decls) typed dcs ffis exs ims) =
-  Neat tycl (fs, decl:decls) typed dcs ffis exs ims
-addDefs ds (Neat tycl fs typed dcs ffis exs ims) = Neat tycl (first (ds++) fs) typed dcs ffis exs ims
+addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) =
+  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) ffes ims
+addDefs ds (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl (ds ++ fs) typed dcs ffis ffes ims
 addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
-addExport e f (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis ((e, f):exs) ims
+addExport e f (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl fs typed dcs ffis ((e, f):ffes) ims
 
 want f = Parser \(ParseState inp precs) -> case ell inp of
   Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
@@ -749,7 +630,7 @@ fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl
 cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
 cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
 
-genDecl = (,) <$> var <* res "::" <*> (Qual <$> (scontext <* res "=>" <|> pure []) <*> _type)
+genDecl = (,) <$> var <*> (res "::" *> _type)
 
 classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> cDecls))
 
@@ -800,7 +681,8 @@ sqExpr = between (res "[") (res "]") $
       ((. A (V "pure")) . foldr (.) id <$> sepBy1 compQual (res ","))
     <|> (\t h -> listify (h:t)) <$> many (res "," *> expr)
     )
-  ) <|> pure (V "[]")
+  )
+  <|> pure (V "[]")
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
@@ -863,23 +745,15 @@ conop = want f <|> between (res "`") (res "`") (want g) where
   f _ = Left ""
   g (ConId s) = Right s
   g _ = Left "want conop"
-
-vars = sepBy1 var $ res ","
-fieldDecl = (\vs t -> map (, t) vs) <$> vars <*> (res "::" *> _type)
-constr = (\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType
-  <|> Constr <$> wantConId <*>
-    (   concat <$> between (res "{") (res "}") (fieldDecl `sepBy` res ",")
-    <|> map ("",) <$> many aType)
-dclass = wantConId
-_deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
+constr = (\x c y -> Constr c [x, y]) <$> aType <*> conop <*> aType
+  <|> Constr <$> wantConId <*> many aType
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
 
 impDecl = addImport <$> (res "import" *> wantConId)
 
 topdecls = braceSep
   (   adt
   <|> classDecl
-  <|> addTopDecl <$> genDecl
   <|> instDecl
   <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
   <|> res "export" *> (addExport <$> wantString <*> var)
@@ -898,26 +772,25 @@ program s = case lex posLexemes $ LexState s (1, 1) of
 
 -- Primitives.
 primAdts =
-  [ addAdt (TC "()") [Constr "()" []] []
-  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []] ["Eq"]
-  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [("", TV "a"), ("", TAp (TC "[]") (TV "a"))]] []
-  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [("", TV "a"), ("", TV "b")]] []
-  ]
+  [ addAdt (TC "()") [Constr "()" []]
+  , addAdt (TC "Bool") [Constr "True" [], Constr "False" []]
+  , addAdt (TAp (TC "[]") (TV "a")) [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]]
+  , addAdt (TAp (TAp (TC ",") (TV "a")) (TV "b")) [Constr "," [TV "a", TV "b"]]]
 
 prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
   wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
-  in fromList $ map (second (first noQual)) $
+  in map (second (first noQual)) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
     , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
     , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
+
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("intFromWord", (arr (TC "Word") (TC "Int"), ro "I"))
     , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
@@ -944,8 +817,8 @@ prims = let
       , ("intMul", "MUL")
       , ("intDiv", "DIV")
       , ("intMod", "MOD")
-      , ("intQuot", "QUOT")
-      , ("intRem", "REM")
+      , ("intQuot", "DIV")
+      , ("intRem", "MOD")
       ]
     ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
       [ ("wordAdd", "ADD")
@@ -1059,10 +932,7 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") lit') b)) x) y where
-  lit' = case lit of
-    Const _ -> A (V "fromInt") (E lit)
-    _ -> E lit
+patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
 unpat dcs as t = case as of
   [] -> pure t
@@ -1117,10 +987,8 @@ rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip)
   $ uncurry classifyAlt <$> as) \acc tab -> acc . genCase dcs tab $ V "fail#"
 
 secondM f (a, b) = (a,) <$> f b
--- Compiles patterns. Overloads literals.
 patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
-    E (Const c) -> pure $ A (V "fromInt") t
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)
@@ -1202,13 +1070,14 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn@(cs, n) = let
-  va = TV (showInt n "")
-  insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
+infer typed loc ast csn = fpair csn \cs n ->
+  let
+    va = TV (showInt n "")
+    insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
   in case ast of
     E x -> Right $ case x of
-      Const _ -> ((TC "Int",  ast), csn)
-      ChrCon _ -> ((TC "Char",  ast), csn)
+      Const _ -> ((TC "Int", ast), csn)
+      ChrCon _ -> ((TC "Char", ast), csn)
       StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
       Link im s q -> insta q
     V s -> maybe (Left $ "undefined: " ++ s) Right
@@ -1283,73 +1152,24 @@ scc ins outs = spanning . depthFirst where
   spanning   = snd . spanningSearch   ins  ([], [])
 
 inferno tycl typed defmap syms = let
-  loc = zip syms (TV . (' ':) <$> syms)
-  in foldM (\(acc, (subs, n)) s -> do
-    let expr = defmap ! s
-    ((t, a), (ms, n1)) <- either (Left . (s++) . (": "++)) Right
-      $ infer typed loc expr (subs, n)
-    cs <- unify (TV (' ':s)) t ms
-    pure ((s, (t, a)):acc, (cs, n1))
+  loc = zip syms $ TV . (' ':) <$> syms
+  in foldM (\(acc, (subs, n)) s ->
+    maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
+    \expr -> infer typed loc expr (subs, n) >>=
+    \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
+    \cs -> Right ((s, (t, a)):acc, (cs, n1))
   ) ([], ([], 0)) syms >>=
   \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove tycl s $ typeAstSub soln ta) <$> stas
-
-insertList xs m = foldr (uncurry insert) m xs
 
 prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
-
-ambiguous (Qual ps t) = filter (not . resolvable) ps where
-  resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
-
-defaultMagic tycl q@(Qual ps t) lamb = let
-  ambis = ambiguous q
-  rings = concatMap isRing ambis
-  isRing (Pred "Ring" (TV v)) = [v]
-  isRing _ = []
-  defaultize lambSub [] lamb = Right ([], foldr (uncurry beta) lamb lambSub)
-  defaultize lambSub (p:pt) (L s t) = case p of
-    Pred cl (TV v) | v `elem` rings -> do
-      (_, ast) <- findProof tycl (Pred cl $ TC "Int") ([], 0)
-      defaultize ((s, ast) : lambSub) pt t
-    _ -> ((p:) *** (L s)) <$> defaultize lambSub pt t
-  in case rings of
-    [] -> Right (q, lamb)
-    _ -> do
-      (ps, lamb) <- defaultize [] ps lamb
-      let q' = Qual ps t
-      case ambiguous q' of
-        [] -> Right (q', lamb)
-        ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
-
-reconcile tycl q@(Qual ps t) lamb = \case
-  Nothing -> defaultMagic tycl q lamb
-  Just qAnno@(Qual psA tA) -> case match t tA of
-    Nothing -> Left $ "type mismatch, expected: " ++ showQual qAnno "" ++ ", actual: " ++ showQual q ""
-    Just sub -> let
-      vcount = length psA
-      vars = map (`showInt` "") [1..vcount]
-      annoDictVars = (zip psA vars, vcount)
-      forbidNew p ((_, n), x)
-        | n == vcount = Right x
-        | True = Left $ "missing predicate: " ++ showPred p ""
-      findAnno p@(Pred cl ty) = findProof tycl (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
-      in do
-        dicts <- mapM findAnno ps
-        case ambiguous qAnno of
-          [] -> pure (qAnno, foldr L (foldl A lamb dicts) vars)
-          ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map showPred ambis) $ ""
-
-inferDefs' tycl decls defmap (typeTab, lambF) syms = let
-  add (tt, f) (s, (q, lamb)) = do
-    (q, lamb) <- either (Left . (s++) . (": "++)) Right
-      $ reconcile tycl q lamb $ lookup s decls
-    pure (insert s q tt, f . ((s, lamb):))
-  in inferno tycl (insertList decls typeTab) defmap syms >>= foldM add (typeTab, lambF)
-
+inferDefs' tycl defmap (typeTab, lambF) syms = let
+  add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
+  in add <$> inferno tycl typeTab defmap syms
 findImportSym imps mods s = concat [maybe [] (\t -> [(im, t)]) $ mlookup s qs | im <- imps, let qs = fst $ fst $ mods ! im]
 
-inferDefs tycl decls defs typed = do
+inferDefs tycl defs typed = do
   let
     insertUnique m (s, (_, t)) = case mlookup s m of
       Nothing -> case mlookup s typed of
@@ -1364,11 +1184,11 @@ inferDefs tycl decls defs typed = do
     outs k = maybe [] id $ mlookup k $ snd graph
     typeTab = fst <$> typed
     lambs = second snd <$> toAscList typed
-  foldM (inferDefs' tycl decls defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
+  foldM (inferDefs' tycl defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
-inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
+inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
     let
       checkDefault (s, Just rawExpr) = do
@@ -1398,7 +1218,7 @@ inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscLis
               (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-              Just qc = mlookup s typed
+              qc = typeOfMethod s
               (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
@@ -1406,7 +1226,7 @@ inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscLis
               Just subc = match headT ty
               (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
             case match tx t2 of
-              Nothing -> Left $ name ++ " class/instance type conflict"
+              Nothing -> Left "class/instance type conflict"
               Just subx -> do
                 ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
                 if length ps2 /= length ps3
@@ -1416,13 +1236,17 @@ inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscLis
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
 
-neatNew = Neat Tip ([], []) Tip Tip [] [] []
+neatNew = Neat Tip [] [] Tip [] [] []
 
-neatPrim = foldr ($) (customMods $ Neat Tip ([], []) prims Tip [] [] []) primAdts
+neatPrim = foldr ($) (Neat Tip [] prims Tip [] [] []) primAdts
+
+typedAsts (Neat _ _ tas _ _ _ _) = tas
+typeclasses (Neat tcs _ _ _ _ _ _) = tcs
+dataCons (Neat _ _ _ dcs _ _ _) = dcs
 
 soloPrim = singleton "#" ((qs, as), ([], [])) where
-  qs = fst <$> typedAsts neatPrim
-  as = second snd <$> toAscList (typedAsts neatPrim)
+  qs = fst <$> fromList (typedAsts neatPrim)
+  as = second snd <$> typedAsts neatPrim
 
 tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -1430,22 +1254,32 @@ tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
 
+null xs = case xs of
+  [] -> True
+  _ -> False
+
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat ienv (rawDefs, decls) typed adtTab ffis ffes rawImps = tab ! name
+      Neat rawIenv rawDefs typed adtTab ffis ffes rawImps = tab ! name
+      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
+        [] -> Tycl (findSigs cl) is
+        _ -> Tycl sigs is
+      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
+      ienv = fromList $ fillSigs <$> toAscList rawIenv
       imps = "#":rawImps
       defs = coalesce rawDefs
-      locals = fromList $ map (, ()) $ keys typed ++ (fst <$> defs)
+      locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
       dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
+      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
     acc' <- foldM (inferModule tab) acc imps
-    let linker = astLink typed locals imps acc'
+    let linker = astLink (fromList typed) locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
-    (qs, lambF) <- inferDefs tycl decls depdefs typed
-    mets <- inferTypeclasses tycl qs dcs linker ienv
+    (qs, lambF) <- inferDefs tycl depdefs (fromList typed)
+    mets <- inferTypeclasses tycl typeOfMethod qs dcs linker ienv
     Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
   Just _ -> Right acc
 
@@ -1537,19 +1371,6 @@ instance Ord Obj where
       Code b -> a <= b
       _ -> False
 
-instance (Eq a, Eq b) => Eq (Either a b) where
-  (Left a) == (Left b) = a == b
-  (Right a) == (Right b) = a == b
-  _ == _ = False
-instance (Ord a, Ord b) => Ord (Either a b) where
-  x <= y = case x of
-    Left a -> case y of
-      Left b -> a <= b
-      Right _ -> True
-    Right a -> case y of
-      Left _ -> False
-      Right b -> a <= b
-
 instance (Eq a, Eq b) => Eq (a, b) where
   (a1, b1) == (a2, b2) = a1 == a2 && b1 == b2
 instance (Ord a, Ord b) => Ord (a, b) where
@@ -1581,32 +1402,12 @@ hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
   \symtab (_, (hp, f)) -> let
     mem = (\case
         Code n -> Right n
-        -- Local s -> Right $ symtab ! s
-        Local s -> Right $ maybe (error s) id $ mlookup s symtab
+        Local s -> Right $ symtab ! s
         Global m s -> Left (m, s)
       ) <$> f []
     in (symtab, (hp, mem))
 
 -- Code generation.
--- Fragile. We search for the above comment and replace the code below to
--- build the web demo.
-customMods = id
-
-libc = ([r|#include<stdio.h>
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
-static char buf[1024], *bufp;
-static FILE *fp;
-void reset_buffer() { bufp = buf; }
-void put_buffer(int n) { *bufp++ = n; }
-void stdin_load_buffer() { fp = fopen(buf, "r"); }
-int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
-void putchar_cast(char c) { putchar(c); }
-void *malloc(unsigned long);
-|]++)
-
 argList t = case t of
   TC s -> [TC s]
   TV s -> [TV s]
@@ -1637,24 +1438,6 @@ ffiDefine n ffis = case ffis of
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
 
-data Target = Host | Wasm
-
-targetFuns Host = libc
-targetFuns Wasm = ([r|
-extern u __heap_base;
-void* malloc(unsigned long n) {
-  static u bump = (u) &__heap_base;
-  return (void *) ((bump += n) - n);
-}
-|]++)
-
-enumTop Host = ("enum{TOP=1<<24};"++)
-enumTop Wasm = ("enum{TOP=1<<22};"++)
-enumComs = ("typedef unsigned u;\n"++)
-  . ("enum{_UNDEFINED=0,"++)
-  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-  . ("};\n"++)
-
 codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem'++)))
   where
@@ -1662,7 +1445,7 @@ codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
 
 ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 
-compile tgt s = either id id do
+compile s = either id id do
   mods <- untangle s
   let
     (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
@@ -1685,22 +1468,24 @@ compile tgt s = either id id do
       pure $ genMain a
 
   pure
-    $ enumTop tgt
-    . enumComs
+    $ ("#include<stdio.h>\n"++)
+    . ("typedef unsigned u;\n"++)
+    . ("enum{_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
     . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
     . foldr (\(x, (modName, funName)) f -> maybe undefined showInt (mlookup funName $ bigmap ! modName) . (", " ++) . f) id ffes
     . ("0};\n" ++)
-    . targetFuns tgt
-    . preamble
+    . (libc++)
+    . (preamble++)
     . (concatMap ffiDeclare ffis ++)
-    . foreignFun ffis
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . ffiDefine (length ffis - 1) ffis
+    . ("\n  }\n}\n" ++)
     . runFun
-    . rtsInit tgt
-    . rtsReduce
-    . ("#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility(\"default\")));\n"++)
     . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
       . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
     $ mainStr
@@ -1742,10 +1527,8 @@ DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
-QUOT x y = "_NUM" "num(1) / num(2)"
-REM x y = "_NUM" "num(1) % num(2)"
-DIV x y = "_NUM" "div(num(1), num(2))"
-MOD x y = "_NUM" "mod(num(1), num(2))"
+DIV x y = "_NUM" "num(1) / num(2)"
+MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
@@ -1767,8 +1550,10 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 
-preamble = ([r|
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
+enum { TOP = 1<<24 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
@@ -1833,7 +1618,7 @@ static void gc() {
 
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
-static int num(u n) { return mem[arg(n) + 1]; }
+static inline int num(u n) { return mem[arg(n) + 1]; }
 static inline void lazy2(u height, u f, u x) {
   u *p = mem + sp[height];
   *p = f;
@@ -1845,12 +1630,9 @@ static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=ap
 typedef unsigned long long uu;
 static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
-|]++)
+|]
 
-runFun = ([r|
-static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
-static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
-static void run() {
+runFun = ([r|static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -1861,20 +1643,14 @@ static void run() {
     }
   }
 }
-|]++)
 
-rtsInit tgt = ([r|
-void rts_init() {|]++) . (case tgt of
-  Host -> ("fp = stdin; bufp = buf;"++)
-  _ -> id) . ([r|
+void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
-|]++)
 
-rtsReduce = ([r|
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
@@ -1896,71 +1672,45 @@ genComb (s, (args, body)) = let
     E (StrCon s) -> (s++)
   ) . ("break;\n"++)
 
-declDemo = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
-void putchar(int) IMPORT("env", "putchar");
-int getchar(void) IMPORT("env", "getchar");
-int eof(void) IMPORT("env", "eof");
-enum {
-  ROOT_BASE = 1<<9,  // 0-terminated array of exported functions
-  // HEAP_BASE - 4: program size
-  HEAP_BASE = (1<<20) - 128 * sizeof(u),  // program
-  TOP = 1<<22
-};
-static u *root = (u*) ROOT_BASE;
-|]++)
-
-rtsInitDemo = ([r|
-static inline void rts_init() {
-  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
-  hp = 128 + mem[127];
-  spTop = mem + TOP - 1;
-}
-|]++)
-
-foreignFun ffis =
-    ("void foreign(u n) {\n  switch(n) {\n" ++)
-  . ffiDefine (length ffis - 1) ffis
-  . ("\n  }\n}\n" ++)
-
-demoFFIs =
-  [ ("putchar", arr (TC "Char") $ TAp (TC "IO") (TC "()"))
-  , ("getchar", TAp (TC "IO") (TC "Char"))
-  , ("eof", TAp (TC "IO") (TC "Int"))
-  ]
-
 main = getArgs >>= \case
-  "coms":_ -> putStr $ ("comlist = [\""++)
-    . foldr (.) id (intersperse ("\",\""++) $ (++) . fst <$> comdefs)
-    $ "\"]\n"
-  "blah":_ -> putStr $ enumComs . declDemo . preamble . foreignFun demoFFIs . runFun . rtsInitDemo . rtsReduce $ [r|
-void fun(void) asm("fun") __attribute__((visibility("default")));
-void fun(void) { rts_reduce(*((u*)512)); }
-|]
-  "comb":_ -> interactCPP $ dumpWith dumpCombs
-  "lamb":_ -> interactCPP $ dumpWith dumpLambs
-  "type":_ -> interactCPP $ dumpWith dumpTypes
-  "wasm":_ -> interactCPP $ compile Wasm
-  _ -> interactCPP $ compile Host
+  "comb":_ -> interact $ dumpWith dumpCombs
+  "lamb":_ -> interact $ dumpWith dumpLambs
+  "type":_ -> interact $ dumpWith dumpTypes
+  _ -> interact compile
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n - 1]
 
--- Include directives.
-interactCPP f = do
-  s <- getContents
-  case lex cppLexer $ LexState s (0,0) of
-    Left e -> putStr $ "CPP error: " ++ e
-    Right (r, _) -> cpp r >>= putStr . f
-data CPP = CPPPass (String -> String) | CPPInclude String
-cppLexer = many $ include <|> (CPPPass . foldr (.) ('\n':) . map (:) <$> many (sat (/= '\n')) <* char '\n')
-include = (foldr (*>) (pure ()) $ map char "#include") *> many (sat isSpace) *>
-  (CPPInclude <$> tokStr) <* char '\n'
-cpp cpps = foldr ($) "" <$> mapM go cpps where
-  go (CPPPass f) = pure f
-  go (CPPInclude s) = do
-    resetBuffer
-    mapM_ (putBuffer . ord) s
-    putBuffer 0
-    stdinLoadBuffer
-    getContentsS
-getContentsS = getChar >>= \n -> if 0 <= n then ((chr n:) .) <$> getContentsS else pure id
+iterate f x = x : iterate f (f x)
+takeWhile _ [] = []
+takeWhile p xs@(x:xt)
+  | p x  = x : takeWhile p xt
+  | True = []
+
+class Enum a where
+  succ           :: a -> a
+  pred           :: a -> a
+  toEnum         :: Int -> a
+  fromEnum       :: a -> Int
+  enumFrom       :: a -> [a]
+  enumFromTo     :: a -> a -> [a]
+instance Enum Int where
+  succ = (+1)
+  pred = (+(0-1))
+  toEnum = id
+  fromEnum = id
+  enumFrom = iterate succ
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Char where
+  succ = chr . (+1) . ord
+  pred = chr . (+(0-1)) . ord
+  toEnum = chr
+  fromEnum = ord
+  enumFrom = iterate succ
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+
+(+) = intAdd
+(-) = intSub
+(*) = intMul
+div = intDiv
+mod = intMod

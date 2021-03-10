@@ -1203,9 +1203,9 @@ infer typed loc ast csn@(cs, n) = let
   insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
   in case ast of
     E x -> Right $ case x of
-      Const _ -> ((TC "Int",  ast), csn)
-      ChrCon _ -> ((TC "Char",  ast), csn)
-      StrCon _ -> ((TAp (TC "[]") (TC "Char"),  ast), csn)
+      Const _ -> ((TC "Int", ast), csn)
+      ChrCon _ -> ((TC "Char", ast), csn)
+      StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     V s -> maybe (Left $ "undefined: " ++ s) Right
       $ (\t -> ((t, ast), csn)) <$> lookup s loc
       <|> insta <$> mlookup s typed

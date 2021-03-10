@@ -220,8 +220,14 @@ We add support for default methods as it involves the same code.
 
 We ruthlessly remove semicolons and braces from our source.
 
-Now that coding is more pleasant, we refine `leftyPat` so it correctly handles
-the wild-card pattern `_` in the left-hand side of a definition.
+Now that the syntax is slightly more pleasant:
+
+  * We refine `leftyPat` so it correctly handles the wild-card pattern `_` in
+  the left-hand side of a definition.
+
+  * We support ranges, except for those that specify a step size.
+
+  * We support list comprehensions.
 
 ++++++++++
 <p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>
