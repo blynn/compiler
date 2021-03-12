@@ -33,6 +33,14 @@ $(call rtsup,virtually,uniquely)
 marginally.c:marginally.hs virtually;time ./virtually < $< > $@
 methodically.c:methodically.hs marginally;time ./marginally < $< > $@
 party.c:party.hs methodically;time ./methodically < $< > $@
+
+define party
+$(1).c: $(2) $(addsuffix .hs, $(addprefix inn/, $3));cat $(addsuffix .hs, $(addprefix inn/, $3)) | time ./$(2) > $$@
+endef
+
+$(call party,multiparty,party,Base Ast Map Lexer Unify RTS party)
+$(call party,party1,party,Base Ast Map Lexer Unify RTS party1)
+
 crossly.c:crossly.hs methodically;time ./methodically < $< > $@
 precisely.c:precisely.hs crossly;time ./crossly < $< > $@
 

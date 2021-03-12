@@ -1,441 +1,11 @@
 -- Modules.
-infixr 9 .
-infixl 7 * , `div` , `mod`
-infixl 6 + , -
-infixr 5 ++
-infixl 4 <*> , <$> , <* , *>
-infix 4 == , /= , <=
-infixl 3 && , <|>
-infixl 2 ||
-infixl 1 >> , >>=
-infixr 0 $
-
-ffi "putchar" putChar :: Int -> IO Int
-ffi "getchar" getChar :: IO Int
-ffi "getargcount" getArgCount :: IO Int
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char
-
-libc = [r|
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
-|]
-
-class Functor f where fmap :: (a -> b) -> f a -> f b
-class Applicative f where
-  pure :: a -> f a
-  (<*>) :: f (a -> b) -> f a -> f b
-class Monad m where
-  return :: a -> m a
-  (>>=) :: m a -> (a -> m b) -> m b
-(<$>) = fmap
-liftA2 f x y = f <$> x <*> y
-(>>) f g = f >>= \_ -> g
-class Eq a where (==) :: a -> a -> Bool
-instance Eq Int where (==) = intEq
-instance Eq Char where (==) = charEq
-($) f x = f x
-id x = x
-const x y = x
-flip f x y = f y x
-(&) x f = f x
-class Ord a where (<=) :: a -> a -> Bool
-compare x y = if x <= y then if y <= x then EQ else LT else GT
-instance Ord Int where (<=) = intLE
-instance Ord Char where (<=) = charLE
-data Ordering = LT | GT | EQ
-instance Ord a => Ord [a] where
-  xs <= ys = case xs of
-    [] -> True
-    x:xt -> case ys of
-      [] -> False
-      y:yt -> case compare x y of
-        LT -> True
-        GT -> False
-        EQ -> xt <= yt
-data Maybe a = Nothing | Just a
-data Either a b = Left a | Right b
-fpair (x, y) f = f x y
-fst (x, y) = x
-snd (x, y) = y
-uncurry f (x, y) = f x y
-first f (x, y) = (f x, y)
-second f (x, y) = (x, f y)
-not a = if a then False else True
-x /= y = not $ x == y
-(.) f g x = f (g x)
-(||) f g = if f then True else g
-(&&) f g = if f then g else False
-flst xs n c = case xs of [] -> n; h:t -> c h t
-instance Eq a => Eq [a] where
-  xs == ys = case xs of
-    [] -> case ys of
-      [] -> True
-      _ -> False
-    x:xt -> case ys of
-      [] -> False
-      y:yt -> x == y && xt == yt
-take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t
-maybe n j m = case m of Nothing -> n; Just x -> j x
-instance Functor Maybe where fmap f = maybe Nothing (Just . f)
-instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
-instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
-instance Alternative Maybe where empty = Nothing ; x <|> y = maybe y Just x
-foldr c n l = flst l n (\h t -> c h(foldr c n t))
-length = foldr (\_ n -> n + 1) 0
-mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
-mapM_ f = foldr ((>>) . f) (pure ())
-foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
-instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
-instance Monad IO where return = ioPure ; (>>=) = ioBind
-instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ $ putChar . ord
-getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
-interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
-undefined = error "undefined"
-foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
-foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
-foldl1 f (h:t) = foldl f h t
-elem k xs = foldr (\x t -> x == k || t) False xs
-find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
-(++) = flip (foldr (:))
-concat = foldr (++) []
-map = flip (foldr . ((:) .)) []
-instance Functor [] where fmap = map
-instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
-instance Monad [] where return = (:[]); (>>=) = flip concatMap
-concatMap = (concat .) . map
-lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
-filter f = foldr (\x xs -> if f x then x:xs else xs) []
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
-intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
-last xs = flst xs undefined last' where last' x xt = flst xt x \y yt -> last' y yt
-init (x:xt) = flst xt [] \_ _ -> x : init xt
-intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
-intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
-all f = foldr (&&) True . map f
-any f = foldr (||) False . map f
-zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt
-zip = zipWith (,)
-data State s a = State (s -> (a, s))
-runState (State f) = f
-instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
-instance Applicative (State s) where
-  pure a = State (a,)
-  (State f) <*> (State x) = State \s -> fpair (f s) \g s' -> first g $ x s'
-instance Monad (State s) where
-  return a = State (a,)
-  (State h) >>= f = State $ uncurry (runState . f) . h
-evalState m s = fst $ runState m s
-get = State \s -> (s, s)
-put n = State \s -> ((), n)
-either l r e = case e of Left x -> l x; Right x -> r x
-instance Functor (Either a) where fmap f e = either Left (Right . f) e
-instance Applicative (Either a) where
-  pure = Right
-  ef <*> ex = case ef of
-    Left s -> Left s
-    Right f -> either Left (Right . f) ex
-instance Monad (Either a) where
-  return = Right
-  ex >>= f = either Left f ex
-class Alternative f where
-  empty :: f a
-  (<|>) :: f a -> f a -> f a
-asum = foldr (<|>) empty
-(*>) = liftA2 \x y -> y
-(<*) = liftA2 \x y -> x
-many p = liftA2 (:) p (many p) <|> pure []
-some p = liftA2 (:) p (many p)
-sepBy1 p sep = liftA2 (:) p (many (sep *> p))
-sepBy p sep = sepBy1 p sep <|> pure []
-between x y p = x *> (p <* y)
-
--- Map.
-data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
-instance Functor (Map k) where
-  fmap f m = case m of
-    Tip -> Tip
-    Bin sz k x l r -> Bin sz k (f x) (fmap f l) (fmap f r)
-size m = case m of Tip -> 0 ; Bin sz _ _ _ _ -> sz
-node k x l r = Bin (1 + size l + size r) k x l r
-singleton k x = Bin 1 k x Tip Tip
-singleL k x l (Bin _ rk rkx rl rr) = node rk rkx (node k x l rl) rr
-doubleL k x l (Bin _ rk rkx (Bin _ rlk rlkx rll rlr) rr) =
-  node rlk rlkx (node k x l rll) (node rk rkx rlr rr)
-singleR k x (Bin _ lk lkx ll lr) r = node lk lkx ll (node k x lr r)
-doubleR k x (Bin _ lk lkx ll (Bin _ lrk lrkx lrl lrr)) r =
-  node lrk lrkx (node lk lkx ll lrl) (node k x lrr r)
-balance k x l r = f k x l r where
-  f | size l + size r <= 1 = node
-    | 5 * size l + 3 <= 2 * size r = case r of
-      Tip -> node
-      Bin sz _ _ rl rr -> if 2 * size rl + 1 <= 3 * size rr
-        then singleL
-        else doubleL
-    | 5 * size r + 3 <= 2 * size l = case l of
-      Tip -> node
-      Bin sz _ _ ll lr -> if 2 * size lr + 1 <= 3 * size ll
-        then singleR
-        else doubleR
-    | True = node
-insert kx x t = case t of
-  Tip -> singleton kx x
-  Bin sz ky y l r -> case compare kx ky of
-    LT -> balance ky y (insert kx x l) r
-    GT -> balance ky y l (insert kx x r)
-    EQ -> Bin sz kx x l r
-insertWith f kx x t = case t of
-  Tip -> singleton kx x
-  Bin sy ky y l r -> case compare kx ky of
-    LT -> balance ky y (insertWith f kx x l) r
-    GT -> balance ky y l (insertWith f kx x r)
-    EQ -> Bin sy kx (f x y) l r
-mlookup kx t = case t of
-  Tip -> Nothing
-  Bin _ ky y l r -> case compare kx ky of
-    LT -> mlookup kx l
-    GT -> mlookup kx r
-    EQ -> Just y
-fromList = foldl (\t (k, x) -> insert k x t) Tip
-member k t = maybe False (const True) $ mlookup k t
-t ! k = maybe undefined id $ mlookup k t
-
-foldrWithKey f = go where
-  go z t = case t of
-    Tip -> z
-    Bin _ kx x l r -> go (f kx x (go z r)) l
-
-toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
-keys = map fst . toAscList
-
--- Syntax tree.
-data Type = TC String | TV String | TAp Type Type
-arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
-data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
-data Constr = Constr String [Type]
-data Pred = Pred String Type
-data Qual = Qual [Pred] Type
-noQual = Qual []
-
-instance Eq Type where
-  (TC s) == (TC t) = s == t
-  (TV s) == (TV t) = s == t
-  (TAp a b) == (TAp c d) = a == c && b == d
-  _ == _ = False
-
-instance Eq Pred where (Pred s a) == (Pred t b) = s == t && a == b
-
-data Instance = Instance
-  -- Type, e.g. Int for Eq Int.
-  Type
-  -- Dictionary name, e.g. "{Eq Int}"
-  String
-  -- Context.
-  [Pred]
-  -- Method definitions
-  (Map String Ast)
-
-data Tycl = Tycl
-  -- | Method names and their default implementations.
-  -- Their types are kept in a global table.
-  [(String, Maybe Ast)]
-  -- | Instances.
-  [Instance]
-
-data Neat = Neat
-  (Map String Tycl)
-  -- | Top-level definitions
-  [(String, Ast)]
-  -- | Typed ASTs, ready for compilation, including ADTs and methods,
-  -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  [(String, (Qual, Ast))]
-  -- | Data constructor table.
-  (Map String [Constr])  -- AdtTab
-  -- | FFI declarations.
-  [(String, Type)]
-  -- | Exports.
-  [(String, String)]
-  -- | Module imports.
-  [String]
-
-patVars = \case
-  PatLit _ -> []
-  PatVar s m -> s : maybe [] patVars m
-  PatCon _ args -> concat $ patVars <$> args
-
-fvPro bound expr = case expr of
-  V s | not (elem s bound) -> [s]
-  A x y -> fvPro bound x `union` fvPro bound y
-  L s t -> fvPro (s:bound) t
-  Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
-  _ -> []
-
-overFree s f t = case t of
-  E _ -> t
-  V s' -> if s == s' then f t else t
-  A x y -> A (overFree s f x) (overFree s f y)
-  L s' t' -> if s == s' then t else L s' $ overFree s f t'
-
-overFreePro s f t = case t of
-  E _ -> t
-  V s' -> if s == s' then f t else t
-  A x y -> A (overFreePro s f x) (overFreePro s f y)
-  L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
-  Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
-  Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
-
-beta s t x = overFree s (const t) x
-
-showParen b f = if b then ('(':) . f . (')':) else f
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
-showInt n = if 0 == n then ('0':) else showInt' n
-par = showParen True
-showType t = case t of
-  TC s -> (s++)
-  TV s -> (s++)
-  TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
-  TAp a b -> par $ showType a . (' ':) . showType b
-showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
-
--- Lexer.
-data LexState = LexState String (Int, Int)
-data Lexer a = Lexer (LexState -> Either String (a, LexState))
-instance Functor Lexer where fmap f (Lexer x) = Lexer $ fmap (first f) . x
-instance Applicative Lexer where
-  pure x = Lexer \inp -> Right (x, inp)
-  f <*> x = Lexer \inp -> case lex f inp of
-    Left e -> Left e
-    Right (fun, t) -> case lex x t of
-      Left e -> Left e
-      Right (arg, u) -> Right (fun arg, u)
-instance Monad Lexer where
-  return = pure
-  x >>= f = Lexer \inp -> case lex x inp of
-    Left e -> Left e
-    Right (a, t) -> lex (f a) t
-instance Alternative Lexer where
-  empty = Lexer \_ -> Left ""
-  (<|>) x y = Lexer \inp -> either (const $ lex y inp) Right $ lex x inp
-
-lex (Lexer f) inp = f inp
-advanceRC x (r, c)
-  | n `elem` [10, 11, 12, 13] = (r + 1, 1)
-  | n == 9 = (r, (c + 8)`mod`8)
-  | True = (r, c + 1)
-  where n = ord x
-pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp)
-sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
-  if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
-char c = sat (c ==)
-
-data Token = Reserved String
-  | VarId String | VarSym String | ConId String | ConSym String
-  | Lit Extra
-
-hexValue d
-  | d <= '9' = ord d - ord '0'
-  | d <= 'F' = 10 + ord d - ord 'A'
-  | d <= 'f' = 10 + ord d - ord 'a'
-isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
-isNewline c = ord c `elem` [10, 11, 12, 13]
-isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
-dashes = char '-' *> some (char '-')
-comment = dashes *> (sat isNewline <|> sat (not . isSymbol) *> many (sat $ not . isNewline) *> sat isNewline)
-small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_')
-large = sat \x -> (x <= 'Z') && ('A' <= x)
-hexit = sat \x -> (x <= '9') && ('0' <= x)
-  || (x <= 'F') && ('A' <= x)
-  || (x <= 'f') && ('a' <= x)
-digit = sat \x -> (x <= '9') && ('0' <= x)
-decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
-hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
-
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
-tokOne delim = escape <|> sat (delim /=)
-
-tokChar = between (char '\'') (char '\'') (tokOne '\'')
-tokStr = between (char '"') (char '"') $ many (tokOne '"')
-integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
-literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
-varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
-  ck s = (if elem s
-    ["ffi", "export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
-    then Reserved else VarId) s
-varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
-  ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s
-
-conId = fmap ConId $ liftA2 (:) large $ many (small <|> large <|> digit <|> char '\'')
-conSym = fmap ck $ liftA2 (:) (char ':') $ many $ sat isSymbol where
-  ck s = (if elem s [":", "::"] then Reserved else ConSym) s
-special = Reserved . (:"") <$> asum (char <$> "(),;[]`{}")
-
-rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> sat (const True) <*> rawBody
-rawQQ = char '[' *> char 'r' *> char '|' *> (Lit . StrCon <$> rawBody)
-lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
-  <|> special <|> literal
-
-whitespace = many (sat isSpace <|> comment)
-lexemes = whitespace *> many (lexeme <* whitespace)
-
-getPos = Lexer \st@(LexState _ rc) -> Right (rc, st)
-posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace)
-
--- Layout.
-data Landin = Curly Int | Angle Int | PL ((Int, Int), Token)
-beginLayout xs = case xs of
-  [] -> [Curly 0]
-  ((r', _), Reserved "{"):_ -> margin r' xs
-  ((r', c'), _):_ -> Curly c' : margin r' xs
-
-landin ls@((_, Reserved "module"):_) = embrace ls
-landin ls@(((r, _), Reserved "{"):_) = margin r ls
-landin ls@(((r, c), _):_) = Curly c : margin r ls
-landin [] = []
-
-margin r ls@(((r', c), _):_) | r /= r' = Angle c : embrace ls
-margin r ls = embrace ls
-
-embrace ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
-  PL x : beginLayout rest
-embrace ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
-  PL x : PL y : beginLayout rest
-embrace (x@((r,_),_):xt) = PL x : margin r xt
-embrace [] = []
-
-data Ell = Ell [Landin] [Int]
-insPos x ts ms = Right (x, Ell ts ms)
-ins w = insPos ((0, 0), Reserved w)
-
-ell (Ell toks cols) = case toks of
-  t:ts -> case t of
-    Angle n -> case cols of
-      m:ms | m == n -> ins ";" ts (m:ms)
-           | n + 1 <= m -> ins "}" (Angle n:ts) ms
-      _ -> ell $ Ell ts cols
-    Curly n -> case cols of
-      m:ms | m + 1 <= n -> ins "{" ts (n:m:ms)
-      [] | 1 <= n -> ins "{" ts [n]
-      _ -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) cols
-    PL x -> case snd x of
-      Reserved "}" -> case cols of
-        0:ms -> ins "}" ts ms
-        _ -> Left "unmatched }"
-      Reserved "{" -> insPos x ts (0:cols)
-      _ -> insPos x ts cols
-  [] -> case cols of
-    [] -> Left "EOF"
-    m:ms | m /= 0 -> ins "}" [] ms
-    _ -> Left "missing }"
-
-parseErrorRule (Ell toks cols) = case cols of
-  m:ms | m /= 0 -> Right $ Ell toks ms
-  _ -> Left "missing }"
+module Main where
+import Base
+import Map
+import Ast
+import Lexer
+import Unify
+import RTS
 
 -- Parser.
 data ParseState = ParseState Ell (Map String (Int, Assoc))
@@ -997,55 +567,6 @@ patternCompile dcs t = optiApp $ evalState (go t) 0 where
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
     Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
 
--- Unification and matching.
-apply sub t = case t of
-  TC v -> t
-  TV v -> maybe t id $ lookup v sub
-  TAp a b -> TAp (apply sub a) (apply sub b)
-
-(@@) s1 s2 = map (second (apply s1)) s2 ++ s1
-
-occurs s t = case t of
-  TC v -> False
-  TV v -> s == v
-  TAp a b -> occurs s a || occurs s b
-
-varBind s t = case t of
-  TC v -> Right [(s, t)]
-  TV v -> Right $ if v == s then [] else [(s, t)]
-  TAp a b -> if occurs s t then Left "occurs check" else Right [(s, t)]
-
-ufail t u = Left $ ("unify fail: "++) . showType t . (" vs "++) . showType u $ ""
-
-mgu t u = case t of
-  TC a -> case u of
-    TC b -> if a == b then Right [] else ufail t u
-    TV b -> varBind b t
-    TAp a b -> ufail t u
-  TV a -> varBind a u
-  TAp a b -> case u of
-    TC b -> ufail t u
-    TV b -> varBind b t
-    TAp c d -> mgu a c >>= unify b d
-
-unify a b s = (@@ s) <$> mgu (apply s a) (apply s b)
-
-merge s1 s2 = if all (\v -> apply s1 (TV v) == apply s2 (TV v))
-  $ map fst s1 `intersect` map fst s2 then Just $ s1 ++ s2 else Nothing
-
-match h t = case h of
-  TC a -> case t of
-    TC b | a == b -> Just []
-    _ -> Nothing
-  TV a -> Just [(a, t)]
-  TAp a b -> case t of
-    TAp c d -> case match a c of
-      Nothing -> Nothing
-      Just ac -> case match b d of
-        Nothing -> Nothing
-        Just bd -> merge ac bd
-    _ -> Nothing
-
 -- Type inference.
 instantiate' t n tab = case t of
   TC s -> ((t, n), tab)
@@ -1189,7 +710,7 @@ inferDefs tycl defs typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
-inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
+inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
     let
       checkDefault (s, Just rawExpr) = do
@@ -1219,7 +740,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perCl
               (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-              qc = typeOfMethod s
+              Just qc = mlookup s typed
               (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
@@ -1241,10 +762,6 @@ neatNew = Neat Tip [] [] Tip [] [] []
 
 neatPrim = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
 
-typedAsts (Neat _ _ tas _ _ _ _) = tas
-typeclasses (Neat tcs _ _ _ _ _ _) = tcs
-dataCons (Neat _ _ _ dcs _ _ _) = dcs
-
 soloPrim = singleton "#" ((qs, as), ([], [])) where
   qs = fst <$> fromList (typedAsts neatPrim)
   as = second snd <$> typedAsts neatPrim
@@ -1255,19 +772,10 @@ tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
 
-null xs = case xs of
-  [] -> True
-  _ -> False
-
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat rawIenv rawDefs typed adtTab ffis ffes rawImps = tab ! name
-      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-        [] -> Tycl (findSigs cl) is
-        _ -> Tycl sigs is
-      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
-      ienv = fromList $ fillSigs <$> toAscList rawIenv
+      Neat ienv rawDefs typed adtTab ffis ffes rawImps = tab ! name
       imps = "#":rawImps
       defs = coalesce rawDefs
       locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
@@ -1275,12 +783,11 @@ inferModule tab acc name = case mlookup name acc of
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
       dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
-      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
     acc' <- foldM (inferModule tab) acc imps
     let linker = astLink (fromList typed) locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
     (qs, lambF) <- inferDefs tycl depdefs (fromList typed)
-    mets <- inferTypeclasses tycl typeOfMethod qs dcs linker ienv
+    mets <- inferTypeclasses tycl qs dcs linker ienv
     Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
   Just _ -> Right acc
 
@@ -1409,36 +916,6 @@ hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
     in (symtab, (hp, mem))
 
 -- Code generation.
-argList t = case t of
-  TC s -> [TC s]
-  TV s -> [TV s]
-  TAp (TC "IO") (TC u) -> [TC u]
-  TAp (TAp (TC "->") x) y -> x : argList y
-
-cTypeName (TC "()") = "void"
-cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
-
-ffiDeclare (name, t) = let tys = argList t in concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
-
-ffiArgs n t = case t of
-  TC s -> ("", ((True, s), n))
-  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
-
-ffiDefine n ffis = case ffis of
-  [] -> id
-  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-    longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
-
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
-
 codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem'++)))
   where
@@ -1491,55 +968,6 @@ compile s = either id id do
       . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
     $ mainStr
 
-genExport m n = ("void f"++) . showInt n . ("("++)
-  . foldr (.) id (intersperse (',':) xs)
-  . ("){rts_reduce("++)
-  . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
-  . (");}\n"++)
-  where
-  xs = map ((('x':) .) . showInt) [0..m - 1]
-  rt = ("root["++) . showInt n . ("]"++)
-
-arrCount = \case
-  TAp (TAp (TC "->") _) y -> 1 + arrCount y
-  _ -> 0
-
--- Main VM loop.
-comdefsrc = [r|
-F x = "foreign(arg(1));"
-Y x = x "sp[1]"
-Q x y z = z(y x)
-QQ f a b c d = d(c(b(a(f))))
-S x y z = x z(y z)
-B x y z = x (y z)
-C x y z = x z y
-R x y z = y z x
-V x y z = z x y
-T x y = y x
-K x y = "_I" x
-I x = "sp[1] = arg(1); sp++;"
-CONS x y z w = w x y
-NUM x y = y "sp[1]"
-DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
-DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
-DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
-DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
-DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
-ADD x y = "_NUM" "num(1) + num(2)"
-SUB x y = "_NUM" "num(1) - num(2)"
-MUL x y = "_NUM" "num(1) * num(2)"
-DIV x y = "_NUM" "num(1) / num(2)"
-MOD x y = "_NUM" "num(1) % num(2)"
-EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
-U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
-U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-REF x y = y "sp[1]"
-READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
-END = "return;"
-|]
 comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
@@ -1550,88 +978,6 @@ comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
     Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
-
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
-void *malloc(unsigned long);
-enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<24 };
-static u *mem, *altmem, *sp, *spTop, hp;
-static inline u isAddr(u n) { return n>=128; }
-static u evac(u n) {
-  if (!isAddr(n)) return n;
-  u x = mem[n];
-  while (isAddr(x) && mem[x] == _T) {
-    mem[n] = mem[n + 1];
-    mem[n + 1] = mem[x + 1];
-    x = mem[n];
-  }
-  if (isAddr(x) && mem[x] == _K) {
-    mem[n + 1] = mem[x + 1];
-    x = mem[n] = _I;
-  }
-  u y = mem[n + 1];
-  switch(x) {
-    case FORWARD: return y;
-    case REDUCING:
-      mem[n] = FORWARD;
-      mem[n + 1] = hp;
-      hp += 2;
-      return mem[n + 1];
-    case _I:
-      mem[n] = REDUCING;
-      y = evac(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = _I;
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
-    default: break;
-  }
-  u z = hp;
-  hp += 2;
-  mem[n] = FORWARD;
-  mem[n + 1] = z;
-  altmem[z] = x;
-  altmem[z + 1] = y;
-  return z;
-}
-
-static void gc() {
-  hp = 128;
-  u di = hp;
-  sp = altmem + TOP - 1;
-  for(u *r = root; *r; r++) *r = evac(*r);
-  *sp = evac(*spTop);
-  while (di < hp) {
-    u x = altmem[di] = evac(altmem[di]);
-    di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
-    di++;
-  }
-  spTop = sp;
-  u *tmp = mem;
-  mem = altmem;
-  altmem = tmp;
-}
-
-static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
-static inline u arg(u n) { return mem[sp [n] + 1]; }
-static inline int num(u n) { return mem[arg(n) + 1]; }
-static inline void lazy2(u height, u f, u x) {
-  u *p = mem + sp[height];
-  *p = f;
-  *++p = x;
-  sp += height - 1;
-  *sp = f;
-}
-static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-typedef unsigned long long uu;
-static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
-static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
-|]
 
 runFun = ([r|static void run() {
   for(;;) {
@@ -1659,20 +1005,6 @@ void rts_reduce(u n) {
 }
 |]++)
 
-genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
-  E (StrCon s) -> (s++)
-  A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
-genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
-genComb (s, (args, body)) = let
-  argc = ('(':) . showInt (length args)
-  m = zip args [1..]
-  in ("case _"++) . (s++) . (':':) . (case body of
-    A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
-    A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-    E (StrCon s) -> (s++)
-  ) . ("break;\n"++)
-
 main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
@@ -1680,38 +1012,4 @@ main = getArgs >>= \case
   _ -> interact compile
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n - 1]
-
-iterate f x = x : iterate f (f x)
-takeWhile _ [] = []
-takeWhile p xs@(x:xt)
-  | p x  = x : takeWhile p xt
-  | True = []
-
-class Enum a where
-  succ           :: a -> a
-  pred           :: a -> a
-  toEnum         :: Int -> a
-  fromEnum       :: a -> Int
-  enumFrom       :: a -> [a]
-  enumFromTo     :: a -> a -> [a]
-instance Enum Int where
-  succ = (+1)
-  pred = (+(0-1))
-  toEnum = id
-  fromEnum = id
-  enumFrom = iterate succ
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
-instance Enum Char where
-  succ = chr . (+1) . ord
-  pred = chr . (+(0-1)) . ord
-  toEnum = chr
-  fromEnum = ord
-  enumFrom = iterate succ
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
-
-(+) = intAdd
-(-) = intSub
-(*) = intMul
-div = intDiv
-mod = intMod
+  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n-1]
