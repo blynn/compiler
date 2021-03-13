@@ -10,10 +10,10 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
 
-ffi "putchar" putChar :: Int -> IO Int
-ffi "getchar" getChar :: IO Int
-ffi "getargcount" getArgCount :: IO Int
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char
+foreign import ccall "putchar" putChar :: Int -> IO Int
+foreign import ccall "getchar" getChar :: IO Int
+foreign import ccall "getargcount" getArgCount :: IO Int
+foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char
 
 libc = [r|
 static int env_argc;
@@ -214,7 +214,7 @@ keys = map fst . toAscList
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [Type]
@@ -309,21 +309,21 @@ data Lexer a = Lexer (LexState -> Either String (a, LexState))
 instance Functor Lexer where fmap f (Lexer x) = Lexer $ fmap (first f) . x
 instance Applicative Lexer where
   pure x = Lexer \inp -> Right (x, inp)
-  f <*> x = Lexer \inp -> case lex f inp of
+  f <*> x = Lexer \inp -> case lexer f inp of
     Left e -> Left e
-    Right (fun, t) -> case lex x t of
+    Right (fun, t) -> case lexer x t of
       Left e -> Left e
       Right (arg, u) -> Right (fun arg, u)
 instance Monad Lexer where
   return = pure
-  x >>= f = Lexer \inp -> case lex x inp of
+  x >>= f = Lexer \inp -> case lexer x inp of
     Left e -> Left e
-    Right (a, t) -> lex (f a) t
+    Right (a, t) -> lexer (f a) t
 instance Alternative Lexer where
   empty = Lexer \_ -> Left ""
-  (<|>) x y = Lexer \inp -> either (const $ lex y inp) Right $ lex x inp
+  (<|>) x y = Lexer \inp -> either (const $ lexer y inp) Right $ lexer x inp
 
-lex (Lexer f) inp = f inp
+lexer (Lexer f) inp = f inp
 advanceRC x (r, c)
   | n `elem` [10, 11, 12, 13] = (r + 1, 1)
   | n == 9 = (r, (c + 8)`mod`8)
@@ -365,7 +365,7 @@ integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   ck s = (if elem s
-    ["ffi", "export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+    ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
     then Reserved else VarId) s
 varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
   ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s
@@ -460,7 +460,7 @@ instance Alternative Parser where
   empty = Parser \_ -> Left ""
   x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
 
-ro = E . Basic . comEnum
+ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
@@ -499,7 +499,7 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   in Neat tycl' fs typed dcs ffis ffes ims
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) ffes ims
+  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) ffes ims
 addDefs ds (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl (ds ++ fs) typed dcs ffis ffes ims
 addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
 addExport e f (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl fs typed dcs ffis ((e, f):ffes) ims
@@ -755,8 +755,10 @@ topdecls = braceSep
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
-  <|> res "export" *> (addExport <$> wantString <*> var)
+  <|> res "foreign" *>
+    (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
+    <|> res "export" *> var *> (addExport <$> wantString <*> var)
+    )
   <|> addDefs <$> def
   <|> fixity *> pure id
   <|> impDecl
@@ -765,7 +767,7 @@ topdecls = braceSep
 haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
 
 offside xs = Ell (landin xs) []
-program s = case lex posLexemes $ LexState s (1, 1) of
+program s = case lexer posLexemes $ LexState s (1, 1) of
   Left e -> Left e
   Right (xs, LexState [] _) -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
   Right (_, st) -> Left "unlexable"
@@ -845,7 +847,7 @@ debruijn n e = case e of
 data IntTree = Lf Extra | LfVar String | Nd IntTree IntTree
 data Sem = Defer | Closed IntTree | Need Sem | Weak Sem
 
-lf = Lf . Basic . comEnum
+lf = Lf . Basic
 
 ldef y = case y of
   Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
@@ -891,27 +893,25 @@ babs t = case t of
 
 nolam x = (\(Closed d) -> d) $ babs $ debruijn [] x
 
-isLeaf (Lf (Basic n)) c = n == comEnum c
-isLeaf _ _ = False
-
 optim t = case t of
-  Nd x y -> let p = optim x ; q = optim y in
-    if isLeaf p "I" then q else
-    if isLeaf q "I" then case p of
-      Lf (Basic c)
-        | c == comEnum "C" -> lf "T"
-        | c == comEnum "B" -> lf "I"
+  Nd x y -> go (optim x) (optim y)
+  _ -> t
+  where
+  go (Lf (Basic "I")) q = q
+  go p q@(Lf (Basic c)) = case c of
+    "I" -> case p of
+      Lf (Basic "C") -> lf "T"
+      Lf (Basic "B") -> lf "I"
       Nd p1 p2 -> case p1 of
-        Lf (Basic c)
-          | c == comEnum "B" -> p2
-          | c == comEnum "R" -> Nd (lf "T") p2
+        Lf (Basic "B") -> p2
+        Lf (Basic "R") -> Nd (lf "T") p2
         _ -> Nd (Nd p1 p2) q
       _ -> Nd p q
-    else if isLeaf q "T" then case p of
-      Nd x y -> if isLeaf x "B" && isLeaf y "C" then lf "V" else Nd p q
+    "T" -> case p of
+      Nd (Lf (Basic "B")) (Lf (Basic "C")) -> lf "V"
       _ -> Nd p q
-    else Nd p q
-  _ -> t
+    _ -> Nd p q
+  go p q = Nd p q
 
 freeCount v expr = case expr of
   E _ -> 0
@@ -1310,7 +1310,8 @@ optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
-  Basic i -> (comName i++)
+  Basic s -> (s++)
+  ForeignFun n -> ("FFI_"++) . showInt n
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)
@@ -1324,7 +1325,6 @@ showPat = \case
 showAst prec t = case t of
   E e -> showExtra e
   V s -> showVar s
-  A (E (Basic f)) (E (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
   A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
   L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
   Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
@@ -1334,7 +1334,6 @@ showAst prec t = case t of
 showTree prec t = case t of
   LfVar s -> showVar s
   Lf extra -> showExtra extra
-  Nd (Lf (Basic f)) (Lf (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
   Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
@@ -1383,7 +1382,8 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 
 enc t = case t of
   Lf n -> case n of
-    Basic c -> pure $ Code c
+    Basic c -> pure $ Code $ comEnum c
+    ForeignFun n -> Code <$> memget (Code $ comEnum "F", Code n)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -1444,16 +1444,20 @@ codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
   where
   (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
 
+codegen mods = (bigmap, mem) where
+  (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+  mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
+
+getIOType (Qual [] (TAp (TC "IO") t)) = Right t
+getIOType q = Left $ "main : " ++ showQual q ""
+
 ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 
 compile s = either id id do
   mods <- untangle s
   let
-    (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+    (bigmap, mem) = codegen mods
     (ffis, ffes) = foldr ffcat ([], []) $ toAscList mods
-    mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
-    getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-    getIOType q = Left $ "main : " ++ showQual q ""
     mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
       Just (Qual [] t) -> t
       _ -> error "TODO: report bad exports"
@@ -1478,7 +1482,7 @@ compile s = either id id do
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
     . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
     . ("static u root[]={" ++)
-    . foldr (\(x, (modName, funName)) f -> maybe undefined showInt (mlookup funName $ bigmap ! modName) . (", " ++) . f) id ffes
+    . foldr (\(modName, (_, ourName)) f -> maybe undefined showInt (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id ffes
     . ("0};\n" ++)
     . (libc++)
     . (preamble++)
@@ -1543,7 +1547,7 @@ END = "return;"
 comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
-comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
+comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
   Left e -> error e
   Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
     Left e -> error e

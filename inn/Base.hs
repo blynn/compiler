@@ -1,9 +1,9 @@
 module Base where
 
-ffi "putchar" putChar :: Int -> IO Int
-ffi "getchar" getChar :: IO Int
-ffi "getargcount" getArgCount :: IO Int
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char
+foreign import ccall "putchar" putChar :: Int -> IO Int
+foreign import ccall "getchar" getChar :: IO Int
+foreign import ccall "getargcount" getArgCount :: IO Int
+foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char
 
 infixr 9 .
 infixl 7 * , `div` , `mod`
@@ -147,6 +147,8 @@ sepBy1 p sep = liftA2 (:) p (many (sep *> p))
 sepBy p sep = sepBy1 p sep <|> pure []
 between x y p = x *> (p <* y)
 
+showParen b f = if b then ('(':) . f . (')':) else f
+
 iterate f x = x : iterate f (f x)
 takeWhile _ [] = []
 takeWhile p xs@(x:xt)
@@ -180,3 +182,8 @@ instance Enum Char where
 (*) = intMul
 div = intDiv
 mod = intMod
+
+instance (Eq a, Eq b) => Eq (a, b) where
+  (a1, b1) == (a2, b2) = a1 == a2 && b1 == b2
+instance (Ord a, Ord b) => Ord (a, b) where
+  (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)

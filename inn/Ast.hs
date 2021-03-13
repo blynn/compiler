@@ -4,7 +4,7 @@ import Map
 
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [Type]
@@ -82,7 +82,6 @@ overFreePro s f t = case t of
 
 beta s t x = overFree s (const t) x
 
-showParen b f = if b then ('(':) . f . (')':) else f
 showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
 showInt n = if 0 == n then ('0':) else showInt' n
 par = showParen True
@@ -96,3 +95,15 @@ showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
 typedAsts (Neat _ _ tas _ _ _ _) = tas
 typeclasses (Neat tcs _ _ _ _ _ _) = tcs
 dataCons (Neat _ _ _ dcs _ _ _) = dcs
+
+depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
+  if vertex `elem` visited then st else second (vertex:)
+    $ depthFirstSearch relation (vertex:visited, sequence) (relation vertex)
+
+spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
+  if vertex `elem` visited then st else second ((:setSequence) . (vertex:))
+    $ depthFirstSearch relation (vertex:visited, []) (relation vertex)
+
+scc ins outs = spanning . depthFirst where
+  depthFirst = snd . depthFirstSearch outs ([], [])
+  spanning   = snd . spanningSearch   ins  ([], [])

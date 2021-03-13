@@ -2,6 +2,8 @@ module RTS where
 
 import Base
 import Ast
+import Map
+import Parser
 
 libc = [r|
 static int env_argc;
@@ -185,3 +187,101 @@ genComb (s, (args, body)) = let
     A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
     E (StrCon s) -> (s++)
   ) . ("break;\n"++)
+
+comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
+combExpr = foldl1 A <$> some
+  (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
+comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
+  Left e -> error e
+  Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
+    Left e -> error e
+    Right (cs, _) -> cs
+comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
+comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
+
+runFun = ([r|static void run() {
+  for(;;) {
+    if (mem + hp > sp - 8) gc();
+    u x = *sp;
+    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+|]++)
+  . foldr (.) id (genComb <$> comdefs)
+  . ([r|
+    }
+  }
+}
+
+void rts_init() {
+  mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
+  hp = 128;
+  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
+  spTop = mem + TOP - 1;
+}
+
+void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
+}
+|]++)
+
+-- Primitives.
+primAdts =
+  [ (TC "()", [Constr "()" []])
+  , (TC "Bool", [Constr "True" [], Constr "False" []])
+  , (TAp (TC "[]") (TV "a"), [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
+  , (TAp (TAp (TC ",") (TV "a")) (TV "b"), [Constr "," [TV "a", TV "b"]])
+  ]
+
+prims = let
+  dyad s = TC s `arr` (TC s `arr` TC s)
+  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
+  bin s = A (ro "Q") (ro s)
+  in map (second (first noQual)) $
+    [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
+    , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
+    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
+    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
+
+    , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
+    , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
+    , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
+    , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
+    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
+    , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
+    , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
+    , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
+    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
+      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
+      A (ro "T") (ro "READREF")))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))),
+      A (A (ro "R") (ro "WRITEREF")) (ro "B")))
+    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
+    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
+    , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
+    ]
+    ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
+      [ ("intAdd", "ADD")
+      , ("intSub", "SUB")
+      , ("intMul", "MUL")
+      , ("intDiv", "DIV")
+      , ("intMod", "MOD")
+      , ("intQuot", "DIV")
+      , ("intRem", "MOD")
+      ]
+    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
+      [ ("wordAdd", "ADD")
+      , ("wordSub", "SUB")
+      , ("wordMul", "MUL")
+      , ("wordDiv", "U_DIV")
+      , ("wordMod", "U_MOD")
+      , ("wordQuot", "U_DIV")
+      , ("wordRem", "U_MOD")
+      ]

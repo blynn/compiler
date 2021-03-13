@@ -216,7 +216,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic Int | Const Int | ChrCon Char | StrCon String
+data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [Type]
@@ -465,7 +465,7 @@ instance Alternative Parser where
   empty = Parser \_ -> Left ""
   x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
 
-ro = E . Basic . comEnum
+ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
@@ -504,7 +504,7 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   in Neat tycl' fs typed dcs ffis exs
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ A (ro "F") (E $ Basic $ length ffis))) : typed) dcs ((foreignname, t):ffis) exs
+  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) exs
 addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (ds ++ fs) typed dcs ffis exs
 addExport e f (Neat tycl fs typed dcs ffis exs) = Neat tycl fs typed dcs ffis ((e, f):exs)
 
@@ -757,6 +757,10 @@ topdecls = braceSep
   (   adt
   <|> classDecl
   <|> instDecl
+  <|> res "foreign" *>
+    (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
+    <|> res "export" *> var *> (addExport <$> wantString <*> var)
+    )
   <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
   <|> res "export" *> (addExport <$> wantString <*> var)
   <|> addDefs <$> def
@@ -843,7 +847,7 @@ debruijn n e = case e of
 data IntTree = Lf Extra | LfVar String | Nd IntTree IntTree
 data Sem = Defer | Closed IntTree | Need Sem | Weak Sem
 
-lf = Lf . Basic . comEnum
+lf = Lf . Basic
 
 ldef y = case y of
   Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
@@ -889,27 +893,25 @@ babs t = case t of
 
 nolam x = (\(Closed d) -> d) $ babs $ debruijn [] x
 
-isLeaf (Lf (Basic n)) c = n == comEnum c
-isLeaf _ _ = False
-
 optim t = case t of
-  Nd x y -> let p = optim x ; q = optim y in
-    if isLeaf p "I" then q else
-    if isLeaf q "I" then case p of
-      Lf (Basic c)
-        | c == comEnum "C" -> lf "T"
-        | c == comEnum "B" -> lf "I"
+  Nd x y -> go (optim x) (optim y)
+  _ -> t
+  where
+  go (Lf (Basic "I")) q = q
+  go p q@(Lf (Basic c)) = case c of
+    "I" -> case p of
+      Lf (Basic "C") -> lf "T"
+      Lf (Basic "B") -> lf "I"
       Nd p1 p2 -> case p1 of
-        Lf (Basic c)
-          | c == comEnum "B" -> p2
-          | c == comEnum "R" -> Nd (lf "T") p2
+        Lf (Basic "B") -> p2
+        Lf (Basic "R") -> Nd (lf "T") p2
         _ -> Nd (Nd p1 p2) q
       _ -> Nd p q
-    else if isLeaf q "T" then case p of
-      Nd x y -> if isLeaf x "B" && isLeaf y "C" then lf "V" else Nd p q
+    "T" -> case p of
+      Nd (Lf (Basic "B")) (Lf (Basic "C")) -> lf "V"
       _ -> Nd p q
-    else Nd p q
-  _ -> t
+    _ -> Nd p q
+  go p q = Nd p q
 
 freeCount v expr = case expr of
   E _ -> 0
@@ -1222,7 +1224,8 @@ optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
-  Basic i -> (comName i++)
+  Basic s -> (s++)
+  ForeignFun n -> ("FFI_"++) . showInt n
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)
@@ -1235,7 +1238,6 @@ showPat = \case
 showAst prec t = case t of
   E e -> showExtra e
   V s -> showVar s
-  A (E (Basic f)) (E (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
   A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
   L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
   Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
@@ -1245,7 +1247,6 @@ showAst prec t = case t of
 showTree prec t = case t of
   LfVar s -> showVar s
   Lf extra -> showExtra extra
-  Nd (Lf (Basic f)) (Lf (Basic c)) | f == comEnum "F" -> ("FFI_"++) . showInt c
   Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
@@ -1290,7 +1291,8 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 
 enc t = case t of
   Lf n -> case n of
-    Basic c -> pure $ Right c
+    Basic c -> pure $ Right $ comEnum c
+    ForeignFun n -> Right <$> memget (Right $ comEnum "F", Right n)
     Const c -> Right <$> memget (Right $ comEnum "NUM", Right c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
