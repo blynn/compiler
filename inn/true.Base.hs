@@ -187,3 +187,7 @@ instance (Eq a, Eq b) => Eq (a, b) where
   (a1, b1) == (a2, b2) = a1 == a2 && b1 == b2
 instance (Ord a, Ord b) => Ord (a, b) where
   (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)
+
+null xs = case xs of
+  [] -> True
+  _ -> False

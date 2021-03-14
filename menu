@@ -15,6 +15,7 @@ c,Let me C
 pattern,Patterns | Guards
 miranda,Miranda
 mvp,Minimum Viable
+module,Modules
 web,WebCompiler
 eq,Equality
 para,Parametricity

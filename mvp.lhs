@@ -78,15 +78,47 @@ experiment with hash consing. We reduce heap usage my maximizing sharing.
 However, it's not necessary a good idea, as this iteration of our compiler is
 appreciably slower!
 
-The code relies on `optiComb` ensuring each definition node has two children,
-or is a basic combinator.
+Consider definitions whose right-hand side is a lone variable. Our `optiComb`
+function follows lone variables so that:
+
+------------------------------------------------------------------------
+f = g
+g = h
+h = f
+x = (f, g, h)
+y = x
+z = y
+w = (x, y, z)
+------------------------------------------------------------------------
+
+compiles to:
+
+------------------------------------------------------------------------
+f = g
+h = g
+g = Y I
+x = (g, g, g)
+y = x
+z = x
+w = (x, x, x)
+------------------------------------------------------------------------
+
+That is, afterwards, a variable with a lone variable definition only appears on
+the right-hand side if its definition has been rewritten to `fix id`, so is no
+longer a lone variable. Our `asm` function relies on this, because it skips
+anything whose right-hand side is a lone variable.
+
+This causes a corner case to fail: our compiler crashes on attempting to export
+a symbol whose right-hand side remains a lone variable after `optiComb`.
+For the time being, we let this slide.
 
 We clean up top-level definitions as mutual recursion is now possible.
 
-We add support for definitions appearing in any order in a let block. This
-is trickier than at the top-level, because of shared variable bindings floating
+We add support for definitions appearing in any order in a let block. This is
+trickier than at the top-level, because of shared variable bindings floating
 around. Again, we find the strongly connected components to detect mutual
-dependencies, but instead of a table of addresses, we apply simple lambda lifting.
+dependencies, but instead of a table of addresses, we apply simple lambda
+lifting.
 See https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[Peyton Jones and Lester, 'Implementing Functional Languages: a tutorial'], Chapter 6.
 
 In brief, we order the members of each component arbitrarily and insert
@@ -228,6 +260,10 @@ Now that the syntax is slightly more pleasant:
   * We support ranges, except for those that specify a step size.
 
   * We support list comprehensions.
+
+  * To match GHC, we support `foreign import ccall` as well as `ffi`,
+  and `foreign export ccall` as well as `export`. In the next compiler,
+  we'll remove `ffi` and plain `export`.
 
 ++++++++++
 <p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>

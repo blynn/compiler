@@ -244,7 +244,7 @@ inferDefs tycl defs typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
-inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
+inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
     let
       checkDefault (s, Just rawExpr) = do
@@ -274,7 +274,7 @@ inferTypeclasses tycl typed dcs linker ienv = concat <$> mapM perClass (toAscLis
               (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-              Just qc = mlookup s typed
+              qc = typeOfMethod s
               (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
@@ -309,7 +309,12 @@ tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat ienv rawDefs typed adtTab ffis ffes rawImps = tab ! name
+      Neat rawIenv rawDefs typed adtTab ffis ffes rawImps = tab ! name
+      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
+        [] -> Tycl (findSigs cl) is
+        _ -> Tycl sigs is
+      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
+      ienv = fromList $ fillSigs <$> toAscList rawIenv
       imps = "#":rawImps
       defs = coalesce rawDefs
       locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
@@ -317,11 +322,12 @@ inferModule tab acc name = case mlookup name acc of
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
       dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
+      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
     acc' <- foldM (inferModule tab) acc imps
     let linker = astLink (fromList typed) locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
     (qs, lambF) <- inferDefs tycl depdefs (fromList typed)
-    mets <- inferTypeclasses tycl qs dcs linker ienv
+    mets <- inferTypeclasses tycl typeOfMethod qs dcs linker ienv
     Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
   Just _ -> Right acc
 

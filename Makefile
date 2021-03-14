@@ -2,7 +2,7 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp web
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
 
@@ -39,7 +39,7 @@ $(1).c: $(2) $(addsuffix .hs, $(addprefix inn/, $3));cat $(addsuffix .hs, $(addp
 endef
 
 $(call party,multiparty,party,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler party)
-$(call party,party1,party,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler1 party)
+$(call party,party1,multiparty,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler1 party)
 
 crossly.c:crossly.hs methodically;time ./methodically < $< > $@
 precisely.c:precisely.hs crossly;time ./crossly < $< > $@
