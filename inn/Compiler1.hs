@@ -88,7 +88,7 @@ classifyAlt v x = case v of
   PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
-  firstC = flst (toAscList tab) undefined (\h _ -> fst h)
+  firstC = case toAscList tab of ((con, _):_) -> con
   cs = maybe (error $ "bad constructor: " ++ firstC) id $ dcs firstC
   in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of
@@ -100,8 +100,8 @@ updateCaseSt dcs (acc, tab) alt = case alt of
   Left f -> (acc . genCase dcs tab . f, Tip)
   Right upd -> (acc, upd tab)
 
-rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip)
-  $ uncurry classifyAlt <$> as) \acc tab -> acc . genCase dcs tab $ V "fail#"
+rewriteCase dcs as = acc . genCase dcs tab $ V "fail#" where
+  (acc, tab) = foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as
 
 secondM f (a, b) = (a,) <$> f b
 patternCompile dcs t = optiApp $ evalState (go t) 0 where
@@ -119,16 +119,15 @@ instantiate' t n tab = case t of
   TV s -> case lookup s tab of
     Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
-  TAp x y ->
-    fpair (instantiate' x n tab) \(t1, n1) tab1 ->
-    fpair (instantiate' y n1 tab1) \(t2, n2) tab2 ->
-    ((TAp t1 t2, n2), tab2)
+  TAp x y -> let
+    ((t1, n1), tab1) = instantiate' x n tab
+    ((t2, n2), tab2) = instantiate' y n1 tab1
+    in ((TAp t1 t2, n2), tab2)
 
 instantiatePred (Pred s t) ((out, n), tab) = first (first ((:out) . Pred s)) (instantiate' t n tab)
 
-instantiate (Qual ps t) n =
-  fpair (foldr instantiatePred (([], n), []) ps) \(ps1, n1) tab ->
-  first (Qual ps1) (fst (instantiate' t n1 tab))
+instantiate (Qual ps t) n = first (Qual ps1) $ fst $ instantiate' t n1 tab where
+  ((ps1, n1), tab) = foldr instantiatePred (([], n), []) ps
 
 proofApply sub a = case a of
   Proof (Pred cl ty) -> Proof (Pred cl $ apply sub ty)
@@ -138,24 +137,24 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn = fpair csn \cs n ->
-  let
-    va = TV (showInt n "")
-    insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
-  in case ast of
-    E x -> Right $ case x of
-      Const _ -> ((TC "Int", ast), csn)
-      ChrCon _ -> ((TC "Char", ast), csn)
-      StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
-      Link im s q -> insta q
-    V s -> maybe (Left $ "undefined: " ++ s) Right
-      $ (\t -> ((t, ast), csn)) <$> lookup s loc
-      <|> insta <$> mlookup s typed
-    A x y -> infer typed loc x (cs, n + 1) >>=
-      \((tx, ax), csn1) -> infer typed loc y csn1 >>=
-      \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
-      \cs -> Right ((va, A ax ay), (cs, n2))
-    L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+infer typed loc ast csn@(cs, n) = case ast of
+  E x -> Right $ case x of
+    Const _ -> ((TC "Int", ast), csn)
+    ChrCon _ -> ((TC "Char", ast), csn)
+    StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
+    Link im s q -> insta q
+  V s -> maybe (Left $ "undefined: " ++ s) Right
+    $ (\t -> ((t, ast), csn)) <$> lookup s loc
+    <|> insta <$> mlookup s typed
+  A x y -> infer typed loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
+    \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
+    \cs -> Right ((va, A ax ay), (cs, n2))
+  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+  where
+  va = TV (showInt n "")
+  insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
+    where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
   [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
@@ -427,31 +426,32 @@ enc t = case t of
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
 
-encTop t = enc t >>= \case
-  Code n -> pure n
-  other -> memget (Code $ comEnum "I", other)
-
 asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
   Tip combs
 
-hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
-  \symtab (_, (hp, f)) -> let
-    mem = (\case
-        Code n -> Right n
-        Local s -> Right $ symtab ! s
-        Global m s -> Left (m, s)
-      ) <$> f []
-    in (symtab, (hp, mem))
+hashcons hp combs = (symtab', (hp', (mem++)))
+  where
+  (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
+  symtab' = resolveLocal <$> symtab
+  mem = resolveLocal <$> memF []
+  resolveLocal = \case
+    Code n -> Right n
+    Local s -> resolveLocal $ symtab ! s
+    Global m s -> Left (m, s)
 
 codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . (mem'++)))
+  (insert name localmap bigmap, (hp', f . f'))
   where
-  (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
+  (localmap, (hp', f')) = hashcons hp $ optiComb lambs
 
-codegen mods = (bigmap, mem) where
+codegen mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
-  mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
+  bigmap' = (resolveGlobal <$>) <$> bigmap
+  mem = resolveGlobal <$> memF []
+  resolveGlobal = \case
+    Left (m, s) -> resolveGlobal $ (bigmap ! m) ! s
+    Right n -> n
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ showQual q ""

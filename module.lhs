@@ -222,6 +222,13 @@ compiler can better optimize locally defined primitives.
 To explore this solution, we copy `Compiler.hs` to `Compiler1.hs`, modify a few
 lines, and add a new `Makefile` rule.
 
+We also remove `encTop` and the I combinator insertion trick, and instead
+recursively resolve `Local` and `Global` symbols until we reach an address.
+This relies on `optiComb` removing cycles involving lone variables on the
+right-hand side, and the absence of cycles among module dependencies.
+
+While we're in the neighbourhood, we eliminate `flst` and `fpair`.
+
 ++++++++++
 <p><a onclick='hideshow("Compiler1");'>&#9654; Toggle `Compiler1.hs`</a></p><div id='Compiler1' style='display:none'>
 ++++++++++
