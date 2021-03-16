@@ -124,6 +124,32 @@ See https://www.microsoft.com/en-us/research/publication/implementing-functional
 In brief, we order the members of each component arbitrarily and insert
 variables so they can all reach each other; we automate what we did by hand
 when writing mutually recursive functions for older versions of our compiler.
+For example:
+
+------------------------------------------------------------------------
+let
+  a = foo a b c
+  b = bar a b c
+  c = baz a b c
+in qux a b c
+------------------------------------------------------------------------
+
+is rewritten to the cycle-free:
+
+------------------------------------------------------------------------
+let
+  a b c = foo (a b c) (b c) c
+  b c   = bar (a b c) (b c) c
+  c     = baz (a b c) (b c) c
+in qux (a b c) (b c) c
+------------------------------------------------------------------------
+
+A triangle appears on the left-hand side, explaining our choice of function
+name, and while the idea is straightforward, the implementation is tedious
+because we recurse in all sorts of ways over the non-empty tails of lists of
+variables, such as `[[a, b, c], [b, c], [c]]` and because we perform
+substitutions in the syntax tree while it still possibly contains case
+expressions and pattern matches.
 
 The `leftyPat` function supports patterns on the left-hand side of definitions,
 for example:

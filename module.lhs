@@ -158,6 +158,10 @@ an intermediate stage that is exactly the same except we use indentation
 instead of braces and semicolons. This would make it easier to compare against
 its successor "methodically".)
 
+------------------------------------------------------------------------
+cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs true.RTS.hs Compiler.hs party.hs
+------------------------------------------------------------------------
+
 ++++++++++
 <p><a onclick='hideshow("true.Base");'>&#9654; Toggle `Base.hs`</a></p><div id='true.Base' style='display:none'>
 ++++++++++
@@ -196,50 +200,6 @@ include::inn/Kiselyov.hs[]
 
 (There are more files, which I'll include if I get around to writing a tool to
 help show several source files in HTML. For now, see the git repo.)
-
-== Party1 ==
-
-Modules feel revolutionary. Our source becomes clearer, because modularization
-forces us to think about interdepedencies. (Behind the scenes, I refactored so
-breaking up was less hard to do.) And we can progress by making a small change
-to a small file, like our earliest compilers back in the day.
-
-However, we face new challenges. Addressing the limitations listed above will
-require effort. Prepending a little wrapper no longer suffices for GHC
-interoperability. And how are we going to keep track of many versions of many
-files?
-
-Our first answer to the last question is to tweak an existing filename and
-`Makefile` rule. The module name remains the same but we concatenate a
-different file.
-
-An alternative to our strange "#" module is to preload each `Neat` value with
-the built-in primitives, at the cost of an extra case when checking for
-ambiguity. Every module now defines and exports `True`, for example, and we
-must exempt such entities from duplicate detection. On the other hand, our
-compiler can better optimize locally defined primitives.
-
-To explore this solution, we copy `Compiler.hs` to `Compiler1.hs`, modify a few
-lines, and add a new `Makefile` rule.
-
-We also remove `encTop` and the I combinator insertion trick, and instead
-recursively resolve `Local` and `Global` symbols until we reach an address.
-This relies on `optiComb` removing cycles involving lone variables on the
-right-hand side, and the absence of cycles among module dependencies.
-
-While we're in the neighbourhood, we eliminate `flst` and `fpair`.
-
-++++++++++
-<p><a onclick='hideshow("Compiler1");'>&#9654; Toggle `Compiler1.hs`</a></p><div id='Compiler1' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Compiler1.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
 
 == GHC compatibility ==
 
@@ -290,7 +250,55 @@ $ ghci -XBlockArguments -XLambdaCase -XNoMonomorphismRestriction \
 
 Here, the `stub.o` has been created from `stub.c` with `clang -c` or similar.
 
-We gave the nice filenames to GHC and using the weird "true."-prefixed
-filenames for our compilers because they are more flexible: we can simply
-concatenate different files to feed to our compilers. An alternative is to
-manage different subdirectories containing the same filenames.
+We gave the nice filenames to GHC, which expects to find modules in files with
+matching names. Our compilers tolerate weird filename prefixes and suffixes
+because we can simply concatenate different files. An alternative is to manage
+different subdirectories containing the same filenames.
+
+== Party1 ==
+
+Modules feel revolutionary. Our source becomes clearer, because modularization
+forces us to think about interdepedencies. (Behind the scenes, I refactored so
+breaking up was less hard to do.) And we can progress by making a small change
+to a small file, like our earliest compilers back in the day.
+
+However, we face new challenges. Addressing the limitations listed above will
+require effort. Prepending a little wrapper no longer suffices for GHC
+interoperability. And how are we going to keep track of many versions of many
+files?
+
+Our first answer to the last question is to tweak an existing filename and
+`Makefile` rule. The module name remains the same but we concatenate a
+different file.
+
+An alternative to our strange "#" module is to preload each `Neat` value with
+the built-in primitives, at the cost of an extra case when checking for
+ambiguity. Every module now defines and exports `True`, for example, and we
+must exempt such entities from duplicate detection. On the other hand, our
+compiler can better optimize locally defined primitives.
+
+To explore this solution, we copy `Compiler.hs` to `Compiler1.hs`, modify a few
+lines, and add a new `Makefile` rule.
+
+We also remove `encTop` and the I combinator insertion trick, and instead
+recursively resolve `Local` and `Global` symbols until we reach an address.
+This relies on `optiComb` removing cycles involving lone variables on the
+right-hand side, and the absence of cycles among module dependencies.
+
+While we're in the neighbourhood, we eliminate `flst` and `fpair`.
+
+------------------------------------------------------------------------
+cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs true.RTS.hs Compiler1.hs party.hs
+------------------------------------------------------------------------
+
+++++++++++
+<p><a onclick='hideshow("Compiler1");'>&#9654; Toggle `Compiler1.hs`</a></p><div id='Compiler1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Compiler1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++

@@ -38,8 +38,15 @@ define party
 $(1).c: $(2) $(addsuffix .hs, $(addprefix inn/, $3));cat $(addsuffix .hs, $(addprefix inn/, $3)) | time ./$(2) > $$@
 endef
 
+define cat
+cat-$(1).hs: $(addsuffix .hs, $(addprefix inn/, $2));cat $(addsuffix .hs, $(addprefix inn/, $2)) > $$@
+endef
+
 $(call party,multiparty,party,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler party)
 $(call party,party1,multiparty,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler1 party)
+$(call party,party2,party1,true.Base Ast1 Map Parser1 Kiselyov Unify true.RTS1 Compiler2 party)
+
+$(call cat,party1,true.Base Ast Map Parser Kiselyov Unify true.RTS1 Compiler1 party)
 
 crossly.c:crossly.hs methodically;time ./methodically < $< > $@
 precisely.c:precisely.hs crossly;time ./crossly < $< > $@

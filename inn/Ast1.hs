@@ -1,3 +1,5 @@
+-- Record fields.
+-- Remove `overFreePro`.
 module Ast where
 import Base
 import Map
@@ -7,7 +9,7 @@ arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
-data Constr = Constr String [Type]
+data Constr = Constr String [(String, Type)]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
 noQual = Qual []
@@ -71,14 +73,6 @@ overFree s f t = case t of
   V s' -> if s == s' then f t else t
   A x y -> A (overFree s f x) (overFree s f y)
   L s' t' -> if s == s' then t else L s' $ overFree s f t'
-
-overFreePro s f t = case t of
-  E _ -> t
-  V s' -> if s == s' then f t else t
-  A x y -> A (overFreePro s f x) (overFreePro s f y)
-  L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
-  Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
-  Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
 
 beta s t x = overFree s (const t) x
 

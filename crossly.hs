@@ -338,7 +338,7 @@ data Neat = Neat
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   (Map String (Qual, Ast))
   -- | Data constructor table.
-  (Map String [Constr])  -- AdtTab
+  (Map String [Constr])
   -- | FFI declarations.
   [(String, Type)]
   -- | Exports.
