@@ -1,3 +1,6 @@
+-- Record fields.
+-- Deriving `Eq`, `Show`.
+-- Remove `flst`.
 module Parser where
 import Base
 import Ast
@@ -185,8 +188,37 @@ mkFFIHelper n t acc = case t of
   TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
-addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis ffes ims
+addAdt t cs ders (Neat tycl fs typed dcs ffis ffes ims) = foldr derive ast ders where
+  ast = Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis ffes ims
+  derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
+    [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
+    )]
+  derive "Show" = addInstance "Show" (mkPreds "Show") t
+    [("showsPrec", L "prec" $ L "x" $ Ca (V "x") $ map showCase cs
+    )]
+  derive der = error $ "bad deriving: " ++ der
+  showCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
+    in (PatCon con (mkPatVar "" <$> as), case args of
+      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
+      _ -> case con of
+        ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
+          (\f g -> A (A (V ".") f) g)
+          [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
+          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
+          , A (A (V "showsPrec") (E $ Const 11)) (V "2")
+          ]
+        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec")
+          $ A (A (V ".") $ A (V "++") (E $ StrCon con))
+          $ foldr (\f g -> A (A (V ".") f) g) (L "x" $ V "x")
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
+      )
+  mkPreds classId = Pred classId . TV <$> typeVars t
+  mkPatVar pre s = PatVar (pre ++ s) Nothing
+  eqCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
+    in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
+      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+         $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
+      , (PatVar "_" Nothing, V "False")])
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
@@ -470,7 +502,9 @@ constr = (\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType
   <|> Constr <$> wantConId <*>
     (   concat <$> between (res "{") (res "}") (fieldDecl `sepBy` res ",")
     <|> map ("",) <$> many aType)
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
+dclass = wantConId
+_deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
 
 impDecl = addImport <$> (res "import" *> wantConId)
 

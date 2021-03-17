@@ -299,6 +299,10 @@ gives a comprehensive overview of this strategy.
 
 http://www.cantab.net/users/antoni.diller/brackets/intro.html[Antoni Diller has interactive demos and more references].
 
+https://en.wikipedia.org/wiki/Chicken_or_the_egg[Ancient philosophers thought
+about bootstrapping compilers] but their progress was paltry. Or poultry, one
+might say.
+
 https://www.joachim-breitner.de/blog/748-Thoughts_on_bootstrapping_GHC[Joachim
 Breitner frets about the difficulty of bootstrapping GHC].
 

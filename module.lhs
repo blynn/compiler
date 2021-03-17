@@ -302,3 +302,136 @@ include::inn/Compiler1.hs[]
 ++++++++++
 </div>
 ++++++++++
+
+== Party2 ==
+
+For link:mvp.html[mutual let definitions] we wrote code that traversed a syntax
+tree to substitute certain variables. An alternative is to stick the tree in
+appropriate lambda abstraction nodes and apply them to syntax trees for the
+terms that will replace the variables. Namely, rely more on dynamic rather than
+static semantics. In some cases, the distinction disappears because beta-reduce
+may occur during optimization.
+
+One advantage of this approach is we can remove `overFreePro`, which is helper
+that traverses over syntax trees before case expressions and pattern matches
+have been transformed away.
+
+We add support for named record fields. We extend the parser to support
+data type declarations such as:
+
+------------------------------------------------------------------------
+data Foo = Foo { bar :: Int, baz :: String } | Qux
+------------------------------------------------------------------------
+
+One function definition per field suffices for accessors.
+For example, we genarate:
+
+------------------------------------------------------------------------
+bar = \case Foo bar baz -> bar
+------------------------------------------------------------------------
+
+except at a lower level, exploiting our knowledge that our data types are
+Scott-encoded.
+
+Record updates and initialization are more challenging. We need more than plain
+function definitions, and furthermore, we only have all valid field names after
+parsing. This means we ought to extend our syntax tree to hold lists of field
+bindings for record updates and initializations.
+
+Instead of adding a new data constructor to our `Ast` type, we invent two
+basic combinators `Basic "{="` and `Basic "=}"` which act as delimiters
+for a list of field bindings, where the `A` data constructor acts like a cons.
+An alternative is to use recursion schemes for our many variants of syntax
+trees.
+
+By pattern compilation, we know all the field names, so at this point we call
+`resolveFieldBinds` to transform, say:
+
+------------------------------------------------------------------------
+x { bar = 42 }
+------------------------------------------------------------------------
+
+into:
+
+------------------------------------------------------------------------
+case x of \Foo {orig}bar {orig}baz -> Foo 42 {orig}baz
+------------------------------------------------------------------------
+
+though again using a lower level representation since we know we're
+Scott-encoding the data types. The `{orig}` added by our code to each variable
+name guards against variable capture.
+
+For record initializations, we only generate the right-hand side of the case
+match and use `undefined` for missing fields instead of `{orig}` variables.
+
+We implement `deriving` for `Eq` and `Show`. It would be nice to automatically
+derive `Eq` for our primitive data types (unit, boolean, pairs, lists) but this
+would require all programs to define the `Eq` class.
+
+++++++++++
+<p><a onclick='hideshow("Ast1");'>&#9654; Toggle `Ast1.hs`</a></p><div id='Ast1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Ast1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Parser1");'>&#9654; Toggle `Parser1.hs`</a></p><div id='Parser1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Parser1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Compiler2");'>&#9654; Toggle `Compiler2.hs`</a></p><div id='Compiler2' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Compiler2.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("true.RTS1");'>&#9654; Toggle `true.RTS1.hs`</a></p><div id='true.RTS1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/true.RTS1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+For data types, we maintain a map from a data constructor name to the list of
+all data constructors of the same type, along with the types of any field they
+may have.
+
+This had been enough. Even though we need to generate a unique and predictable
+symbol per type to represent corresponding case expressions, the function
+`specialCase` simply builds this symbol from the first data constructor.
+
+We barely modify this map for named fields. As a result, there's no easy way
+for `findField` to look up relevant information based on a field name. We
+ineffiicently search linearly through possibly repeated entries. It may be
+better to add a separate map for named fields, but it's tedious to add fields
+to the `Neat` type when our current compiler lacks support for naming them!
+Once again, a proto-chicken comes first.
+
+To test with GHC, we create a new directory containing appropriately named
+symlinks to the desired versions of the modules. Incremental development means
+we only need to change a few symlinks at a time, but in the long run, we ought
+to write a program to generate all symlinks from a given set of module files.

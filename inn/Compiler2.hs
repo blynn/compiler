@@ -324,7 +324,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perCl
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
 
-neatNew = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
+neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip [] [] []) primAdts
 
 tabulateModules mods = foldM ins Tip $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -346,7 +346,6 @@ inferModule tab acc name = case mlookup name acc of
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
-      --dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
       dcs = adtTab : map (dataCons . (tab !)) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
     acc' <- foldM (inferModule tab) acc imps

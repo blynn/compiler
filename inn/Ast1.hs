@@ -90,6 +90,11 @@ typedAsts (Neat _ _ tas _ _ _ _) = tas
 typeclasses (Neat tcs _ _ _ _ _ _) = tcs
 dataCons (Neat _ _ _ dcs _ _ _) = dcs
 
+typeVars = \case
+  TC _ -> []
+  TV v -> [v]
+  TAp x y -> typeVars x `union` typeVars y
+
 depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
   if vertex `elem` visited then st else second (vertex:)
     $ depthFirstSearch relation (vertex:visited, sequence) (relation vertex)
