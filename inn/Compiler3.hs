@@ -1,4 +1,5 @@
--- Record fields.
+-- FFI across multiple modules.
+-- Rewrite with named fields, Show, Eq.
 module Compiler where
 
 import Base
@@ -56,7 +57,7 @@ patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
 unpat dcs as t = case as of
   [] -> pure t
-  a:at -> get >>= \n -> put (n + 1) >> let freshv = showInt n "#" in L freshv <$> let
+  a:at -> get >>= \n -> put (n + 1) >> let freshv = shows n "#" in L freshv <$> let
     go p x = case p of
       PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
       PatVar s m -> maybe (unpat dcs at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
@@ -82,7 +83,7 @@ rewritePats' dcs asxs ls = case asxs of
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
 
 rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (flip showInt "#") $ take (length vs0) [n..]
+  ls = map (`shows` "#") $ take (length vs0) [n..]
   in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' dcs vsxs ls
 
 classifyAlt v x = case v of
@@ -149,7 +150,7 @@ patternCompile dcs t = optiApp $ resolveFieldBinds dcs $ evalState (go t) 0 wher
 instantiate' t n tab = case t of
   TC s -> ((t, n), tab)
   TV s -> case lookup s tab of
-    Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
+    Nothing -> let va = TV $ show n in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
   TAp x y -> let
     ((t1, n1), tab1) = instantiate' x n tab
@@ -184,12 +185,12 @@ infer typed loc ast csn@(cs, n) = case ast of
     \cs -> Right ((va, A ax ay), (cs, n2))
   L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   where
-  va = TV (showInt n "")
+  va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
+  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
   (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance tycl qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
@@ -197,7 +198,7 @@ findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
 
 findProof tycl pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
   Nothing -> case tycl classId of
-    [] -> Left $ "no instance: " ++ showPred pred ""
+    [] -> Left $ "no instance: " ++ show pred
     insts -> findInstance tycl psn pred insts
   Just s -> Right (psn, V s)
 
@@ -274,7 +275,7 @@ inferDefs tycl defs typed = do
     lambs = second snd <$> toAscList typed
   foldM (inferDefs' tycl defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
 
-dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
+dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
 inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
@@ -303,13 +304,13 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perCl
               Just subx -> do
                 ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
                 if length ps2 /= length ps3
-                  then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                  then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                   else pure tr
         ms <- mapM perMethod sigs
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
 
-neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip [] [] []) primAdts
+neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip Tip Tip []) primAdts
 
 tabulateModules mods = foldM ins Tip $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -339,7 +340,7 @@ inferModule tab acc name = case mlookup name acc of
           Nothing -> Left $ "bad default method type: " ++ s
           _ -> case ps of
             [Pred cl _] | cl == classId -> Right (qs, lambF)
-            _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
+            _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
         where
         defName = "{default}" ++ s
         Just q@(Qual ps0 t0) = fst <$> lookup s typed
@@ -360,7 +361,7 @@ untangle s = case program s of
       foldM (inferModule tab) Tip $ keys tab
     _ -> Left $ "parse error: " ++ case ell s of
       Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""
 
 optiComb' (subs, combs) (s, lamb) = let
   gosub t = case t of
@@ -375,33 +376,9 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
-showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
-
-showExtra = \case
-  Basic s -> (s++)
-  ForeignFun n -> ("FFI_"++) . showInt n
-  Const i -> showInt i
-  ChrCon c -> ('\'':) . (c:) . ('\'':)
-  StrCon s -> ('"':) . (s++) . ('"':)
-  Link im s _ -> (im++) . ('.':) . (s++)
-
-showPat = \case
-  PatLit e -> showExtra e
-  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
-  PatCon s ps -> (s++) . ("TODO"++)
-
-showAst prec t = case t of
-  E e -> showExtra e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
-  Proof p -> ("{Proof "++) . showPred p . ("}"++)
-
 showTree prec t = case t of
   LfVar s -> showVar s
-  Lf extra -> showExtra extra
+  Lf extra -> shows extra
   Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
 disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
@@ -413,18 +390,10 @@ dumpCombs ((_, lambs), _) = map disasm $ optiComb lambs
 
 dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
 
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
-
-dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
 
 -- Hash consing.
-data Obj = Local String | Global String String | Code Int
-
-instance Eq Obj where
-  Local a == Local b = a == b
-  Global m a == Global n b = m == n && a == b
-  Code a == Code b = a == b
-  _ == _ = False
+data Obj = Local String | Global String String | Code Int deriving Eq
 
 instance Ord Obj where
   x <= y = case x of
@@ -446,7 +415,6 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    ForeignFun n -> Code <$> memget (Code $ comEnum "F", Code n)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -473,15 +441,21 @@ codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
   where
   (localmap, (hp', f')) = hashcons hp $ optiComb lambs
 
-codegen mods = (bigmap', mem) where
+codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
   bigmap' = (resolveGlobal <$>) <$> bigmap
   mem = resolveGlobal <$> memF []
+  ffiIndex = fromList $ zip (keys ffis) [0..]
   resolveGlobal = \case
-    Left (m, s) -> resolveGlobal $ (bigmap ! m) ! s
+    Left (m, s) -> if m == "{foreign}"
+      then ffiIndex ! s
+      else resolveGlobal $ (bigmap ! m) ! s
     Right n -> n
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-getIOType q = Left $ "main : " ++ showQual q ""
+getIOType q = Left $ "main : " ++ shows q ""
 
-ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
+ffcat (name, (_, (ffis, ffes))) (xs, ys) =
+  ( foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) xs $ toAscList ffis
+  , foldr (\(k, v) m -> insertWith (error $ "duplicate export: " ++ k) k (name, v) m) ys $ toAscList ffes
+  )

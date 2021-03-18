@@ -1,3 +1,5 @@
+-- FFI across multiple modules.
+-- Rewrite with named fields, Show, Eq.
 module Parser where
 import Base
 import Ast
@@ -30,8 +32,9 @@ advanceRC x (r, c)
   | True = (r, c + 1)
   where n = ord x
 pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp)
-sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
-  if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
+sat f = Lexer \(LexState inp rc) -> case inp of
+  [] -> Left "EOF"
+  h:t -> if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
 char c = sat (c ==)
 
 data Token = Reserved String
@@ -164,46 +167,89 @@ ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
+  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
-scottConstr t cs (Constr s ts) = (s,
+scottConstr t cs (Constr s sts) = (s,
   (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
-mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
+  : [(field, (noQual $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
+  where
+  ts = snd <$> sts
+  proj fd = foldr L (V fd) $ fst <$> sts
+  inj x = map (\(Constr s' _) -> if s' == s then x else V "undefined") cs
+mkAdtDefs t cs = mkCase t cs : concatMap (scottConstr t cs) cs
 
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
+  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
-addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis ffes ims
+addAdt t cs ders neat = foldr derive neat' ders where
+  neat' = neat
+    { typedAsts = mkAdtDefs t cs ++ typedAsts neat
+    , dataCons = updateDcs cs $ dataCons neat
+    }
+  derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
+    [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
+    )]
+  derive "Show" = addInstance "Show" (mkPreds "Show") t
+    [("showsPrec", L "prec" $ L "x" $ Ca (V "x") $ map showCase cs
+    )]
+  derive der = error $ "bad deriving: " ++ der
+  showCase (Constr con args) = let as = show <$> [1..length args]
+    in (PatCon con (mkPatVar "" <$> as), case args of
+      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
+      _ -> case con of
+        ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
+          (\f g -> A (A (V ".") f) g)
+          [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
+          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
+          , A (A (V "showsPrec") (E $ Const 11)) (V "2")
+          ]
+        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec")
+          $ A (A (V ".") $ A (V "++") (E $ StrCon con))
+          $ foldr (\f g -> A (A (V ".") f) g) (L "x" $ V "x")
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
+      )
+  mkPreds classId = Pred classId . TV <$> typeVars t
+  mkPatVar pre s = PatVar (pre ++ s) Nothing
+  eqCase (Constr con args) = let as = show <$> [1..length args]
+    in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
+      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+         $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
+      , (PatVar "_" Nothing, V "False")])
 
 emptyTycl = Tycl [] []
-addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
-  vars = take (size sigs) $ (`showInt` "") <$> [0..]
+addClass classId v (sigs, defs) neat = if null ms then neat
+  { typeclasses = insert classId (Tycl (keys sigs) is) tycl
+  , typedAsts = selectors ++ typedAsts neat
+  , topDefs = defaults ++ topDefs neat
+  } else error $ "duplicate class: " ++ classId
+  where
+  vars = take (size sigs) $ show <$> [0..]
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
+  tycl = typeclasses neat
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
-  tycl' = insert classId (Tycl (keys sigs) is) tycl
-  in if null ms then Neat tycl' (defaults ++ fs) (selectors ++ typed) dcs ffis ffes ims
-    else error $ "duplicate class: " ++ classId
 
-addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
+addInstance classId ps ty ds neat = neat
+  { typeclasses = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
+  } where
+  tycl = typeclasses neat
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
-  tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
-  name = '{':classId ++ (' ':showType ty "") ++ "}"
-  in Neat tycl' fs typed dcs ffis ffes ims
+  name = '{':classId ++ (' ':shows ty "}")
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) ffes ims
-addDefs ds (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl (ds ++ fs) typed dcs ffis ffes ims
-addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
-addExport e f (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl fs typed dcs ffis ((e, f):ffes) ims
+addForeignImport foreignname ourname t neat = let ffis = ffiImports neat in neat
+  { typedAsts = (ourname, (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t)) : typedAsts neat
+  , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t ffis
+  }
+addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
+addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
+addImport im neat = neat { moduleImports = im:moduleImports neat }
 
 want f = Parser \(ParseState inp precs) -> case ell inp of
   Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
@@ -242,10 +288,14 @@ braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  f _ _ = error "bad multidef"
-  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+coalesce = \case
+  [] -> []
+  h@(s, x):t -> case t of
+    [] -> [h]
+    (s', x'):t' -> let
+      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+      f _ _ = error "bad multidef"
+      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
@@ -258,16 +308,13 @@ addLets ls x = foldr triangle x components where
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
   triangle names expr = let
     tnames = nonemptyTails names
-    suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
     insLams vs t = foldr L t vs
-    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+    appem vs = foldl1 A $ V <$> vs
+    suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
+    redef tns expr = foldr L (suball expr) tns
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined id $ lookup x ls) (suball expr) tnames
 
-data Assoc = NAssoc | LAssoc | RAssoc
-instance Eq Assoc where
-  NAssoc == NAssoc = True
-  LAssoc == LAssoc = True
-  RAssoc == RAssoc = True
-  _ == _ = False
+data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
 precOf s precTab = maybe 5 fst $ mlookup s precTab
 assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
@@ -385,9 +432,16 @@ sqExpr = between (res "[") (res "]") $
   )
   <|> pure (V "[]")
 
+fbind = A <$> (E . StrCon <$> var) <*> (res "=" *> expr)
+
+mayUpdate v = (do
+    fbs <- between (res "{") (res "}") $ sepBy1 fbind (res ",")
+    pure $ A (E $ Basic "{=") $ foldr A (E $ Basic "=}") $ v:fbs
+  ) <|> pure v
+
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> fmap V (con <|> var) <|> E <$> wantLit
+  <|> ((V <$> (con <|> var)) >>= mayUpdate) <|> E <$> wantLit
 
 aexp = foldl1 A <$> some atom
 
@@ -446,9 +500,15 @@ conop = want f <|> between (res "`") (res "`") (want g) where
   f _ = Left ""
   g (ConId s) = Right s
   g _ = Left "want conop"
-constr = (\x c y -> Constr c [x, y]) <$> aType <*> conop <*> aType
-  <|> Constr <$> wantConId <*> many aType
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
+commaVars = sepBy1 var $ res ","
+fieldDecl = (\vs t -> map (, t) vs) <$> commaVars <*> (res "::" *> _type)
+constr = (\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType
+  <|> Constr <$> wantConId <*>
+    (   concat <$> between (res "{") (res "}") (fieldDecl `sepBy` res ",")
+    <|> map ("",) <$> many aType)
+dclass = wantConId
+_deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
 
 impDecl = addImport <$> (res "import" *> wantConId)
 
@@ -457,8 +517,8 @@ topdecls = braceSep
   <|> classDecl
   <|> instDecl
   <|> res "foreign" *>
-    (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
-    <|> res "export" *> var *> (addExport <$> wantString <*> var)
+    (   res "import" *> var *> (addForeignImport <$> wantString <*> var <*> (res "::" *> _type))
+    <|> res "export" *> var *> (addForeignExport <$> wantString <*> var)
     )
   <|> addDefs <$> def
   <|> fixity *> pure id

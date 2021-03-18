@@ -30,12 +30,7 @@ data Instance = Instance
   -- Method definitions
   (Map String Ast)
 
-data Tycl = Tycl
-  -- | Method names and their default implementations.
-  -- Their types are kept in a global table.
-  [(String, Maybe Ast)]
-  -- | Instances.
-  [Instance]
+data Tycl = Tycl [String] [Instance]
 
 data Neat = Neat
   (Map String Tycl)

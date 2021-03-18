@@ -1,26 +1,54 @@
--- Record fields.
--- Remove `overFreePro`.
+-- FFI across multiple modules.
+-- Rewrite with named fields, Show, Eq.
 module Ast where
 import Base
 import Map
 
-data Type = TC String | TV String | TAp Type Type
+data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
-data Pred = Pred String Type
+data Pred = Pred String Type deriving Eq
 data Qual = Qual [Pred] Type
 noQual = Qual []
 
-instance Eq Type where
-  (TC s) == (TC t) = s == t
-  (TV s) == (TV t) = s == t
-  (TAp a b) == (TAp c d) = a == c && b == d
-  _ == _ = False
+instance Show Type where
+  showsPrec _ = \case
+    TC s -> (s++)
+    TV s -> (s++)
+    TAp (TAp (TC "->") a) b -> showParen True $ shows a . (" -> "++) . shows b
+    TAp a b -> showParen True $ shows a . (' ':) . shows b
+instance Show Pred where
+  showsPrec _ (Pred s t) = (s++) . (' ':) . shows t . (" => "++)
+instance Show Qual where
+  showsPrec _ (Qual ps t) = foldr (.) id (map shows ps) . shows t
+instance Show Extra where
+  showsPrec _ = \case
+    Basic s -> (s++)
+    Const i -> shows i
+    ChrCon c -> shows c
+    StrCon s -> shows s
+    Link im s _ -> (im++) . ('.':) . (s++)
+instance Show Pat where
+  showsPrec _ = \case
+    PatLit e -> shows e
+    PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
+    PatCon s ps -> (s++) . ("TODO"++)
 
-instance Eq Pred where (Pred s a) == (Pred t b) = s == t && a == b
+showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
+
+showAst prec t = case t of
+  E e -> shows e
+  V s -> showVar s
+  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
+  L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . showAst prec t
+  Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . showAst False t) vsts)
+  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> shows p . (" -> "++) . showAst False a) as)
+  Proof p -> ("{Proof "++) . shows p . ("}"++)
+
+showType = shows  -- for Unify.
 
 data Instance = Instance
   -- Type, e.g. Int for Eq Int.
@@ -35,20 +63,16 @@ data Instance = Instance
 data Tycl = Tycl [String] [Instance]
 
 data Neat = Neat
-  (Map String Tycl)
-  -- | Top-level definitions
-  [(String, Ast)]
+  { typeclasses :: Map String Tycl
+  , topDefs :: [(String, Ast)]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  [(String, (Qual, Ast))]
-  -- | Data constructor table.
-  (Map String [Constr])
-  -- | FFI declarations.
-  [(String, Type)]
-  -- | Exports.
-  [(String, String)]
-  -- | Module imports.
-  [String]
+  , typedAsts :: [(String, (Qual, Ast))]
+  , dataCons :: Map String [Constr]
+  , ffiImports :: Map String Type
+  , ffiExports :: Map String String
+  , moduleImports :: [String]
+  }
 
 patVars = \case
   PatLit _ -> []
@@ -70,20 +94,6 @@ overFree s f t = case t of
   L s' t' -> if s == s' then t else L s' $ overFree s f t'
 
 beta s t x = overFree s (const t) x
-
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
-showInt n = if 0 == n then ('0':) else showInt' n
-par = showParen True
-showType t = case t of
-  TC s -> (s++)
-  TV s -> (s++)
-  TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
-  TAp a b -> par $ showType a . (' ':) . showType b
-showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
-
-typedAsts (Neat _ _ tas _ _ _ _) = tas
-typeclasses (Neat tcs _ _ _ _ _ _) = tcs
-dataCons (Neat _ _ _ dcs _ _ _) = dcs
 
 typeVars = \case
   TC _ -> []

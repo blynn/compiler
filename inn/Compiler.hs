@@ -247,26 +247,11 @@ dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
   perClass (classId, Tycl sigs insts) = do
     let
-      checkDefault (s, Just rawExpr) = do
-        expr <- snd <$> linker (patternCompile dcs rawExpr)
-        (ta, (sub, _)) <- either (Left . (s++) . (" (class): "++)) Right
-          $ infer typed [] expr ([], 0)
-        (_, (Qual ps t, a)) <- prove tycl s $ typeAstSub sub ta
-        case ps of
-          [Pred cl _] | cl == classId -> Right ()
-          _ -> Left $ "bad method: " ++ s
-        Qual ps0 t0 <- maybe (Left "parse bug!") Right $ mlookup s typed
-        case match t t0 of
-          Nothing -> Left $ "bad method type: " ++ s
-          _ -> Right ()
-      checkDefault (s, Nothing) = pure ()
-    mapM_ checkDefault sigs
-    let
       perInstance (Instance ty name ps idefs) = do
         let
           dvs = map snd $ fst $ dictVars ps 0
-          perMethod (s, mayDefault) = do
-            let Just rawExpr = mlookup s idefs <|> mayDefault <|> pure (V "fail#")
+          perMethod s = do
+            let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
             expr <- snd <$> linker (patternCompile dcs rawExpr)
             (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
               $ infer typed [] expr ([], 0)
@@ -323,11 +308,22 @@ inferModule tab acc name = case mlookup name acc of
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
       dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
+      genDefaultMethod (qs, lambF) (classId, s) = case mlookup defName qs of
+        Nothing -> Right (insert defName q qs, lambF . ((defName, E $ Link "#" "fail#" undefined):))
+        Just (Qual ps t) -> case match t t0 of
+          Nothing -> Left $ "bad default method type: " ++ s
+          _ -> case ps of
+            [Pred cl _] | cl == classId -> Right (qs, lambF)
+            _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
+        where
+        defName = "{default}" ++ s
+        Just q@(Qual ps0 t0) = fst <$> lookup s typed
     acc' <- foldM (inferModule tab) acc imps
     let linker = astLink (fromList typed) locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
     (qs, lambF) <- inferDefs tycl depdefs (fromList typed)
     mets <- inferTypeclasses tycl typeOfMethod qs dcs linker ienv
+    (qs, lambF) <- foldM genDefaultMethod (qs, lambF) [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
     Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
   Just _ -> Right acc
 

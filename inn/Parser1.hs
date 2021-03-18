@@ -225,10 +225,11 @@ addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
   vars = take (size sigs) $ (`showInt` "") <$> [0..]
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
-  methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
-  Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
-  tycl' = insert classId (Tycl methods is) tycl
-  in Neat tycl' fs (selectors ++ typed) dcs ffis ffes ims
+  defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
+  Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
+  tycl' = insert classId (Tycl (keys sigs) is) tycl
+  in if null ms then Neat tycl' (defaults ++ fs) (selectors ++ typed) dcs ffis ffes ims
+    else error $ "duplicate class: " ++ classId
 
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl

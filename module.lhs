@@ -28,6 +28,7 @@ problem into digestible subproblems; for example, we might only need to think
 about the intricacies of magic spells when controlling the wizard character.
 
 As usual, our first stab has limitations.
+This party is just getting started.
 
   * To avoid dealing with files, our compiler reads the concatenation of all
   the modules on standard input.
@@ -38,8 +39,7 @@ As usual, our first stab has limitations.
   * Fixity declarations must precede all occurrences of their corresponding
   operators in the standard input.
 
-  * At most one module should declare FFI imports, and
-  at most one module should declare FFI exports.
+  * At most one module should declare FFI imports.
 
   * Cyclic module dependencies cause an infinite loop.
 
@@ -130,11 +130,20 @@ Modules make us regret older expedient decisions regarding typeclasses.
 We threw default method definitions in one data structure, and lumped together
 method type signatures and instances in another. But now we might find a
 typeclass definition in one module, and an instance of it in another, so our
-code that searches imports for this information is messy.
+code that searches imports for this information is messy. For example,
+the `fillSigs` helper raids other modules for the types of methods.
 
-Also, we toss dictionary selector functions on to a big pile of ordinary
-definitions, so to find the type of a method we add `typeOfMethod`, whose logic
-is similar to `findImportSym`, but differs enough that we implement it
+We had previously substituted the syntax trees for default method
+implementations straight into instances. If we one day want incremental
+compilation, then it is likely easier to compile a default implementation
+once, then access it from other modules via a layer of indirection. With this
+in mind, for each method `foo`, we generate a method called `{default}foo`
+whose body is the default method implementation of `foo` if given, and
+`fail#` otherwise.
+
+Since we toss dictionary selector functions on to a big pile of ordinary
+definitions, to find the type of a method we add `typeOfMethod`, whose logic is
+similar to `findImportSym`, but differs enough that we implement it
 independently.
 
 ++++++++++
@@ -306,11 +315,11 @@ include::inn/Compiler1.hs[]
 == Party2 ==
 
 For link:mvp.html[mutual let definitions] we wrote code that traversed a syntax
-tree to substitute certain variables. An alternative is to stick the tree in
-appropriate lambda abstraction nodes and apply them to syntax trees for the
-terms that will replace the variables. Namely, rely more on dynamic rather than
-static semantics. In some cases, the distinction disappears because beta-reduce
-may occur during optimization.
+tree to substitute certain variables. An alternative is to build a syntax tree
+that describes this substitution. After all, lambda calculus is substitution
+incarnate. In other words, we rely more on dynamic rather than static
+semantics, a distinction that sometimes blurs because beta-reducing may occur
+during optimization.
 
 One advantage of this approach is we can remove `overFreePro`, which is helper
 that traverses over syntax trees before case expressions and pattern matches
@@ -435,3 +444,81 @@ To test with GHC, we create a new directory containing appropriately named
 symlinks to the desired versions of the modules. Incremental development means
 we only need to change a few symlinks at a time, but in the long run, we ought
 to write a program to generate all symlinks from a given set of module files.
+
+== Party3 ==
+
+We fix the problem with foreign imports across multiple modules. In the
+lone-module days, our we could number the imports as we parsed the source.
+Now, we can only number them after we have seen all imports from all modules.
+We replace the number of an import with its name in the syntax tree, which we
+map to a number during code generation.
+
+We reuse the `Link` data constructor for this. The special `{foreign}` module
+indicates the function name is foreign. Thus we can discard the `ForeignFun`
+data constructor.
+
+We also add checks for name conflicts among foreign imports and exports.
+
+++++++++++
+<p><a onclick='hideshow("Ast2");'>&#9654; Toggle `Ast2.hs`</a></p><div id='Ast2' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Ast2.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Parser2");'>&#9654; Toggle `Parser2.hs`</a></p><div id='Parser2' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Parser2.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Compiler3");'>&#9654; Toggle `Compiler3.hs`</a></p><div id='Compiler3' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Compiler3.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("true.RTS2");'>&#9654; Toggle `true.RTS2.hs`</a></p><div id='true.RTS2' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/true.RTS2.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("party1");'>&#9654; Toggle `party1.hs`</a></p><div id='party1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/party1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
+We take advantage of our new ability to derive `Eq` and `Show` instances,
+and also name the fields of the `Neat` data type.
