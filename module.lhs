@@ -24,7 +24,7 @@ powerful multi-talented being. Perhaps we enjoy observing teamwork, or
 following gaming traditions.
 
 But perhaps we also like parties for the same reasons we decompose a large
-problem into digestible subproblems; for example, we might only need to think
+problem into digestible subproblems. For example, we might only need to think
 about the intricacies of magic spells when controlling the wizard character.
 
 As usual, our first stab has limitations.
@@ -51,12 +51,8 @@ insists on one module per file with imports appearing before other
 declarations, hence its parser can process imports before reaching any
 expressions and determine the fixity of any operators that appear when it later
 reaches them. With our scheme, we may encounter an operator in an expression
-before learning its fixity.
-
-We can fix this by adding a parsing phase: when parsing expressions, we treat
-all infix operators as, say, right-associative with the same precedence, and
-after learning the fixities, a second phase re-associates all expressions.
-Perhaps in a future compiler.
+before learning its fixity, which confuses our simple parser. In a later
+compiler we'll address this issue.
 
 We tweak the parser to support `module` and `import`, and add a new field to
 `Neat` that hold the imports of a module. A module with no explicit `module`
@@ -448,16 +444,18 @@ to write a program to generate all symlinks from a given set of module files.
 == Party3 ==
 
 We fix the problem with foreign imports across multiple modules. In the
-lone-module days, our we could number the imports as we parsed the source.
-Now, we can only number them after we have seen all imports from all modules.
-We replace the number of an import with its name in the syntax tree, which we
-map to a number during code generation.
+lone-module days, we numbered the imports as we parsed the source. Now,
+the numbering must be consistent across all modules.
+
+In the spirit of incremental compilation, we replace the number of an import
+with its name in the syntax tree, which we map to a number during our code
+generation that corresponds to linking.
 
 We reuse the `Link` data constructor for this. The special `{foreign}` module
 indicates the function name is foreign. Thus we can discard the `ForeignFun`
 data constructor.
 
-We also add checks for name conflicts among foreign imports and exports.
+We also check for name conflicts among foreign imports and exports.
 
 ++++++++++
 <p><a onclick='hideshow("Ast2");'>&#9654; Toggle `Ast2.hs`</a></p><div id='Ast2' style='display:none'>
@@ -522,3 +520,77 @@ include::inn/party1.hs[]
 We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
 We take advantage of our new ability to derive `Eq` and `Show` instances,
 and also name the fields of the `Neat` data type.
+
+== Party4 ==
+
+Recall we require a fixity declaration to precede the use of its corresponding
+operator, which forces us to concatenate module sources in a particular order.
+We remove this wart by adding a new phase. Once done, not only may we paste
+together modules in any order, but we may also declare fixities anywhere within
+a module.
+
+During parsing, operators have the same precedence. When a chain of two or more
+appear in a row, we abuse the syntax tree to store them in a right-associative
+list, for example: `[1 + 2, * 3, - 4, + 5]`.
+
+For patterns, we use the list field of a `PatCon` value; a made-up data
+constructor "{+" indicates the beginning of such a list. Expressions are
+clumsier; we bookend chains with the made-up basic combinators "{+" and "+},
+and fashion a list out of `A` and `V` nodes.
+
+By the time we call `patternCompile`, we have access to all modules. During
+this phase, we traverse the syntax tree, and we re-associate each specially
+marked infix chain now that we can look up the fixities of all operators.
+
+The algorithm is conceptually straightforward. Starting from the first binary
+infix expression, that is, two operands and one operator, for each operator and
+operand we add on the right, we walk down the right spine of the current syntax
+tree until we reach a node of higher precedence; leaf nodes are considered to
+have maximum precedence. Then we insert the operator and operand at this point.
+We also check for illegal infix operator conflicts.
+
+The code is messy due to a couple of wrinkles. Firstly, we have two distinct ad
+hoc representations of lists for holding infix chains. Secondly, we temporarily
+mark operands with more ad hoc conventions to avoid descending too far when
+reshaping syntax trees. For example, in the expression `1 + (2 + 3) * 4`, the
+subexpression `(2 + 3)` is atomic.
+
+++++++++++
+<p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Ast3.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Parser3");'>&#9654; Toggle `Parser3.hs`</a></p><div id='Parser3' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Parser3.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("Compiler4");'>&#9654; Toggle `Compiler4.hs`</a></p><div id='Compiler4' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Compiler4.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+We only allow top-level fixity declarations. We could add support for scoped
+fixity declarations with yet more ad hoc encodings that we later use to create
+scoped fixity lookup tables that override the global ones.

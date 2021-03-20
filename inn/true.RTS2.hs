@@ -196,7 +196,7 @@ combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
 comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
   Left e -> error e
-  Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
+  Right (xs, _) -> case parse (braceSep comb) $ offside xs of
     Left e -> error e
     Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
