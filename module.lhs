@@ -88,6 +88,7 @@ the Haskell syntax we support:
   * Operations involving native integer types: `chr ord intAdd intMul`
     and so on.
   * Primitives for IO monad methods.
+  * The RTS reduces `fail#` on failed case matches.
 
 Then each module implicity imports this special "#" module, so these built-in
 primitives are accessible to all.
@@ -457,6 +458,10 @@ data constructor.
 
 We also check for name conflicts among foreign imports and exports.
 
+We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
+We take advantage of our new ability to derive `Eq` and `Show` instances,
+and also name the fields of the `Neat` data type.
+
 ++++++++++
 <p><a onclick='hideshow("Ast2");'>&#9654; Toggle `Ast2.hs`</a></p><div id='Ast2' style='display:none'>
 ++++++++++
@@ -517,10 +522,6 @@ include::inn/party1.hs[]
 </div>
 ++++++++++
 
-We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
-We take advantage of our new ability to derive `Eq` and `Show` instances,
-and also name the fields of the `Neat` data type.
-
 == Party4 ==
 
 Recall we require a fixity declaration to precede the use of its corresponding
@@ -534,9 +535,9 @@ appear in a row, we abuse the syntax tree to store them in a right-associative
 list, for example: `[1 + 2, * 3, - 4, + 5]`.
 
 For patterns, we use the list field of a `PatCon` value; a made-up data
-constructor "{+" indicates the beginning of such a list. Expressions are
-clumsier; we bookend chains with the made-up basic combinators "{+" and "+},
-and fashion a list out of `A` and `V` nodes.
+constructor `"{+"` indicates the beginning of such a list. Expressions are
+clumsier; we bookend chains with the made-up basic combinators `"{+"` and
+`"+}"`, and fashion a list out of `A` and `V` nodes.
 
 By the time we call `patternCompile`, we have access to all modules. During
 this phase, we traverse the syntax tree, and we re-associate each specially
@@ -554,6 +555,25 @@ hoc representations of lists for holding infix chains. Secondly, we temporarily
 mark operands with more ad hoc conventions to avoid descending too far when
 reshaping syntax trees. For example, in the expression `1 + (2 + 3) * 4`, the
 subexpression `(2 + 3)` is atomic.
+
+We only allow top-level fixity declarations. We could add support for scoped
+fixity declarations with yet more ad hoc encodings that we later use to create
+scoped fixity lookup tables that override the global ones.
+
+We do some housekeeping. Given a `Neat`, type inference had produced a tuple of
+a particular type that contained the data needed by the next phase. We change
+it to produce a new `Neat` with an updated `typedAsts` field, so there's one
+fewer data type to occupy our thoughts and APIs. We no longer need to pick out
+specific fields to pass to the next phase, as we simply pass everything.
+
+We also change `typedAsts` from a list to a map, which should be faster.
+Perhaps we should propagate this change further back, because compilation is
+growing even slower.
+
+Adding modules has made a mess of our various functions for looking up data
+constructors, top-level variables, typeclasses, and so on. We reorganize them
+a little to standardize the logic for searching through the list of imports.
+This makes it easier to add support for lists of export symbols.
 
 ++++++++++
 <p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
@@ -591,6 +611,14 @@ include::inn/Compiler4.hs[]
 </div>
 ++++++++++
 
-We only allow top-level fixity declarations. We could add support for scoped
-fixity declarations with yet more ad hoc encodings that we later use to create
-scoped fixity lookup tables that override the global ones.
+++++++++++
+<p><a onclick='hideshow("party2");'>&#9654; Toggle `party2.hs`</a></p><div id='party2' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/party2.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++

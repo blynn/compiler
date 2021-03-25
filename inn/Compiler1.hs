@@ -290,13 +290,12 @@ tabulateModules mods = foldM ins Tip $ go <$> mods where
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat rawIenv rawDefs typed adtTab ffis ffes imps = tab ! name
+      Neat rawIenv defs typed adtTab ffis ffes imps = tab ! name
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
         [] -> Tycl (findSigs cl) is
         _ -> Tycl sigs is
       findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList rawIenv
-      defs = coalesce rawDefs
       locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im

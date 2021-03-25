@@ -1,4 +1,5 @@
 -- Separate fixity phase.
+-- Export lists.
 module Parser where
 import Base
 import Ast
@@ -161,21 +162,21 @@ instance Alternative Parser where
 
 ro = E . Basic
 conOf (Constr s _) = s
-specialCase (h:_) = '|':conOf h
-mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
-  , ro "I"))
+specialCase (h:_) = '{':conOf h
+mkCase t cs = insert (specialCase cs)
+  ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
+  , ro "I")
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
-scottConstr t cs (Constr s sts) = (s,
-  (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
-  : [(field, (noQual $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
+scottConstr t cs (Constr s sts) = foldr (.) (insertWith (error $ "constructor conflict: " ++ s) s
+  (Qual [] $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts)
+  ) [insertWith (error $ "field conflict: " ++ field) field (Qual [] $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field) | (field, ft) <- sts, field /= ""]
   where
   ts = snd <$> sts
   proj fd = foldr L (V fd) $ fst <$> sts
   inj x = map (\(Constr s' _) -> if s' == s then x else V "undefined") cs
-mkAdtDefs t cs = mkCase t cs : concatMap (scottConstr t cs) cs
+mkAdtDefs t cs = foldr (.) (mkCase t cs) $ scottConstr t cs <$> cs
 
 mkFFIHelper n t acc = case t of
   TC s -> acc
@@ -185,9 +186,14 @@ mkFFIHelper n t acc = case t of
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs ders neat = foldr derive neat' ders where
   neat' = neat
-    { typedAsts = mkAdtDefs t cs ++ typedAsts neat
+    { typedAsts = mkAdtDefs t cs $ typedAsts neat
     , dataCons = updateDcs cs $ dataCons neat
+    , type2Cons = insert (typeName t) (concatMap cnames cs) $ type2Cons neat
     }
+  typeName = \case
+    TAp x _ -> typeName x
+    TC c -> c
+  cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
     [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
     )]
@@ -221,13 +227,13 @@ addAdt t cs ders neat = foldr derive neat' ders where
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) neat = if null ms then neat
   { typeclasses = insert classId (Tycl (keys sigs) is) tycl
-  , typedAsts = selectors ++ typedAsts neat
+  , typedAsts = selectors $ typedAsts neat
   , topDefs = defaults ++ topDefs neat
   } else error $ "duplicate class: " ++ classId
   where
   vars = take (size sigs) $ show <$> [0..]
-  selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
-    L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
+  selectors = foldr (.) id $ zipWith (\var (s, t) -> insertWith (error $ "method conflict: " ++ s) s (Qual [Pred classId v] t,
+    L "@" $ A (V "@") $ foldr L (V var) vars)) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
   tycl = typeclasses neat
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
@@ -239,9 +245,9 @@ addInstance classId ps ty ds neat = neat
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   name = '{':classId ++ (' ':shows ty "}")
 
-addForeignImport foreignname ourname t neat = let ffis = ffiImports neat in neat
-  { typedAsts = (ourname, (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t)) : typedAsts neat
-  , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t ffis
+addForeignImport foreignname ourname t neat = neat
+  { typedAsts = insertWith (error $ "import conflict: " ++ ourname) ourname (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t) $ typedAsts neat
+  , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t $ ffiImports neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
 addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
@@ -282,15 +288,6 @@ paren = between (res "(") (res ")")
 braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";")
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
-
-coalesce = \case
-  [] -> []
-  h@(s, x):t -> case t of
-    [] -> [h]
-    (s', x'):t' -> let
-      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-      f _ _ = error "bad multidef"
-      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
@@ -353,8 +350,8 @@ fixityDecl w a = do
 
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
-cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
-cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
+cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
+cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
 genDecl = (,) <$> var <*> (res "::" *> _type)
 
@@ -366,9 +363,9 @@ scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",")
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
   (scontext <* res "=>" <|> pure [])
-    <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)))
+    <*> wantConId <*> _type <*> (res "where" *> braceDef))
 
-letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr
+letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
@@ -388,14 +385,14 @@ section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
   <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
-  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> braceDef)
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
 compQual =
   (\p xs e -> A (A (V "concatMap") $ onePat [p] e) xs)
     <$> pat <*> (res "<-" *> expr)
   <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
-  <|> addLets <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> addLets <$> (res "let" *> braceDef)
 
 sqExpr = between (res "[") (res "]") $
   ((&) <$> expr <*>
@@ -451,7 +448,7 @@ patChain a = \case
 patAtom = PatCon <$> gcon <*> many apat <|> apat
 pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
-maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
+maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
 guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
@@ -468,6 +465,16 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+coalesce = \case
+  [] -> []
+  h@(s, x):t -> case t of
+    [] -> [h]
+    (s', x'):t' -> let
+      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+      f _ _ = error "bad multidef"
+      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+defSemi = coalesce . concat <$> sepBy1 def (res ";")
+braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -495,12 +502,24 @@ topdecls = braceSep
     (   res "import" *> var *> (addForeignImport <$> wantString <*> var <*> (res "::" *> _type))
     <|> res "export" *> var *> (addForeignExport <$> wantString <*> var)
     )
-  <|> addDefs <$> def
+  <|> addDefs <$> defSemi
   <|> fixity
   <|> impDecl
   )
 
-haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
+export_ = ExportVar <$> wantVarId <|> ExportCon <$> wantConId <*>
+  (   paren ((:[]) <$> res ".." <|> sepBy (var <|> con) (res ","))
+  <|> pure []
+  )
+exports = Just <$> paren (export_ `sepBy` res ",")
+  <|> pure Nothing
+
+haskell = some do
+  (moduleName, exs) <- mayModule
+  (moduleName,) . (exs,) <$> topdecls
+
+mayModule = res "module" *> ((,) <$> wantConId <*> exports <* res "where")
+  <|> pure ("Main", Nothing)
 
 offside xs = Ell (landin xs) []
 program s = case lexer posLexemes $ LexState s (1, 1) of

@@ -1,0 +1,59 @@
+-- Separate fixity phase.
+-- Export lists.
+module Main where
+import Base
+import Map
+import Ast
+import RTS
+import Compiler
+
+compile s = either id id do
+  mods <- untangle s
+  let
+    (ffis, ffes) = foldr ffcat (Tip, Tip) $ toAscList mods
+    (bigmap, mem) = codegen ffis mods
+    mustType modName s = case mlookup s $ typedAsts $ mods ! modName of
+      Just (Qual [] t, _) -> t
+      _ -> error "TODO: report bad exports"
+    mayMain = do
+        tab <- mlookup "Main" bigmap
+        mainAddr <- mlookup "main" tab
+        mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")
+        pure (mainAddr, mainType)
+  mainStr <- case mayMain of
+    Nothing -> pure ""
+    Just (a, q) -> do
+      getIOType q
+      pure $ genMain a
+
+  pure
+    $ ("#include<stdio.h>\n"++)
+    . ("typedef unsigned u;\n"++)
+    . ("enum{_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
+    . ("static const u prog[]={" ++)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
+    . ("};\nstatic const u prog_size="++) . shows (length mem) . (";\n"++)
+    . ("static u root[]={" ++)
+    . foldr (\(ourName, (modName, _)) f -> maybe undefined shows (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id (toAscList ffes)
+    . ("0};\n" ++)
+    . (libc++)
+    . (preamble++)
+    . foldr (.) id (ffiDeclare <$> toAscList ffis)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
+    . ("\n  }\n}\n" ++)
+    . runFun
+    . foldr (.) id (zipWith (\(expName, (modName, ourName)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++)
+      . genExport (arrCount $ mustType modName ourName) n) (toAscList ffes) [0..])
+    $ mainStr
+
+main = getArgs >>= \case
+  "comb":_ -> interact $ dumpWith dumpCombs
+  "lamb":_ -> interact $ dumpWith dumpLambs
+  "type":_ -> interact $ dumpWith dumpTypes
+  _ -> interact compile
+  where
+  getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
+  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n-1]

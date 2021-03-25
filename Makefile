@@ -46,7 +46,7 @@ $(call party,multiparty,party,true.Base Ast Map Parser Kiselyov Unify true.RTS C
 $(call party,party1,multiparty,true.Base Ast Map Parser Kiselyov Unify true.RTS Compiler1 party)
 $(call party,party2,party1,true.Base Ast1 Map Parser1 Kiselyov Unify true.RTS1 Compiler2 party)
 $(call party,party3,party2,true.Base1 Ast2 Map Parser2 Kiselyov Unify true.RTS2 Compiler3 party1)
-$(call party,party4,party3,true.Base1 Ast3 Map Parser3 Kiselyov Unify true.RTS2 Compiler4 party1)
+$(call party,party4,party3,true.Base1 Ast3 Map Parser3 Kiselyov Unify true.RTS2 Compiler4 party2)
 
 $(call cat,party1,true.Base Ast Map Parser Kiselyov Unify true.RTS1 Compiler1 party)
 

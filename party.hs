@@ -220,7 +220,6 @@ data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | C
 data Constr = Constr String [Type]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
-noQual = Qual []
 
 instance Eq Type where
   (TC s) == (TC t) = s == t
@@ -459,13 +458,13 @@ ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
+  ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ ts) -> foldr arr (TV "case") ts) cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
 scottConstr t cs (Constr s ts) = (s,
-  (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
+  (Qual [] $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
 mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
 
 mkFFIHelper n t acc = case t of
@@ -536,11 +535,6 @@ paren = between (res "(") (res ")")
 braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";")
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
-
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  f _ _ = error "bad multidef"
-  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
@@ -623,8 +617,8 @@ fixityDecl w a = do
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
-cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
-cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
+cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
+cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
 genDecl = (,) <$> var <*> (res "::" *> _type)
 
@@ -636,9 +630,9 @@ scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",")
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
   (scontext <* res "=>" <|> pure [])
-    <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)))
+    <*> wantConId <*> _type <*> (res "where" *> braceDef))
 
-letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr
+letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
@@ -658,14 +652,14 @@ section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
   <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
-  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> braceDef)
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
 compQual =
   (\p xs e -> A (A (V "concatMap") $ onePat [p] e) xs)
     <$> pat <*> (res "<-" *> expr)
   <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
-  <|> addLets <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> addLets <$> (res "let" *> braceDef)
 
 sqExpr = between (res "[") (res "]") $
   ((&) <$> expr <*>
@@ -717,7 +711,7 @@ patP n = if n <= 9
   else PatCon <$> gcon <*> many apat <|> apat
 pat = patP 0
 
-maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
+maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
 guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
@@ -734,6 +728,12 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
+  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+  f _ _ = error "bad multidef"
+  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+defSemi = coalesce . concat <$> sepBy1 def (res ";")
+braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -755,7 +755,7 @@ topdecls = braceSep
     (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
     <|> res "export" *> var *> (addExport <$> wantString <*> var)
     )
-  <|> addDefs <$> def
+  <|> addDefs <$> defSemi
   <|> fixity *> pure id
   <|> impDecl
   )
@@ -780,7 +780,7 @@ prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
   wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
-  in map (second (first noQual)) $
+  in map (second (first $ Qual [])) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
     , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
@@ -1243,14 +1243,13 @@ null xs = case xs of
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat rawIenv rawDefs typed adtTab ffis ffes rawImps = tab ! name
+      Neat rawIenv defs typed adtTab ffis ffes rawImps = tab ! name
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
         [] -> Tycl (findSigs cl) is
         _ -> Tycl sigs is
       findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList rawIenv
       imps = "#":rawImps
-      defs = coalesce rawDefs
       locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im

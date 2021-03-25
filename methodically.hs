@@ -545,11 +545,6 @@ braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  f _ _ = error "bad multidef"
-  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
@@ -631,8 +626,8 @@ fixityDecl w a = do
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
-cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
-cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
+cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
+cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
 genDecl = (,) <$> var <*> (res "::" *> _type)
 
@@ -644,9 +639,9 @@ scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",")
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
   (scontext <* res "=>" <|> pure [])
-    <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)))
+    <*> wantConId <*> _type <*> (res "where" *> braceDef))
 
-letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr
+letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
@@ -666,14 +661,14 @@ section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
   <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
-  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> braceDef)
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
 compQual =
   (\p xs e -> A (A (V "concatMap") $ onePat [p] e) xs)
     <$> pat <*> (res "<-" *> expr)
   <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
-  <|> addLets <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> addLets <$> (res "let" *> braceDef)
 
 sqExpr = between (res "[") (res "]") $
   ((&) <$> expr <*>
@@ -725,7 +720,7 @@ patP n = if n <= 9
   else PatCon <$> gcon <*> many apat <|> apat
 pat = patP 0
 
-maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
+maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
 guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
@@ -742,6 +737,12 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
+  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+  f _ _ = error "bad multidef"
+  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+defSemi = coalesce . concat <$> sepBy1 def (res ";")
+braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -763,7 +764,7 @@ topdecls = braceSep
     )
   <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
   <|> res "export" *> (addExport <$> wantString <*> var)
-  <|> addDefs <$> def
+  <|> addDefs <$> defSemi
   <|> fixity *> pure id
   )
 
@@ -1201,7 +1202,7 @@ untangle s = case program s of
   Right (prog, ParseState s _) -> case s of
     Ell [] [] -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
       Neat tycl defs typed dcs ffis exs -> do
-        (qas, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> coalesce defs) typed
+        (qas, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
         mets <- inferTypeclasses tycl qas dcs
         pure ((qas, lambF mets), (ffis, exs))
     _ -> Left $ "parse error: " ++ case ell s of

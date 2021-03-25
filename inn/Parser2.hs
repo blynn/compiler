@@ -167,14 +167,14 @@ ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
-  ( noQual $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
+  ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
   , ro "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = ro "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
 scottConstr t cs (Constr s sts) = (s,
-  (noQual $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
-  : [(field, (noQual $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
+  (Qual [] $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))
+  : [(field, (Qual [] $ t `arr` ft, L s $ foldl A (V s) $ inj $ proj field)) | (field, ft) <- sts, field /= ""]
   where
   ts = snd <$> sts
   proj fd = foldr L (V fd) $ fst <$> sts
@@ -288,15 +288,6 @@ braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 
-coalesce = \case
-  [] -> []
-  h@(s, x):t -> case t of
-    [] -> [h]
-    (s', x'):t' -> let
-      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-      f _ _ = error "bad multidef"
-      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
@@ -375,8 +366,8 @@ fixityDecl w a = do
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
-cDecls = first fromList . second (fromList . coalesce) . foldr ($) ([], []) <$> braceSep cDecl
-cDecl = first . (:) <$> genDecl <|> second . (++) <$> def
+cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
+cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
 genDecl = (,) <$> var <*> (res "::" *> _type)
 
@@ -388,9 +379,9 @@ scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",")
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
   (scontext <* res "=>" <|> pure [])
-    <*> wantConId <*> _type <*> (res "where" *> (coalesce . concat <$> braceSep def)))
+    <*> wantConId <*> _type <*> (res "where" *> braceDef))
 
-letin = addLets <$> between (res "let") (res "in") (coalesce . concat <$> braceSep def) <*> expr
+letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
@@ -410,14 +401,14 @@ section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
   <|> (\x -> Just . maybe x (\y -> (V ">>=" `A` x) `A` (L "_" y))) <$> expr
-  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> (\ds -> Just . addLets ds . maybePureUnit) <$> (res "let" *> braceDef)
 doblock = res "do" *> (maybePureUnit . foldr ($) Nothing <$> braceSep stmt)
 
 compQual =
   (\p xs e -> A (A (V "concatMap") $ onePat [p] e) xs)
     <$> pat <*> (res "<-" *> expr)
   <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
-  <|> addLets <$> (res "let" *> (coalesce . concat <$> braceSep def))
+  <|> addLets <$> (res "let" *> braceDef)
 
 sqExpr = between (res "[") (res "]") $
   ((&) <$> expr <*>
@@ -476,7 +467,7 @@ patP n = if n <= 9
   else PatCon <$> gcon <*> many apat <|> apat
 pat = patP 0
 
-maybeWhere p = (&) <$> p <*> (res "where" *> (addLets . coalesce . concat <$> braceSep def) <|> pure id)
+maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
 guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
@@ -493,6 +484,16 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+coalesce = \case
+  [] -> []
+  h@(s, x):t -> case t of
+    [] -> [h]
+    (s', x'):t' -> let
+      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+      f _ _ = error "bad multidef"
+      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+defSemi = coalesce . concat <$> sepBy1 def (res ";")
+braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = want f <|> between (res "`") (res "`") (want g) where
@@ -520,7 +521,7 @@ topdecls = braceSep
     (   res "import" *> var *> (addForeignImport <$> wantString <*> var <*> (res "::" *> _type))
     <|> res "export" *> var *> (addForeignExport <$> wantString <*> var)
     )
-  <|> addDefs <$> def
+  <|> addDefs <$> defSemi
   <|> fixity *> pure id
   <|> impDecl
   )

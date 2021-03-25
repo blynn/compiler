@@ -12,7 +12,6 @@ data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | C
 data Constr = Constr String [(String, Type)]
 data Pred = Pred String Type deriving Eq
 data Qual = Qual [Pred] Type
-noQual = Qual []
 
 instance Show Type where
   showsPrec _ = \case

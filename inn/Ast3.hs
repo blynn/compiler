@@ -9,9 +9,9 @@ data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link Strin
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
+data ModExport = ExportVar String | ExportCon String [String]
 data Pred = Pred String Type deriving Eq
 data Qual = Qual [Pred] Type
-noQual = Qual []
 
 instance Show Type where
   showsPrec _ = \case
@@ -68,15 +68,17 @@ data Neat = Neat
   , topDefs :: [(String, Ast)]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
-  , typedAsts :: [(String, (Qual, Ast))]
+  , typedAsts :: Map String (Qual, Ast)
   , dataCons :: Map String [Constr]
+  , type2Cons :: Map String [String]
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
   , moduleImports :: [String]
+  , moduleExports :: Maybe [String]
   , opFixity :: Map String (Int, Assoc)
   }
 
-neatEmpty = Neat Tip [] [] Tip Tip Tip [] Tip
+neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip [] Nothing Tip
 
 patVars = \case
   PatLit _ -> []
