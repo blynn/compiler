@@ -1,9 +1,11 @@
 -- Define `Show`. Uses `deriving`.
 -- Remove `flst`, `fpair`.
+-- Change `isEOF` and `getChar` to behave more like Haskell's.
 module Base where
 
 foreign import ccall "putchar" putChar :: Int -> IO Int
-foreign import ccall "getchar" getChar :: IO Int
+foreign import ccall "getchar_shim" getChar :: IO Char
+foreign import ccall "eof_shim" isEOFInt :: IO Int
 foreign import ccall "getargcount" getArgCount :: IO Int
 foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char
 
@@ -18,6 +20,9 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 1 =<<
 infixr 0 $
+
+isEOF = (0 /=) <$> isEOFInt
+getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -94,7 +99,6 @@ instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind 
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
 putStr = mapM_ $ putChar . ord
-getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
 error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
 undefined = error "undefined"

@@ -1352,8 +1352,8 @@ compile s = case untangle s of
     . ("static u root[]={" ++)
     . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
     . ("0};\n" ++)
-    . (libc++)
     . (preamble++)
+    . (libc++)
     . (concatMap ffiDeclare ffis ++)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
     . ffiDefine (length ffis - 1) ffis

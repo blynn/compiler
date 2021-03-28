@@ -374,6 +374,67 @@ We implement `deriving` for `Eq` and `Show`. It would be nice to automatically
 derive `Eq` for our primitive data types (unit, boolean, pairs, lists) but this
 would require all programs to define the `Eq` class.
 
+We prepare to change `getChar` to match Haskell's, which throws an exception on
+end of input. Up until now, ours simply calls the `getchar` function of C,
+which returns -1 on end of input. Also, we would like Haskell's `isEOF` so we
+can avoid this exception.
+
+Complications arise because C's `feof(stdin)` only reports the end of input
+after `getChar` has attempted to read past it and returned -1, while Haskell's
+more clairvoyant version returns `True` before `getChar` would throw an error
+because of the end of input. Additionally, our primitive FFI mechanism has
+no way to convert a C int to `Bool`.
+
+We write wrappers to get `getChar` and `isEOF` with the desired behaviour, and
+add them to the C source to the runtime in the `RTS` module. Thus our next
+compiler will print the new runtime in its output. However, it is unable to use
+any new runtime features itself; only the programs it builds can do that.
+
+If an FFI call enocunters an error, instead of unceremoniously calling
+`exit()`, we ought to push an exception-handling combinator on the stack. With
+this in mind, I experimented with setting a global flag on failure to trigger
+exception handling, but it caused a massive performance hit. Compiler build
+times went up from around 7 seconds to 10 seconds on my laptop, mostly caused
+by checking the flag for every `getChar`, `isEOF`, and `putChar` call. The
+compiler source is about 70000 characters, and the output is about 200000
+characters. Each input byte needs one `isEOF` and one `getChar` call, and each
+output byte needs one `putChar` call, which suggests we're eating close to 10
+extra microseconds per check.
+
+I tried removing the flag and reordering foreign function calls so that they
+occur after the stack has been primed to return results; this way, the foreign
+call wrapper can simply push an exception combinator on the stack on error. But
+I ran into a smaller but still significant performance hit. Even without
+conditional branching in the happy path, the reordering is evidently enough to
+mess up C compiler optimizations.
+
+We can work around this problem with a better `getContents` implementation,
+and indeed, perhaps this would already improve current build times.
+For now we'll just put up with `exit()` instead of exceptions.
+
+We also fix a bug with FFI imports that return values and have been declared
+to be pure functions. Directly pushing `_NUM` and a value is wrong, because
+our code relies on numbers being held in app nodes. We should backport this
+fix.
+
+Recall for data types, we maintain a map from a data constructor name to the
+list of all data constructors of the same type, along with the types of any
+field they may have. Even though we need to generate a unique and predictable
+symbol per type to represent corresponding case expressions, the function
+`specialCase` simply builds this symbol from the first data constructor.
+
+We barely modify this map for named fields. As a result, there's no easy way
+for `findField` to look up relevant information based on a field name. We
+ineffiicently search linearly through possibly repeated entries. It may be
+better to add a separate map for named fields, but it's tedious to add fields
+to the `Neat` type when our current compiler lacks support for naming them!
+Once again, a proto-chicken comes first.
+
+To test with GHC, we create a new directory containing appropriately named
+symlinks to the desired versions of the modules. Incremental development means
+we only need to change a few symlinks at a time, but in the long run, we ought
+to write a program to generate all symlinks from a given set of module files.
+
 ++++++++++
 <p><a onclick='hideshow("Ast1");'>&#9654; Toggle `Ast1.hs`</a></p><div id='Ast1' style='display:none'>
 ++++++++++
@@ -422,26 +483,6 @@ include::inn/true.RTS1.hs[]
 </div>
 ++++++++++
 
-For data types, we maintain a map from a data constructor name to the list of
-all data constructors of the same type, along with the types of any field they
-may have.
-
-This had been enough. Even though we need to generate a unique and predictable
-symbol per type to represent corresponding case expressions, the function
-`specialCase` simply builds this symbol from the first data constructor.
-
-We barely modify this map for named fields. As a result, there's no easy way
-for `findField` to look up relevant information based on a field name. We
-ineffiicently search linearly through possibly repeated entries. It may be
-better to add a separate map for named fields, but it's tedious to add fields
-to the `Neat` type when our current compiler lacks support for naming them!
-Once again, a proto-chicken comes first.
-
-To test with GHC, we create a new directory containing appropriately named
-symlinks to the desired versions of the modules. Incremental development means
-we only need to change a few symlinks at a time, but in the long run, we ought
-to write a program to generate all symlinks from a given set of module files.
-
 == Party3 ==
 
 We fix the problem with foreign imports across multiple modules. In the
@@ -461,6 +502,21 @@ We also check for name conflicts among foreign imports and exports.
 We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
 We take advantage of our new ability to derive `Eq` and `Show` instances,
 and also name the fields of the `Neat` data type.
+
+We continue our revamp of `getChar`, as our previous iteration laid the
+groundwork.
+
+++++++++++
+<p><a onclick='hideshow("true.Base1");'>&#9654; Toggle `true.Base1.hs`</a></p><div id='true.Base1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/true.Base1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
 
 ++++++++++
 <p><a onclick='hideshow("Ast2");'>&#9654; Toggle `Ast2.hs`</a></p><div id='Ast2' style='display:none'>

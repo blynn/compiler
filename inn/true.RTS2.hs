@@ -1,5 +1,6 @@
 -- FFI across multiple modules.
 -- Rewrite with named fields, Show, Eq.
+-- Change `isEOF` and `getChar` to behave more like Haskell's.
 module RTS where
 
 import Base
@@ -14,6 +15,21 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+static int nextCh, isAhead;
+int eof_shim() {
+  if (!isAhead) {
+    isAhead = 1;
+    nextCh = getchar();
+  }
+  return nextCh == -1;
+}
+void exit(int);
+char getchar_shim() {
+  if (!isAhead) nextCh = getchar();
+  if (nextCh == -1) exit(1);
+  isAhead = 0;
+  return nextCh;
+}
 |]
 
 preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
@@ -154,13 +170,13 @@ ffiArgs n t = case t of
   TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
 
 ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == "()"
-  then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++)
-  else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++)
+  then longDistanceCall . cont ("_K"++) . ("); break;"++)
+  else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++)
   where
   (args, ((isPure, ret), count)) = ffiArgs 2 t
   lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
-  aa tgt = "app(arg(" ++ shows (count + 1) "), " ++ tgt ++ "), arg(" ++ shows count ")"
-  longDistanceCall = name ++ "(" ++ args ++ ")"
+  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
+  longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 

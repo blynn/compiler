@@ -1475,8 +1475,8 @@ compile s = either id id do
     . ("static u root[]={" ++)
     . foldr (\(modName, (_, ourName)) f -> maybe undefined showInt (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id ffes
     . ("0};\n" ++)
-    . (libc++)
     . (preamble++)
+    . (libc++)
     . (concatMap ffiDeclare ffis ++)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
     . ffiDefine (length ffis - 1) ffis

@@ -1,5 +1,6 @@
 -- Record fields.
 -- Remove `fpair.
+-- Shims for `getChar` and `isEOF`.
 module RTS where
 
 import Base
@@ -14,6 +15,21 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+static int nextCh, isAhead;
+int eof_shim() {
+  if (!isAhead) {
+    isAhead = 1;
+    nextCh = getchar();
+  }
+  return nextCh == -1;
+}
+void exit(int);
+char getchar_shim() {
+  if (!isAhead) nextCh = getchar();
+  if (nextCh == -1) exit(1);
+  isAhead = 0;
+  return nextCh;
+}
 |]
 
 preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
@@ -158,11 +174,11 @@ ffiDefine n ffis = case ffis of
   (name, t):xt -> let
     (args, ((isPure, ret), count)) = ffiArgs 2 t
     lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-    longDistanceCall = name ++ "(" ++ args ++ ")"
+    cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
+    longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
     in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+      then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
+      else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
 
