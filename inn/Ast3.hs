@@ -66,6 +66,7 @@ data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
 data Neat = Neat
   { typeclasses :: Map String Tycl
   , topDefs :: [(String, Ast)]
+  , topDecls :: Map String Qual
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   , typedAsts :: Map String (Qual, Ast)
@@ -78,7 +79,7 @@ data Neat = Neat
   , opFixity :: Map String (Int, Assoc)
   }
 
-neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip [] Nothing Tip
+neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip [] Nothing Tip
 
 patVars = \case
   PatLit _ -> []

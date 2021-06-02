@@ -59,11 +59,11 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure '\0' <|> char 'x' *> (chr <$> hexadecimal))
 tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
-tokStr = between (char '"') (char '"') $ many (tokOne '"')
+tokStr = between (char '"') (char '"') $ many $ many (char '\\' *> char '&') *> tokOne '"'
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
@@ -232,7 +232,7 @@ addClass classId v (sigs, defs) neat = if null ms then neat
   } else error $ "duplicate class: " ++ classId
   where
   vars = take (size sigs) $ show <$> [0..]
-  selectors = foldr (.) id $ zipWith (\var (s, t) -> insertWith (error $ "method conflict: " ++ s) s (Qual [Pred classId v] t,
+  selectors = foldr (.) id $ zipWith (\var (s, Qual ps t) -> insertWith (error $ "method conflict: " ++ s) s (Qual (Pred classId v:ps) t,
     L "@" $ A (V "@") $ foldr L (V var) vars)) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
   tycl = typeclasses neat
@@ -244,6 +244,8 @@ addInstance classId ps ty ds neat = neat
   tycl = typeclasses neat
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   name = '{':classId ++ (' ':shows ty "}")
+
+addTopDecl (s, t) neat = neat { topDecls = insert s t $ topDecls neat }
 
 addForeignImport foreignname ourname t neat = neat
   { typedAsts = insertWith (error $ "import conflict: " ++ ourname) ourname (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t) $ typedAsts neat
@@ -353,7 +355,7 @@ fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl
 cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
 cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
-genDecl = (,) <$> var <*> (res "::" *> _type)
+genDecl = (,) <$> var <* res "::" <*> (Qual <$> (scontext <* res "=>" <|> pure []) <*> _type)
 
 classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> cDecls))
 
@@ -497,6 +499,7 @@ impDecl = addImport <$> (res "import" *> wantConId)
 topdecls = braceSep
   (   adt
   <|> classDecl
+  <|> addTopDecl <$> genDecl
   <|> instDecl
   <|> res "foreign" *>
     (   res "import" *> var *> (addForeignImport <$> wantString <*> var <*> (res "::" *> _type))

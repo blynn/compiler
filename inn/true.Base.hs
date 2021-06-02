@@ -1,9 +1,6 @@
 module Base where
 
-foreign import ccall "putchar" putChar :: Int -> IO Int
-foreign import ccall "getchar" getChar :: IO Int
-foreign import ccall "getargcount" getArgCount :: IO Int
-foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char
+import System
 
 infixr 9 .
 infixl 7 * , `div` , `mod`

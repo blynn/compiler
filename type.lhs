@@ -17,8 +17,7 @@ compiler ensures they stay in sync with the code.
 
 Therefore, we ought to add types to our language. We mimic Haskell, with at
 least one deliberate difference:
-https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tldi10-vytiniotis.pdf[Let
-should not be generalized]. We only generalize top-level definitions.
+https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tldi10-vytiniotis.pdf[let is not generalized]. We only generalize top-level definitions.
 
 == Typically ==
 

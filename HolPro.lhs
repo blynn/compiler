@@ -312,8 +312,8 @@ Given a `Hol` term to prove, we begin by making it a goal with no assumptions.
 Then we apply a 'tactic' to replace the goal with subgoals, along with a
 justification function that describes how to prove the original goal if each of
 the subgoals are proved. We may apply tactics recursively, thus we wind up with
-a tree. Ultimately, if each we prove each leaf theorem, then a bottom-up
-recursion following the crumbs we've left behind proves our original goal.
+a tree. Ultimately, if we prove each leaf theorem, then recursively tracing the
+crumbs we've left behind proves our original goal.
 
 Hence, each node of a `GoalTree` represents a single theorem. Leaf nodes are
 either theorems we have succesfully proved (`Thm`) or theorems we are still

@@ -1,0 +1,3 @@
+:set "-Dimport_qq_here=import Text.RawString.QQ --" -cpp -XQuasiQuotes
+:set -XBlockArguments -XLambdaCase -XTupleSections
+:set -XNoMonomorphismRestriction -XMonoLocalBinds

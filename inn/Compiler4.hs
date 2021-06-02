@@ -300,7 +300,28 @@ prove searcher s (t, a) = flip fmap (prove' searcher ([], 0) a) \((ps, _), x) ->
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
 
-inferDefs searcher defs typed = do
+ambiguous (Qual ps t) = filter (not . resolvable) ps where
+  resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
+
+reconcile searcher q@(Qual ps t) ast = \case
+  Nothing -> Right (q, ast)
+  Just qAnno@(Qual psA tA) -> case match t tA of
+    Nothing -> Left $ ("type mismatch, expected: "++) . shows qAnno . (", actual: "++) $ show q
+    Just sub -> let
+      vcount = length psA
+      vars = show <$> [1..vcount]
+      annoDictVars = (zip psA vars, vcount)
+      forbidNew p ((_, n), x)
+        | n == vcount = Right x
+        | True = Left $ "missing predicate: " ++ show p
+      findAnno p@(Pred cl ty) = findProof searcher (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
+      in do
+        dicts <- mapM findAnno ps
+        case ambiguous qAnno of
+          [] -> pure (qAnno, foldr L (foldl A ast dicts) vars)
+          ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map shows ambis) $ ""
+
+inferDefs searcher defs decls typed = do
   let
     insertUnique m (s, (_, t)) = if isBuiltIn s then Left $ "reserved: " ++ s else case mlookup s m of
       Nothing -> Right $ insert s t m
@@ -311,7 +332,10 @@ inferDefs searcher defs typed = do
   let
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
-    inferComponent typed syms = foldr (uncurry insert) typed <$> inferno searcher typed defmap syms
+    add typed (s, (q, ast)) = do
+      (q, ast) <- reconcile searcher q ast $ mlookup s decls
+      pure $ insert s (q, ast) typed
+    inferComponent typed syms = foldM add typed =<< inferno searcher typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
@@ -454,7 +478,7 @@ inferModule tab acc name = case mlookup name acc of
     acc' <- foldM (inferModule tab) acc imps
     let searcher = searcherNew acc' neat ienv
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
-    typed <- inferDefs searcher depdefs typed
+    typed <- inferDefs searcher depdefs (topDecls neat) typed
     typed <- inferTypeclasses searcher ienv typed
     typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList $ typeclasses neat, sig <- sigs]
     Right $ insert name neat { typedAsts = typed } acc'

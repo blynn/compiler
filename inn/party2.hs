@@ -6,6 +6,7 @@ import Map
 import Ast
 import RTS
 import Compiler
+import System
 
 compile s = either id id do
   mods <- untangle s
@@ -34,9 +35,8 @@ compile s = either id id do
     . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . shows (length mem) . (";\n"++)
-    . ("static u root[]={" ++)
-    . foldr (\(ourName, (modName, _)) f -> maybe undefined shows (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id (toAscList ffes)
+    . ("};\nstatic u root[]={" ++)
+    . foldr (\(_, (modName, ourName)) f -> maybe undefined shows (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id (toAscList ffes)
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)

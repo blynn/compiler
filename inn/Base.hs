@@ -43,6 +43,3 @@ instance Monad (State s) where
 evalState m s = fst $ runState m s
 get = State \s -> (s, s)
 put n = State \s -> ((), n)
-
-foreign import ccall "getargcount" getArgCount :: IO Int
-foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char

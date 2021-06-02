@@ -1,6 +1,6 @@
--- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
--- Change `isEOF` and `getChar` to behave more like Haskell's.
+-- Record fields.
+-- Remove `fpair.
+-- Shims for `getChar` and `isEOF`.
 module RTS where
 
 import Base
@@ -8,29 +8,7 @@ import Ast
 import Map
 import Parser
 
-ghc_compatilibity_thing = undefined
-
-libc = [r|
-static int env_argc;
-int getargcount() { return env_argc; }
-static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
-static int nextCh, isAhead;
-int eof_shim() {
-  if (!isAhead) {
-    isAhead = 1;
-    nextCh = getchar();
-  }
-  return nextCh == -1;
-}
-void exit(int);
-char getchar_shim() {
-  if (!isAhead) nextCh = getchar();
-  if (nextCh == -1) exit(1);
-  isAhead = 0;
-  return nextCh;
-}
-|]
+import_qq_here = import_qq_here
 
 preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
 void *malloc(unsigned long);
@@ -161,45 +139,47 @@ cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
 cTypeName (TC "Char") = "char"
 
-ffiDeclare (name, t) = let tys = argList t in (concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]++)
+ffiDeclare (name, t) = let tys = argList t in concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
 
 ffiArgs n t = case t of
   TC s -> ("", ((True, s), n))
   TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
 
-ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == "()"
-  then longDistanceCall . cont ("_K"++) . ("); break;"++)
-  else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++)
-  where
-  (args, ((isPure, ret), count)) = ffiArgs 2 t
-  lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
-  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
-  longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+ffiDefine n ffis = case ffis of
+  [] -> id
+  (name, t):xt -> let
+    (args, ((isPure, ret), count)) = ffiArgs 2 t
+    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
+    cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
+    longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+      then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
+      else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
 
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
   _ -> 0
 
-genExport m n = ("void f"++) . shows n . ("("++)
+genExport m n = ("void f"++) . showInt n . ("("++)
   . foldr (.) id (intersperse (',':) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . shows) [0..m - 1]
-  rt = ("root["++) . shows n . ("]"++)
+  xs = map ((('x':) .) . showInt) [0..m - 1]
+  rt = ("root["++) . showInt n . ("]"++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
+  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
-  argc = ('(':) . shows (length args)
+  argc = ('(':) . showInt (length args)
   m = zip args [1..]
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
@@ -212,7 +192,7 @@ combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
 comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
   Left e -> error e
-  Right (xs, _) -> case parse (braceSep comb) $ offside xs of
+  Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
     Left e -> error e
     Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
@@ -233,7 +213,7 @@ runFun = ([r|static void run() {
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
-  for (u i = 0; i < prog_size; i++) mem[hp++] = prog[i];
+  for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
 

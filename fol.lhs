@@ -597,7 +597,7 @@ problem].
 
 If the given formula is valid, then this algorithm eventually finds a proof
 provided the method we use to pick ground terms eventually selects any given
-possbiility. This is the case for our `groundTuples` function.
+possibility. This is the case for our `groundTuples` function.
 
 == Gilmore ==
 

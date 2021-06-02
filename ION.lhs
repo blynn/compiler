@@ -232,9 +232,11 @@ should be an integer constant, that is, `#c` for some `c`. Then the character
 with ASCII code `c` is printed on standard output, and the expression
 `1xy` is reduced to `y(.)(T1)`.
 
-(In ION assembly, symbols and letters are equivalent. In particular, the
-`(.)` combinator is not a binary operator representing function composition, but
-just another combinator.)
+(In ION assembly, symbols, letters and digits are just names of combinators. In
+particular, the `(.)` combinator is not a binary operator representing function
+composition. Similarly, `0` and `1` do not represent integers; the names of
+these combinators were inspired by the file descriptors of standard input and
+output.)
 
 \begin{code}
 eval :: Monad m => (Int -> VM -> m (Maybe VM)) -> VM -> m VM

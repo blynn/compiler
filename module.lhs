@@ -165,7 +165,7 @@ instead of braces and semicolons. This would make it easier to compare against
 its successor "methodically".)
 
 ------------------------------------------------------------------------
-cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs true.RTS.hs Compiler.hs party.hs
+cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Compiler.hs party.hs
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -231,9 +231,14 @@ include::inn/Base.hs[]
 ++++++++++
 
 Another obstacle is our built-in support for quasi-quoted raw strings. We solve
-this by confining all such strings to the `RTS` module, which we call
-`true.RTS.hs` then create a wrapper `RTS.hs` that uses the C pre-processor to
-make it work with GHC.
+this by adding the line:
+
+------------------------------------------------------------------------
+import_qq_here = import_qq_here
+------------------------------------------------------------------------
+
+immediately after the import statements. Then we enable the C pre-processor and
+define `import_qq_here` to be `import Text.RawString.QQ --`.
 
 ++++++++++
 <p><a onclick='hideshow("RTS");'>&#9654; Toggle `RTS.hs` for GHC</a></p><div id='RTS' style='display:none'>
@@ -247,11 +252,16 @@ include::inn/RTS.hs[]
 </div>
 ++++++++++
 
-Our source now works with GHC. In the `inn` subdirectory:
+Our source now works with GHC with the following options:
 
 ------------------------------------------------------------------------
-$ ghci -XBlockArguments -XLambdaCase -XNoMonomorphismRestriction \
-  -XMonoLocalBinds -XTupleSections party.hs ../stub.o
+include::inn/compat.ghci[]
+------------------------------------------------------------------------
+
+In the `inn` subdirectory:
+
+------------------------------------------------------------------------
+$ ghci -ghci-script compat.ghci party.hs ../stub.o
 ------------------------------------------------------------------------
 
 Here, the `stub.o` has been created from `stub.c` with `clang -c` or similar.
@@ -260,6 +270,9 @@ We gave the nice filenames to GHC, which expects to find modules in files with
 matching names. Our compilers tolerate weird filename prefixes and suffixes
 because we can simply concatenate different files. An alternative is to manage
 different subdirectories containing the same filenames.
+
+We can test later iterations with GHCi by symlinking appropriate versions of
+each file in a dedicated subdirectory.
 
 == Party1 ==
 
@@ -625,6 +638,10 @@ specific fields to pass to the next phase, as we simply pass everything.
 We also change `typedAsts` from a list to a map, which should be faster.
 Perhaps we should propagate this change further back, because compilation is
 growing even slower.
+
+We add support for top-level type declarations, and check they agree with
+definitions, and in some cases specialize by substituting in typeclass
+dictionaries.
 
 Adding modules has made a mess of our various functions for looking up data
 constructors, top-level variables, typeclasses, and so on. We reorganize them

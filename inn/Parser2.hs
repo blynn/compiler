@@ -59,11 +59,11 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure (chr 0) <|> char 'x' *> (chr <$> hexadecimal))
 tokOne delim = escape <|> sat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
-tokStr = between (char '"') (char '"') $ many (tokOne '"')
+tokStr = between (char '"') (char '"') $ many $ many (char '\\' *> char '&') *> tokOne '"'
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where

@@ -71,8 +71,7 @@ def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr
 program = liftki sp (some (liftk def (spch #;)));
 ------------------------------------------------------------------------
 
-Finally, something new: a function to rewrite lambda terms with De Bruijn
-syntax:
+Finally, something new: conversion to De Bruijn notation:
 
 ------------------------------------------------------------------------
 -- data DB = Ze | Su DB | Pass LC | La DB | App DB DB

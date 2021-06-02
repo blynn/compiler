@@ -6,3 +6,5 @@ void stdin_load_buffer() {}
 
 void putchar_cast(char c) {}
 int getchar_fp(int n) { return 0; }
+char getchar_shim() {return 0;}
+int eof_shim() {return 0;}
