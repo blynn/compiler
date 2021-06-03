@@ -1,5 +1,7 @@
 module System where
 
+import Base
+hide_prelude_here = hide_prelude_here
 import_qq_here = import_qq_here
 
 foreign import ccall "putchar" putChar :: Int -> IO Int
@@ -12,4 +14,10 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+void errchar(int c) { fputc(c, stderr); }
+void errexit() { fputc('\n', stderr); return; }
 |]
+
+putStr = mapM_ $ putChar . ord
+getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
+interact f = getContents >>= putStr . f

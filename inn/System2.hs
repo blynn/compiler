@@ -1,5 +1,6 @@
 module System where
 
+import Base
 import_qq_here = import_qq_here
 
 foreign import ccall "putchar" putChar :: Int -> IO Int
@@ -28,4 +29,11 @@ char getchar_shim() {
   isAhead = 0;
   return nextCh;
 }
+void errchar(int c) { fputc(c, stderr); }
+void errexit() { fputc('\n', stderr); return; }
 |]
+
+isEOF = (0 /=) <$> isEOFInt
+putStr = mapM_ $ putChar . ord
+getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
+interact f = getContents >>= putStr . f

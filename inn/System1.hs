@@ -1,6 +1,7 @@
 -- Transitional: we use old system calls, but generate code for the new system calls.
 module System where
 
+import Base
 import_qq_here = import_qq_here
 
 foreign import ccall "putchar" putChar :: Int -> IO Int
@@ -28,4 +29,10 @@ char getchar_shim() {
   isAhead = 0;
   return nextCh;
 }
+void errchar(int c) { fputc(c, stderr); }
+void errexit() { fputc('\n', stderr); return; }
 |]
+
+putStr = mapM_ $ putChar . ord
+getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
+interact f = getContents >>= putStr . f

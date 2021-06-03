@@ -3,8 +3,6 @@
 -- Change `isEOF` and `getChar` to behave more like Haskell's.
 module Base where
 
-import System
-
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -16,9 +14,6 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 1 =<<
 infixr 0 $
-
-isEOF = (0 /=) <$> isEOFInt
-getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -91,12 +86,7 @@ length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
-instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
-instance Monad IO where return = ioPure ; (>>=) = ioBind
-instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ $ putChar . ord
-interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
+error = primitiveError
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
@@ -199,6 +189,9 @@ null xs = case xs of
   [] -> True
   _ -> False
 
+instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
+instance Monad IO where return = ioPure ; (>>=) = ioBind
+instance Functor IO where fmap f x = ioPure f <*> x
 class Show a where
   showsPrec :: Int -> a -> String -> String
   showsPrec _ x = (show x++)

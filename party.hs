@@ -20,6 +20,8 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 char getargchar(int n, int k) { return env_argv[n][k]; }
+void errchar(int c) { fputc(c, stderr); }
+void errexit() { fputc('\n', stderr); return; }
 |]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
@@ -795,6 +797,7 @@ prims = let
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
+    , ("primitiveError", (arr (TAp (TC "[]") (TC "Char")) (TV "a"), ro "ERR"))
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
       A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
@@ -1534,6 +1537,10 @@ REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"
+ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
+ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
+ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
+ERREND = "errexit(); return;"
 |]
 comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some

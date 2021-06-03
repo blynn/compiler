@@ -240,6 +240,9 @@ import_qq_here = import_qq_here
 immediately after the import statements. Then we enable the C pre-processor and
 define `import_qq_here` to be `import Text.RawString.QQ --`.
 
+We perform similar tricks to hide `Prelude` symbols we define in the `System`
+module.
+
 ++++++++++
 <p><a onclick='hideshow("RTS");'>&#9654; Toggle `RTS.hs` for GHC</a></p><div id='RTS' style='display:none'>
 ++++++++++

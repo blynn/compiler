@@ -1,6 +1,7 @@
 -- GHC-compatible version. Ours is in a file with prefix "true."
 module Base where
 import qualified Data.Char (chr, ord)
+hide_prelude_here = hide_prelude_here
 
 chr = Data.Char.chr
 ord = Data.Char.ord

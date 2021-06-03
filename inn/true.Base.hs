@@ -1,7 +1,5 @@
 module Base where
 
-import System
-
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
@@ -78,13 +76,7 @@ length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
-instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
-instance Monad IO where return = ioPure ; (>>=) = ioBind
-instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ $ putChar . ord
-getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
-interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
+error = primitiveError
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
@@ -188,3 +180,7 @@ instance (Ord a, Ord b) => Ord (a, b) where
 null xs = case xs of
   [] -> True
   _ -> False
+
+instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
+instance Monad IO where return = ioPure ; (>>=) = ioBind
+instance Functor IO where fmap f x = ioPure f <*> x
