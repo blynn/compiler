@@ -194,8 +194,8 @@ extendChain searcher stay down s s' =
       else stay
     else down
   where
-  (prec, assoc) = either (const (5, LAssoc)) id $ findPrec searcher s
-  (prec', assoc') = either (const (5, LAssoc)) id $ findPrec searcher s'
+  (prec, assoc) = either (const (9, LAssoc)) id $ findPrec searcher s
+  (prec', assoc') = either (const (9, LAssoc)) id $ findPrec searcher s'
 
 secondM f (a, b) = (a,) <$> f b
 patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where

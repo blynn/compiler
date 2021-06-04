@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html *.mjs fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
@@ -87,10 +87,7 @@ sync: site ; rsync -R -r $(SITE) crypto.stanford.edu:www/compiler/
 
 clean: ; -rm $(SITE)
 
-# Later Asterius changes break my build, so first pin down a version with:
-#   $ docker pull terrorjack/asterius@sha256:77879bab47d392dc5be091f95af6306054e745a7b7ca477376c982adfe9cae61
-fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror 690a505d49b ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
-
-# fol.mjs fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && docker run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ./build-fol && cp -r fol-asterius/fol.wasm fol-asterius/*.mjs .
+# One day, we might want to pin to a particular image: https://asterius.netlify.app/images.html
+fol.js fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && podman run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ahc-link --bundle --browser --input-hs fol.lhs && cp -r fol-asterius/fol.wasm fol-asterius/fol.js .
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^

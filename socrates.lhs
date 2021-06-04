@@ -349,11 +349,13 @@ Attempting to formalize all of C is a fool's errand. For example:
   * Officially, https://blog.regehr.org/archives/232[it is illegal to optimize
   `x=0; x=0;`] but this rule is flouted in practice.
   * https://www.cl.cam.ac.uk/research/security/ctsrd/pdfs/201901-popl-cerberus.pdf[Pointer
-  semantics are ill-defined].
+  semantics are ill-defined]. https://gcc.godbolt.org/z/6dvd7c[Try for yourself online]!
   We sympathize with: "...the ISO standard is a prose document, as is typical
   for industry standards. The lack of mathematical precision, while also
   typical for industry standards, has surely contributed to the accumulated
   confusion..."
+  * https://queue.acm.org/detail.cfm?id=3468263[Meaningless C/C++ is often
+  found in production. The `memmove()` function is difficult to write in C].
 
 There is even http://compcert.inria.fr/[a certified C compiler], that is, a C
 compiler that a computer can prove is correct.

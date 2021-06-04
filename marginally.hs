@@ -574,7 +574,7 @@ instance Eq Assoc where
 ; RAssoc == RAssoc = True
 ; _ == _ = False
 };
-precOf s precTab = maybe 5 fst $ mlookup s precTab;
+precOf s precTab = maybe 9 fst $ mlookup s precTab;
 assocOf s precTab = maybe LAssoc snd $ mlookup s precTab;
 
 parseErr s = Parser $ const $ Left s;

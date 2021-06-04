@@ -310,7 +310,7 @@ right-hand side, and the absence of cycles among module dependencies.
 While we're in the neighbourhood, we eliminate `flst` and `fpair`.
 
 ------------------------------------------------------------------------
-cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs true.RTS.hs Compiler1.hs party.hs
+cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Compiler1.hs party.hs
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -488,11 +488,11 @@ include::inn/Compiler2.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("true.RTS1");'>&#9654; Toggle `true.RTS1.hs`</a></p><div id='true.RTS1' style='display:none'>
+<p><a onclick='hideshow("RTS1");'>&#9654; Toggle `RTS1.hs`</a></p><div id='RTS1' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/true.RTS1.hs[]
+include::inn/RTS1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -571,11 +571,11 @@ include::inn/Compiler3.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("true.RTS2");'>&#9654; Toggle `true.RTS2.hs`</a></p><div id='true.RTS2' style='display:none'>
+<p><a onclick='hideshow("RTS2");'>&#9654; Toggle `RTS2.hs`</a></p><div id='RTS2' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/true.RTS2.hs[]
+include::inn/RTS2.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++

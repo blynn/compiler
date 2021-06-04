@@ -455,7 +455,7 @@ instance Eq Assoc where
 ; RAssoc == RAssoc = True
 ; _ == _ = False
 };
-precOf s precTab = fmaybe (mlookup s precTab) 5 fst;
+precOf s precTab = fmaybe (mlookup s precTab) 9 fst;
 assocOf s precTab = fmaybe (mlookup s precTab) LAssoc snd;
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
 opFold precTab e xs = case xs of

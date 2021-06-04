@@ -50,10 +50,10 @@ We break type inference into 3 steps:
   correct. A later compiler supports default class method definitions, which
   are also handled in this phase.
 
-During code generation, we no longer necessarily know the address of a
-dependent symbol. Instead, we must leave space for an address and fill it in
-later. We take advantage of lazy tying-the-knot style so the code appears to
-effortlessly solve this problem.
+During code generation, we no longer know the address of a dependent symbol.
+Instead, we must leave space for an address and fill it in later. We take
+advantage of lazy tying-the-knot style so the code appears to effortlessly
+solve this problem.
 
 As our previous now has a predefined `Bool` type, we take this opportunity to
 refactor to use if-then-else instead of matching on `True` and `False`.
@@ -75,8 +75,8 @@ include::mutually.hs[]
 
 Now that code generation requires a map of addresses, it's a good time to
 experiment with hash consing. We reduce heap usage my maximizing sharing.
-However, it's not necessary a good idea, as this iteration of our compiler is
-appreciably slower!
+However, it may cost too much, as this iteration of our compiler is appreciably
+slower!
 
 Consider definitions whose right-hand side is a lone variable. Our `optiComb`
 function follows lone variables so that:

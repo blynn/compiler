@@ -226,7 +226,11 @@ void rts_init() {
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+#ifdef RUNFUN
+  RUNFUN;
+#else
   run();
+#endif
 }
 |]++)
 

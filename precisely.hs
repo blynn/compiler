@@ -798,7 +798,7 @@ addLets ls x = foldr triangle x components where
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
 
 data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
-precOf s precTab = maybe 5 fst $ mlookup s precTab
+precOf s precTab = maybe 9 fst $ mlookup s precTab
 assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
 parseErr s = Parser $ const $ Left s

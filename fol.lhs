@@ -1,7 +1,7 @@
 = First-order logic =
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script type='module' src='fol.mjs'></script>
+<script src='fol.js'></script>
 <script>
 function hideshow(s) {
   var x = document.getElementById(s);
@@ -671,6 +671,8 @@ runThen cont wr = do
   let (a, w) = runWriter wr
   cb <- makeHaskellCallback $ stream cont (a, w [])
   js_setTimeout cb 0
+foreign import javascript "wrapper" makeHaskellCallback :: IO () -> IO JSFunction
+foreign import javascript "wrapper" makeHaskellCallback1 :: (JSObject -> IO ()) -> IO JSFunction
 #else
 output = print
 runThen cont wr = do
@@ -1252,30 +1254,30 @@ getElem :: String -> IO JSVal
 getElem k = js_getElementById (toJSString k)
 addEventListener :: JSVal -> String -> (JSObject -> IO ()) -> IO ()
 addEventListener target event handler = do
-  callback <- makeHaskellCallback1 $ coerce handler
+  callback <- makeHaskellCallback1 handler
   js_addEventListener target (toJSString event) callback
 createElem :: String -> IO JSVal
 createElem = js_createElement . toJSString
 appendValue :: JSVal -> String -> IO ()
 appendValue e s = js_appendValue e $ toJSString s
 
-foreign import javascript "document.getElementById(${1})"
+foreign import javascript "document.getElementById($1)"
   js_getElementById :: JSString -> IO JSVal
-foreign import javascript "${1}[${2}] = ${3}"
+foreign import javascript "$1[$2] = $3"
   js_setProperty :: JSVal -> JSString -> JSString -> IO ()
-foreign import javascript "${1}[${2}]"
+foreign import javascript "$1[$2]"
   js_getProperty :: JSVal -> JSString -> IO JSString
-foreign import javascript "${1}.addEventListener(${2},${3})"
+foreign import javascript "$1.addEventListener($2,$3)"
   js_addEventListener :: JSVal -> JSString -> JSFunction -> IO ()
-foreign import javascript "document.createElement(${1})"
+foreign import javascript "document.createElement($1)"
   js_createElement :: JSString -> IO JSVal
-foreign import javascript "${1}.appendChild(${2})"
+foreign import javascript "$1.appendChild($2)"
   appendChild :: JSVal -> JSVal -> IO ()
-foreign import javascript "${1}.value += ${2}"
+foreign import javascript "$1.value += $2"
   js_appendValue :: JSVal -> JSString -> IO ()
-foreign import javascript "setTimeout(${1},${2})"
+foreign import javascript "setTimeout($1,$2)"
   js_setTimeout :: JSFunction -> Int -> IO ()
-foreign import javascript "${1}.scrollTop = ${1}.scrollHeight"
+foreign import javascript "$1.scrollTop = $1.scrollHeight"
   scrollToBottom :: JSVal -> IO ()
 
 main :: IO ()

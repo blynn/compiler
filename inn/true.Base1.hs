@@ -8,7 +8,7 @@ infixl 7 * , `div` , `mod`
 infixl 6 + , -
 infixr 5 ++
 infixl 4 <*> , <$> , <* , *>
-infix 4 == , /= , <=
+infix 4 == , /= , <= , <
 infixl 3 && , <|>
 infixl 2 ||
 infixl 1 >> , >>=
@@ -96,6 +96,14 @@ find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
+head (h:_) = h
+tail (_:t) = t
+xs!!0 = head xs
+xs!!n = tail xs!!(n - 1)
+replicate 0 _ = []
+replicate n x = x : replicate (n - 1) x
+null [] = True
+null _ = False
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap
@@ -185,9 +193,9 @@ mod = intMod
 instance (Ord a, Ord b) => Ord (a, b) where
   (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)
 
-null xs = case xs of
-  [] -> True
-  _ -> False
+a < b = a <= b && a /= b
+a > b = b <= a && a /= b
+(>=) = flip(<=)
 
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind

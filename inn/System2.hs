@@ -35,5 +35,6 @@ void errexit() { fputc('\n', stderr); return; }
 
 isEOF = (0 /=) <$> isEOFInt
 putStr = mapM_ $ putChar . ord
+putStrLn = (>> putChar (ord '\n')) . putStr
 getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 interact f = getContents >>= putStr . f
