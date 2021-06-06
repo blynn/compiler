@@ -88,6 +88,10 @@ sync: site ; rsync -R -r $(SITE) crypto.stanford.edu:www/compiler/
 clean: ; -rm $(SITE)
 
 # One day, we might want to pin to a particular image: https://asterius.netlify.app/images.html
-fol.js fol.wasm: fol.lhs; mkdir -p fol-asterius && cp fol.cabal fol.lhs fol-asterius/ && podman run -it --rm -v $(PWD):/mirror -w /mirror terrorjack/asterius ahc-link --bundle --browser --input-hs fol.lhs && cp -r fol-asterius/fol.wasm fol-asterius/fol.js .
+fol.js fol.wasm: fol.lhs
+	mkdir -p fol-asterius
+	cp fol.cabal fol.lhs fol-asterius/
+	podman run -it --rm -v $(PWD)/fol-asterius/:/mirror -w /mirror terrorjack/asterius ahc-link --bundle --browser --input-hs fol.lhs
+	cd fol-asterius && cp fol.js fol.wasm ..
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^

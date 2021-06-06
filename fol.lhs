@@ -89,7 +89,6 @@ Practical Logic and Automated Reasoning'.
 {-# LANGUAGE CPP #-}
 #ifdef ASTERIUS
 import Asterius.Types
-import Data.Coerce
 #endif
 import Control.Monad.State
 import Control.Monad.Writer
