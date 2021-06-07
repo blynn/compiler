@@ -1336,3 +1336,16 @@ main = do
 To force the browser to render log updates, we use zero-duration timeouts. The
 change in control flow means that the web version of `meson` interleaves the
 refutations of independent subformulas.
+
+We may be running into https://github.com/tweag/asterius/issues/696[an Asterius
+bug involving callbacks and garbage collection]. The callbacks created in the
+`stream` function are all one-shot, but if we declare them as `"oneshot"` then
+our code crashes on the `steamroller` problem.
+
+Letting them build up on the heap means we can solve `steamroller` with "Lazy
+MESON", but only once. The second time we click the button, we run into a strange
+JavaScript error:
+
+------------------------------------------------------------------------
+Uncaught (in promise) JSException "RuntimeError: function signature mismatch
+------------------------------------------------------------------------

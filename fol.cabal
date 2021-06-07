@@ -7,4 +7,3 @@ executable fol
   main-is: fol.lhs
   build-depends: base, megaparsec, mtl, containers, asterius-prelude
   default-language: Haskell2010
-  cpp-options: -DASTERIUS

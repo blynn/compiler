@@ -104,6 +104,7 @@ replicate 0 _ = []
 replicate n x = x : replicate (n - 1) x
 null [] = True
 null _ = False
+reverse = foldl (flip (:)) []
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap
