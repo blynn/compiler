@@ -142,22 +142,29 @@ argList t = case t of
   TV s -> [TV s]
   TAp (TC "IO") (TC u) -> [TC u]
   TAp (TAp (TC "->") x) y -> x : argList y
+  _ -> [t]
 
 cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
 cTypeName (TC "Char") = "char"
+cTypeName _ = "int"
 
 ffiDeclare (name, t) = let tys = argList t in (concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]++)
 
 ffiArgs n t = case t of
-  TC s -> ("", ((True, s), n))
-  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TC "IO") u -> ("", ((False, u), n))
+  TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  _ -> ("", ((True, t), n))
 
-ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == "()"
+needsNum t = case t of
+  TC "Int" -> True
+  TC "Char" -> True
+  _ -> False
+
+ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   then longDistanceCall . cont ("_K"++) . ("); break;"++)
-  else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++)
+  else ("{u r = "++) . longDistanceCall . cont (if needsNum ret then "app(_NUM, r)" else "r" ++) . ("); break;}\n"++)
   where
   (args, ((isPure, ret), count)) = ffiArgs 2 t
   lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
@@ -171,7 +178,7 @@ arrCount = \case
   _ -> 0
 
 genExport m n = ("void f"++) . shows n . ("("++)
-  . foldr (.) id (intersperse (',':) xs)
+  . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)

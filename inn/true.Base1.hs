@@ -105,6 +105,19 @@ replicate n x = x : replicate (n - 1) x
 null [] = True
 null _ = False
 reverse = foldl (flip (:)) []
+dropWhile _ [] = []
+dropWhile p xs@(x:xt)
+  | p x  = dropWhile p xt
+  | True = xs
+span _ [] = ([], [])
+span p xs@(x:xt)
+  | p x  = first (x:) $ span p xt
+  | True = ([],xs)
+break p = span (not . p)
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
+words s = case dropWhile isSpace s of
+  "" -> []
+  s' -> w : words s'' where (w, s'') = break isSpace s'
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap

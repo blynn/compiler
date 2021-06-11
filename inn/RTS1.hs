@@ -169,7 +169,7 @@ arrCount = \case
   _ -> 0
 
 genExport m n = ("void f"++) . showInt n . ("("++)
-  . foldr (.) id (intersperse (',':) xs)
+  . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
