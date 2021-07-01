@@ -584,14 +584,14 @@ addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
-          [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
+          [ A (A (V "showsPrec") (E $ Const 0)) (V "1")
           , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
-          , A (A (V "showsPrec") (E $ Const 11)) (V "2")
+          , A (A (V "showsPrec") (E $ Const 0)) (V "2")
           ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec") $ foldr
+        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 0)) $ V "prec") $ foldr
           (\f g -> A (A (V ".") f) g)
           (L "s" $ A (A (V "++") (E $ StrCon con)) (V "s"))
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 0)) (V a)) as
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing

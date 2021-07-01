@@ -1,10 +1,11 @@
 -- GHC-compatible version. Ours is in a file with prefix "true."
 module Base where
-import qualified Data.Char (chr, ord)
+import qualified Data.Char (chr, ord, isSpace)
 hide_prelude_here = hide_prelude_here
 
 chr = Data.Char.chr
 ord = Data.Char.ord
+isSpace = Data.Char.isSpace
 
 first f (x, y) = (f x, y)
 second f (x, y) = (x, f y)
@@ -44,3 +45,9 @@ instance Monad (State s) where
 evalState m s = fst $ runState m s
 get = State \s -> (s, s)
 put n = State \s -> ((), n)
+
+integerSignList x f = f (x >= 0) $ go x where
+  go 0 = []
+  go n = r : go q where (q, r) = divMod n $ 2^32
+
+intFromWord = fromIntegral

@@ -164,7 +164,7 @@ needsNum t = case t of
 
 ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   then longDistanceCall . cont ("_K"++) . ("); break;"++)
-  else ("{u r = "++) . longDistanceCall . cont (if needsNum ret then "app(_NUM, r)" else "r" ++) . ("); break;}\n"++)
+  else ("{u r = "++) . longDistanceCall . cont ((if needsNum ret then "app(_NUM, r)" else "r") ++) . ("); break;}\n"++)
   where
   (args, ((isPure, ret), count)) = ffiArgs 2 t
   lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
@@ -263,6 +263,7 @@ prims = let
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
+    , ("intFromWord", (arr (TC "Word") (TC "Int"), ro "I"))
     , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))

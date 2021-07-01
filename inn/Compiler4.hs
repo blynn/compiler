@@ -1,5 +1,6 @@
 -- Separate fixity phase.
 -- Export lists.
+-- Detect missing instances.
 module Compiler where
 
 import Base
@@ -252,7 +253,9 @@ infer typed loc ast csn@(cs, n) = case ast of
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
+  []  -> case ty of
+    TV _ -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
+    _ -> Left $ "no instance: " ++ show p
   (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance searcher qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
@@ -260,7 +263,7 @@ findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
 
 findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
   Nothing -> case findTypeclass searcher classId of
-    [] -> Left $ "no instance: " ++ show pred
+    [] -> Left $ classId ++ " has no instances"
     insts -> findInstance searcher psn pred insts
   Just s -> Right (psn, V s)
 

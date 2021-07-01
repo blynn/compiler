@@ -657,3 +657,6 @@ and our prover finds:
 
 http://hackage.haskell.org/package/djinn[The Djinn tool] is similar to what we
 built, though has considerably more features.
+
+https://arxiv.org/abs/1805.07518[Michael Shulman describes an intimate
+connection between linear logic and constructive mathematics].

@@ -180,7 +180,7 @@ mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
     (u0:u1:ut) = reverse us
     (lsbs, msbs) = splitAt (ulen - vlen - 1) us
     (ql, qh) = word64Div u1 u0 v1 0
-    q0  = if 1 <= qh then (0-1) else ql
+    q0 = if 1 <= qh then (0-1) else ql
     (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- 1) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs 0) 0, bor == 0]
 
 mpDivScale n = fst $ word64Div 0 1 (n + 1) 0
@@ -700,14 +700,14 @@ addAdt t cs ders (Neat tycl fs typed dcs ffis exs) = foldr derive ast ders where
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
-          [ A (A (V "showsPrec") (E $ Const 11)) (V "1")
+          [ A (A (V "showsPrec") (E $ Const 0)) (V "1")
           , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
-          , A (A (V "showsPrec") (E $ Const 11)) (V "2")
+          , A (A (V "showsPrec") (E $ Const 0)) (V "2")
           ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 11)) $ V "prec") $ foldr
+        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 0)) $ V "prec") $ foldr
           (\f g -> A (A (V ".") f) g)
           (L "s" $ A (A (V "++") (E $ StrCon con)) (V "s"))
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 11)) (V a)) as
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") (E $ Const 0)) (V a)) as
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
@@ -1227,7 +1227,7 @@ secondM f (a, b) = (a,) <$> f b
 -- Compiles patterns. Overloads literals.
 patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
-    E (Const c) -> pure $ A (V "fromInteger") t
+    E (Const _) -> pure $ A (V "fromInteger") t
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)

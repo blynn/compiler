@@ -8,6 +8,8 @@ import RTS
 import Compiler
 import System
 
+hide_prelude_here' = hide_prelude_here'
+
 compile s = either id id do
   mods <- untangle s
   let

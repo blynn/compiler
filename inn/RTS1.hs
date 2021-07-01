@@ -250,7 +250,6 @@ prims = let
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))

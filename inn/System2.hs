@@ -1,6 +1,7 @@
 module System where
 
 import Base
+hide_prelude_here = hide_prelude_here
 import_qq_here = import_qq_here
 
 foreign import ccall "putchar" putChar :: Int -> IO Int
@@ -36,5 +37,6 @@ void errexit() { fputc('\n', stderr); return; }
 isEOF = (0 /=) <$> isEOFInt
 putStr = mapM_ $ putChar . ord
 putStrLn = (>> putChar (ord '\n')) . putStr
+print = putStrLn . show
 getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 interact f = getContents >>= putStr . f
