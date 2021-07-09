@@ -1,6 +1,7 @@
 -- Separate fixity phase.
 -- Export lists.
 -- Detect missing instances.
+-- Top-level type annotations.
 module Compiler where
 
 import Base
@@ -291,38 +292,24 @@ runDep (Dep f) = f []
 
 inferno searcher typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
-  in foldM (\(acc, (subs, n)) s ->
-    maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
-    \expr -> infer typed loc expr (subs, n) >>=
-    \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
-    \cs -> Right ((s, (t, a)):acc, (cs, n1))
-  ) ([], ([], 0)) syms >>=
-  \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove searcher s $ typeAstSub soln ta) <$> stas
+  go (acc, (subs, n)) s = do
+    expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
+    ((t, a), (ms, n1)) <- infer typed loc expr (subs, n)
+    cs <- unify (TV (' ':s)) t ms
+    Right ((s, (t, a)):acc, (cs, n1))
+  in do
+    (stas, (soln, _)) <- foldM go ([], ([], 0)) syms
+    pure $ (\(s, ta) -> (s, typeAstSub soln ta)) <$> stas
 
-prove searcher s (t, a) = flip fmap (prove' searcher ([], 0) a) \((ps, _), x) -> let
+prove searcher s t a = flip fmap (prove' searcher ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
 
-ambiguous (Qual ps t) = filter (not . resolvable) ps where
-  resolvable (Pred _ ty) = all (`elem` typeVars t) $ typeVars ty
-
-reconcile searcher q@(Qual ps t) ast = \case
-  Nothing -> Right (q, ast)
+reconcile searcher s t ast = \case
+  Nothing -> snd <$> prove searcher s t ast
   Just qAnno@(Qual psA tA) -> case match t tA of
-    Nothing -> Left $ ("type mismatch, expected: "++) . shows qAnno . (", actual: "++) $ show q
-    Just sub -> let
-      vcount = length psA
-      vars = show <$> [1..vcount]
-      annoDictVars = (zip psA vars, vcount)
-      forbidNew p ((_, n), x)
-        | n == vcount = Right x
-        | True = Left $ "missing predicate: " ++ show p
-      findAnno p@(Pred cl ty) = findProof searcher (Pred cl $ apply sub ty) annoDictVars >>= forbidNew p
-      in do
-        dicts <- mapM findAnno ps
-        case ambiguous qAnno of
-          [] -> pure (qAnno, foldr L (foldl A ast dicts) vars)
-          ambis -> Left $ ("ambiguous: "++) . foldr (.) id (map shows ambis) $ ""
+    Nothing -> Left $ ("type mismatch, annotation: "++) . shows tA . (", actual: "++) $ show t
+    Just sub -> snd <$> prove searcher s tA (proofApply sub ast)
 
 inferDefs searcher defs decls typed = do
   let
@@ -336,7 +323,7 @@ inferDefs searcher defs decls typed = do
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
     add typed (s, (q, ast)) = do
-      (q, ast) <- reconcile searcher q ast $ mlookup s decls
+      (q, ast) <- reconcile searcher s q ast $ mlookup s decls
       pure $ insert s (q, ast) typed
     inferComponent typed syms = foldM add typed =<< inferno searcher typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
