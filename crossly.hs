@@ -1,7 +1,7 @@
 -- Can target wasm.
 -- Top-level type annotations.
 
-ffi "putchar_cast" putChar :: Char -> IO ()
+ffi "putchar" putChar :: Char -> IO Int
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
 ffi "getchar_fp" getChar :: IO Int
@@ -1494,14 +1494,13 @@ libc = ([r|#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
+int getargchar(int n, int k) { return env_argv[n][k]; }
 static char buf[1024], *bufp;
 static FILE *fp;
 void reset_buffer() { bufp = buf; }
 void put_buffer(int n) { *bufp++ = n; }
 void stdin_load_buffer() { fp = fopen(buf, "r"); }
 int getchar_fp(void) { int n = getc(fp); if (n < 0) fclose(fp); return n; }
-void putchar_cast(char c) { putchar(c); }
 void *malloc(unsigned long);
 |]++)
 
@@ -1513,7 +1512,7 @@ argList t = case t of
 
 cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
+cTypeName (TC "Char") = "int"
 
 ffiDeclare (name, t) = let tys = argList t in concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]

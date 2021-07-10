@@ -10,7 +10,7 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
 
-foreign import ccall "putchar" putChar :: Int -> IO Int
+foreign import ccall "putchar" putChar :: Char -> IO Int
 foreign import ccall "getchar" getChar :: IO Int
 foreign import ccall "getargcount" getArgCount :: IO Int
 foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char
@@ -19,7 +19,7 @@ libc = [r|
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
+int getargchar(int n, int k) { return env_argv[n][k]; }
 void errchar(int c) { fputc(c, stderr); }
 void errexit() { fputc('\n', stderr); return; }
 |]
@@ -92,10 +92,10 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
-putStr = mapM_ $ putChar . ord
+putStr = mapM_ putChar
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
-error s = unsafePerformIO $ putStr s >> putChar (ord '\n') >> exitSuccess
+error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
@@ -1411,7 +1411,7 @@ argList t = case t of
 
 cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
+cTypeName (TC "Char") = "int"
 
 ffiDeclare (name, t) = let tys = argList t in concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]

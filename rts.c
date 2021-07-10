@@ -146,6 +146,6 @@ void rts_init() {
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
-char getargchar(int n, int k) { return env_argv[n][k]; }
+int getargchar(int n, int k) { return env_argv[n][k]; }
 
 #define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}

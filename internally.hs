@@ -1001,7 +1001,7 @@ argList t = case t of
 
 cTypeName (TC "()") = "void";
 cTypeName (TC "Int") = "int";
-cTypeName (TC "Char") = "char";
+cTypeName (TC "Char") = "int";
 
 ffiDeclare (name, t) = let { tys = argList t } in concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"];

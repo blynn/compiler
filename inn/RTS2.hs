@@ -1,6 +1,7 @@
 -- FFI across multiple modules.
 -- Rewrite with named fields, Show, Eq.
 -- Change `isEOF` and `getChar` to behave more like Haskell's.
+-- Change `div` and `mod` to round down instead towards zero for `Int`.
 module RTS where
 
 import Base
@@ -120,8 +121,10 @@ DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
-DIV x y = "_NUM" "num(1) / num(2)"
-MOD x y = "_NUM" "num(1) % num(2)"
+QUOT x y = "_NUM" "num(1) / num(2)"
+REM x y = "_NUM" "num(1) % num(2)"
+DIV x y = "_NUM" "div(num(1), num(2))"
+MOD x y = "_NUM" "mod(num(1), num(2))"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
@@ -146,7 +149,7 @@ argList t = case t of
 
 cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "char"
+cTypeName (TC "Char") = "int"
 cTypeName _ = "int"
 
 ffiDeclare (name, t) = let tys = argList t in (concat
@@ -211,7 +214,11 @@ comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 
-runFun = ([r|static void run() {
+runFun = ([r|
+static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
+static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
+
+static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -291,8 +298,8 @@ prims = let
       , ("intMul", "MUL")
       , ("intDiv", "DIV")
       , ("intMod", "MOD")
-      , ("intQuot", "DIV")
-      , ("intRem", "MOD")
+      , ("intQuot", "QUOT")
+      , ("intRem", "REM")
       ]
     ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
       [ ("wordAdd", "ADD")
