@@ -86,6 +86,7 @@ find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap

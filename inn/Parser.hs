@@ -42,7 +42,6 @@ hexValue d
   | d <= '9' = ord d - ord '0'
   | d <= 'F' = 10 + ord d - ord 'A'
   | d <= 'f' = 10 + ord d - ord 'a'
-isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 isNewline c = ord c `elem` [10, 11, 12, 13]
 isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
 dashes = char '-' *> some (char '-')
