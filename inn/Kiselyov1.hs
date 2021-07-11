@@ -1,3 +1,4 @@
+-- Add `Show` instance.
 module Kiselyov where
 import Base
 import Ast
@@ -16,10 +17,11 @@ debruijn n e = case e of
 data IntTree = Lf Extra | LfVar String | Nd IntTree IntTree
 data Sem = Defer | Closed IntTree | Need Sem | Weak Sem
 
-showTree prec t = case t of
-  LfVar s -> showVar s
-  Lf extra -> showExtra extra
-  Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
+instance Show IntTree where
+  showsPrec prec = \case
+    LfVar s -> showVar s
+    Lf extra -> shows extra
+    Nd x y -> showParen (1 <= prec) $ showsPrec 0 x . (' ':) . showsPrec 1 y
 
 lf = Lf . Basic
 

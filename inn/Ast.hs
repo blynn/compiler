@@ -86,6 +86,32 @@ showType t = case t of
   TAp a b -> par $ showType a . (' ':) . showType b
 showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
 
+showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
+
+showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
+
+showExtra = \case
+  Basic s -> (s++)
+  ForeignFun n -> ("FFI_"++) . showInt n
+  Const i -> showInt i
+  ChrCon c -> ('\'':) . (c:) . ('\'':)
+  StrCon s -> ('"':) . (s++) . ('"':)
+  Link im s _ -> (im++) . ('.':) . (s++)
+
+showPat = \case
+  PatLit e -> showExtra e
+  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
+  PatCon s ps -> (s++) . ("TODO"++)
+
+showAst prec t = case t of
+  E e -> showExtra e
+  V s -> showVar s
+  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
+  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
+  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
+  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
+  Proof p -> ("{Proof "++) . showPred p . ("}"++)
+
 typedAsts (Neat _ _ tas _ _ _ _) = tas
 typeclasses (Neat tcs _ _ _ _ _ _) = tcs
 dataCons (Neat _ _ _ dcs _ _ _) = dcs

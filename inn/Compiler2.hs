@@ -374,45 +374,14 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
-showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
-
-showExtra = \case
-  Basic s -> (s++)
-  ForeignFun n -> ("FFI_"++) . showInt n
-  Const i -> showInt i
-  ChrCon c -> ('\'':) . (c:) . ('\'':)
-  StrCon s -> ('"':) . (s++) . ('"':)
-  Link im s _ -> (im++) . ('.':) . (s++)
-
-showPat = \case
-  PatLit e -> showExtra e
-  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
-  PatCon s ps -> (s++) . ("TODO"++)
-
-showAst prec t = case t of
-  E e -> showExtra e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
-  Proof p -> ("{Proof "++) . showPred p . ("}"++)
-
-showTree prec t = case t of
-  LfVar s -> showVar s
-  Lf extra -> showExtra extra
-  Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
-disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
-
 dumpWith dumper s = case untangle s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
 
-dumpCombs ((_, lambs), _) = map disasm $ optiComb lambs
+dumpCombs ((_, lambs), _) = go <$> optiComb lambs where
+  go (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
 dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
-
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
 
 dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 

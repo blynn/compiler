@@ -45,8 +45,8 @@ endef
 $(call party,multiparty,party,true.Base System Ast Map Parser Kiselyov Unify RTS Compiler party)
 $(call party,party1,multiparty,true.Base System Ast Map Parser Kiselyov Unify RTS Compiler1 party)
 $(call party,party2,party1,true.Base System Ast1 Map Parser1 Kiselyov Unify RTS1 Compiler2 party)
-$(call party,party3,party2,true.Base1 System1 Ast2 Map Parser2 Kiselyov Unify RTS2 Compiler3 party1)
-$(call party,party4,party3,true.Base1 System1 Ast3 Map Parser3 Kiselyov Unify RTS2 Compiler4 party2)
+$(call party,party3,party2,true.Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Compiler3 party1)
+$(call party,party4,party3,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS2 Compiler4 party2)
 
 $(call cat,party1,true.Base System Ast Map Parser Kiselyov Unify RTS1 Compiler1 party)
 

@@ -497,17 +497,12 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
-showTree prec t = case t of
-  LfVar s -> showVar s
-  Lf extra -> shows extra
-  Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
-disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
-
 dumpWith dumper s = case untangle s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, neat) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper neat)) $ toAscList tab
 
-dumpCombs neat = map disasm $ optiComb $ second snd <$> toAscList (typedAsts neat)
+dumpCombs neat = map go $ optiComb $ second snd <$> toAscList (typedAsts neat) where
+  go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 dumpLambs neat = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) $ second snd <$> toAscList (typedAsts neat)
 
