@@ -5,9 +5,24 @@ import Map
 import Ast
 import RTS
 import Compiler
+import Kiselyov
 import System
 
 hide_prelude_here' = hide_prelude_here'
+
+codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . (mem'++)))
+  where
+  (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
+
+codegen mods = (bigmap, mem) where
+  (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+  mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
+
+getIOType (Qual [] (TAp (TC "IO") t)) = Right t
+getIOType q = Left $ "main : " ++ showQual q ""
+
+ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 
 compile s = either id id do
   mods <- untangle s
@@ -49,6 +64,17 @@ compile s = either id id do
     . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
       . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
     $ mainStr
+
+dumpWith dumper s = case untangle s of
+  Left err -> err
+  Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
+
+dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
+
+dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+
+dumpCombs ((_, lambs), _) = go <$> optiComb lambs where
+  go (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
 main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs

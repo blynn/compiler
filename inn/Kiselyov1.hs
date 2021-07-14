@@ -68,3 +68,37 @@ babs t = case t of
   App x y -> babs x ## babs y
 
 nolam x = (\(Closed d) -> d) $ babs $ debruijn [] x
+
+-- Optimizations.
+optim t = case t of
+  Nd x y -> go (optim x) (optim y)
+  _ -> t
+  where
+  go (Lf (Basic "I")) q = q
+  go p q@(Lf (Basic c)) = case c of
+    "I" -> case p of
+      Lf (Basic "C") -> lf "T"
+      Lf (Basic "B") -> lf "I"
+      Nd p1 p2 -> case p1 of
+        Lf (Basic "B") -> p2
+        Lf (Basic "R") -> Nd (lf "T") p2
+        _ -> Nd (Nd p1 p2) q
+      _ -> Nd p q
+    "T" -> case p of
+      Nd (Lf (Basic "B")) (Lf (Basic "C")) -> lf "V"
+      _ -> Nd p q
+    _ -> Nd p q
+  go p q = Nd p q
+
+optiComb' (subs, combs) (s, lamb) = let
+  gosub t = case t of
+    LfVar v -> maybe t id $ lookup v subs
+    Nd a b -> Nd (gosub a) (gosub b)
+    _ -> t
+  c = optim $ gosub $ nolam lamb
+  combs' = combs . ((s, c):)
+  in case c of
+    Lf (Basic _) -> ((s, c):subs, combs')
+    LfVar v -> if v == s then (subs, combs . ((s, Nd (lf "Y") (lf "I")):)) else ((s, gosub c):subs, combs')
+    _ -> (subs, combs')
+optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs

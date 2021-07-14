@@ -2,6 +2,7 @@ module RTS where
 
 import Base
 import Ast
+import Kiselyov
 import Map
 import Parser
 
@@ -293,3 +294,57 @@ prims = let
       , ("wordQuot", "U_DIV")
       , ("wordRem", "U_MOD")
       ]
+
+-- Hash consing.
+data Obj = Local String | Global String String | Code Int
+
+instance Eq Obj where
+  Local a == Local b = a == b
+  Global m a == Global n b = m == n && a == b
+  Code a == Code b = a == b
+  _ == _ = False
+
+instance Ord Obj where
+  x <= y = case x of
+    Local a -> case y of
+      Local b -> a <= b
+      _ -> True
+    Global m a -> case y of
+      Local _ -> False
+      Global n b -> if m == n then a <= b else m <= n
+      _ -> True
+    Code a -> case y of
+      Code b -> a <= b
+      _ -> False
+
+memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
+  Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
+  Just v -> pure v
+
+enc t = case t of
+  Lf n -> case n of
+    Basic c -> pure $ Code $ comEnum c
+    ForeignFun n -> Code <$> memget (Code $ comEnum "F", Code n)
+    Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
+    ChrCon c -> enc $ Lf $ Const $ ord c
+    StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
+    Link m s _ -> pure $ Global m s
+  LfVar s -> pure $ Local s
+  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
+
+encTop t = enc t >>= \case
+  Code n -> pure n
+  other -> memget (Code $ comEnum "I", other)
+
+asm combs = foldM
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
+  Tip combs
+
+hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
+  \symtab (_, (hp, f)) -> let
+    mem = (\case
+        Code n -> Right n
+        Local s -> Right $ symtab ! s
+        Global m s -> Left (m, s)
+      ) <$> f []
+    in (symtab, (hp, mem))

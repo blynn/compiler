@@ -6,9 +6,34 @@ import Map
 import Ast
 import RTS
 import Compiler
+import Kiselyov
 import System
 
 hide_prelude_here' = hide_prelude_here'
+
+codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . f'))
+  where
+  (localmap, (hp', f')) = hashcons hp $ optiComb lambs
+
+codegen ffis mods = (bigmap', mem) where
+  (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+  bigmap' = (resolveGlobal <$>) <$> bigmap
+  mem = resolveGlobal <$> memF []
+  ffiIndex = fromList $ zip (keys ffis) [0..]
+  resolveGlobal = \case
+    Left (m, s) -> if m == "{foreign}"
+      then ffiIndex ! s
+      else resolveGlobal $ (bigmap ! m) ! s
+    Right n -> n
+
+getIOType (Qual [] (TAp (TC "IO") t)) = Right t
+getIOType q = Left $ "main : " ++ show q
+
+ffcat (name, (_, (ffis, ffes))) (xs, ys) =
+  ( foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) xs $ toAscList ffis
+  , foldr (\(k, v) m -> insertWith (error $ "duplicate export: " ++ k) k (name, v) m) ys $ toAscList ffes
+  )
 
 compile s = either id id do
   mods <- untangle s
@@ -50,6 +75,17 @@ compile s = either id id do
     . foldr (.) id (zipWith (\(expName, (modName, ourName)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++)
       . genExport (arrCount $ mustType modName ourName) n) (toAscList ffes) [0..])
     $ mainStr
+
+dumpWith dumper s = case untangle s of
+  Left err -> err
+  Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
+
+dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
+
+dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
+
+dumpCombs ((_, lambs), _) = go <$> optiComb lambs where
+  go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
