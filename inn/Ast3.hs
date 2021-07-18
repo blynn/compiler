@@ -1,4 +1,5 @@
 -- Separate fixity phase.
+-- Module exports.
 module Ast where
 import Base
 import Map

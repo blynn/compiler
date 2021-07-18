@@ -30,16 +30,18 @@ codegen ffis mods = (bigmap', mem) where
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
 
-ffcat (name, (_, (ffis, ffes))) (xs, ys) =
-  ( foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) xs $ toAscList ffis
-  , foldr (\(k, v) m -> insertWith (error $ "duplicate export: " ++ k) k (name, v) m) ys $ toAscList ffes
-  )
-
 compile s = either id id do
   mods <- untangle s
   let
-    (ffis, ffes) = foldr ffcat (Tip, Tip) $ toAscList mods
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . fst . snd) $ elems mods
     (bigmap, mem) = codegen ffis mods
+    ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
+      [ (expName, (addr, argcount))
+      | (modName, (_, (_, ffes))) <- toAscList mods
+      , (expName, ourName) <- toAscList ffes
+      , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
+      , let argcount = arrCount $ mustType modName ourName
+      ]
     mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
       Just (Qual [] t) -> t
       _ -> error "TODO: report bad exports"
@@ -63,7 +65,7 @@ compile s = either id id do
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
-    . foldr (\(_, (modName, ourName)) f -> maybe undefined shows (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id (toAscList ffes)
+    . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
@@ -72,8 +74,7 @@ compile s = either id id do
     . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
     . ("\n  }\n}\n" ++)
     . runFun
-    . foldr (.) id (zipWith (\(expName, (modName, ourName)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++)
-      . genExport (arrCount $ mustType modName ourName) n) (toAscList ffes) [0..])
+    . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
     $ mainStr
 
 dumpWith dumper s = case untangle s of

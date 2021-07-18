@@ -77,4 +77,5 @@ foldrWithKey f = go where
 
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 keys = map fst . toAscList
+elems = map snd . toAscList
 assocs = toAscList
