@@ -1,5 +1,6 @@
--- Record fields.
-module Compiler where
+-- Preload primitives.
+-- Remove `flst`, `fpair`.
+module Typer where
 
 import Base
 import Map
@@ -23,8 +24,6 @@ optiApp t = case t of
   _ -> t
 
 -- Pattern compiler.
-findCon dcs s = foldr (<|>) Nothing $ mlookup s <$> dcs
-
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
@@ -37,7 +36,7 @@ unpat dcs as t = case as of
     go p x = case p of
       PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
       PatVar s m -> maybe (unpat dcs at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
-      PatCon con args -> case findCon dcs con of
+      PatCon con args -> case dcs con of
         Nothing -> error "bad data constructor"
         Just cons -> unpat dcs args x >>= \y -> unpat dcs at $ singleOut con cons (V freshv) y
     in go a t
@@ -48,7 +47,7 @@ unpatTop dcs als x = case als of
     go p t = case p of
       PatLit lit -> unpatTop dcs alt $ patEq lit (V l) t $ V "pjoin#"
       PatVar s m -> maybe (unpatTop dcs alt) go m $ beta s (V l) t
-      PatCon con args -> case findCon dcs con of
+      PatCon con args -> case dcs con of
         Nothing -> error "bad data constructor"
         Just cons -> unpat dcs args t >>= \y -> unpatTop dcs alt $ singleOut con cons (V l) y
     in go a x
@@ -69,7 +68,7 @@ classifyAlt v x = case v of
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
   firstC = case toAscList tab of ((con, _):_) -> con
-  cs = maybe (error $ "bad constructor: " ++ firstC) id $ findCon dcs firstC
+  cs = maybe (error $ "bad constructor: " ++ firstC) id $ dcs firstC
   in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of
       Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
@@ -83,37 +82,8 @@ updateCaseSt dcs (acc, tab) alt = case alt of
 rewriteCase dcs as = acc . genCase dcs tab $ V "fail#" where
   (acc, tab) = foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as
 
-findField dcs f = case [(con, fields) | tab <- dcs, (_, cons) <- toAscList tab, Constr con fields <- cons, (f', _) <- fields, f == f'] of
-  [] -> error $ "no such field: " ++ f
-  h:_ -> h
-
-resolveFieldBinds dcs t = go t where
-  go t = case t of
-    E _ -> t
-    V _ -> t
-    A (E (Basic "{=")) (A expr fbsAst) -> let
-      fromAst t = case t of
-        A (A (E (StrCon f)) body) rest -> (f, body):fromAst rest
-        E (Basic "=}") -> []
-      fbs@((firstField, _):_) = fromAst fbsAst
-      (con, fields) = findField dcs firstField
-      cs = maybe undefined id $ findCon dcs con
-      newValue = foldl A (V con) [maybe (V $ "[old]"++f) id $ lookup f fbs | (f, _) <- fields]
-      initValue = foldl A expr [maybe (V "undefined") id $ lookup f fbs | (f, _) <- fields]
-      updater = foldr L newValue $ ("[old]"++) . fst <$> fields
-      inj x = map (\(Constr con' _) -> if con' == con then x else V "undefined") cs
-      allPresent = all (`elem` (fst <$> fields)) $ fst <$> fbs
-      isCon = case expr of
-        V (h:_) -> 'A' <= h && h <= 'Z'
-        _ -> False
-      in if allPresent
-        then if isCon then initValue else foldl A (A (V $ specialCase cs) expr) $ inj updater
-        else error "bad fields in update"
-    A x y -> A (go x) (go y)
-    L s x -> L s $ go x
-
 secondM f (a, b) = (a,) <$> f b
-patternCompile dcs t = optiApp $ resolveFieldBinds dcs $ evalState (go t) 0 where
+patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
@@ -289,8 +259,8 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perCl
 primAdts =
   [ (TC "()", [Constr "()" []])
   , (TC "Bool", [Constr "True" [], Constr "False" []])
-  , (TAp (TC "[]") (TV "a"), [Constr "[]" [], Constr ":" $ map ("",) [TV "a", TAp (TC "[]") (TV "a")]])
-  , (TAp (TAp (TC ",") (TV "a")) (TV "b"), [Constr "," $ map ("",) [TV "a", TV "b"]])
+  , (TAp (TC "[]") (TV "a"), [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
+  , (TAp (TAp (TC ",") (TV "a")) (TV "b"), [Constr "," [TV "a", TV "b"]])
   ]
 
 prims = let
@@ -347,8 +317,7 @@ prims = let
       , ("wordRem", "U_MOD")
       ]
 
-
-neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip [] [] []) primAdts
+neatNew = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
 
 tabulateModules mods = foldM ins Tip $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -369,7 +338,7 @@ inferModule tab acc name = case mlookup name acc of
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
-      dcs = adtTab : map (dataCons . (tab !)) imps
+      dcs s = foldr (<|>) (mlookup s adtTab) $ map (\im -> mlookup s $ dataCons $ tab ! im) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
       genDefaultMethod (qs, lambF) (classId, s) = case mlookup defName qs of
         Nothing -> Right (insert defName q qs, lambF . ((defName, V "fail#"):))

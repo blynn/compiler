@@ -2,7 +2,7 @@
 -- Export lists.
 -- Detect missing instances.
 -- Top-level type annotations.
-module Compiler where
+module Typer where
 
 import Base
 import Map

@@ -1,6 +1,5 @@
--- Record fields.
--- Remove `fpair.
--- Shims for `getChar` and `isEOF`.
+-- Separate fixity phase.
+-- Export lists.
 module RTS where
 
 import Base
@@ -36,7 +35,7 @@ void errchar(int c) { fputc(c, stderr); }
 void errexit() { fputc('\n', stderr); return; }
 |]
 
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 enum { TOP = 1<<24 };
@@ -142,8 +141,10 @@ DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
-DIV x y = "_NUM" "num(1) / num(2)"
-MOD x y = "_NUM" "num(1) % num(2)"
+QUOT x y = "_NUM" "num(1) / num(2)"
+REM x y = "_NUM" "num(1) % num(2)"
+DIV x y = "_NUM" "div(num(1), num(2))"
+MOD x y = "_NUM" "mod(num(1), num(2))"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
@@ -164,52 +165,57 @@ argList t = case t of
   TV s -> [TV s]
   TAp (TC "IO") (TC u) -> [TC u]
   TAp (TAp (TC "->") x) y -> x : argList y
+  _ -> [t]
 
 cTypeName (TC "()") = "void"
 cTypeName (TC "Int") = "int"
 cTypeName (TC "Char") = "int"
+cTypeName _ = "int"
 
-ffiDeclare (name, t) = let tys = argList t in concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]
+ffiDeclare (name, t) = let tys = argList t in (concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]++)
 
 ffiArgs n t = case t of
-  TC s -> ("", ((True, s), n))
-  TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TC "IO") u -> ("", ((False, u), n))
+  TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  _ -> ("", ((True, t), n))
 
-ffiDefine n ffis = case ffis of
-  [] -> id
-  (name, t):xt -> let
-    (args, ((isPure, ret), count)) = ffiArgs 2 t
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
-    longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
-      else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
+needsNum t = case t of
+  TC "Int" -> True
+  TC "Char" -> True
+  _ -> False
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
+ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
+  then longDistanceCall . cont ("_K"++) . ("); break;"++)
+  else ("{u r = "++) . longDistanceCall . cont ((if needsNum ret then "app(_NUM, r)" else "r") ++) . ("); break;}\n"++)
+  where
+  (args, ((isPure, ret), count)) = ffiArgs 2 t
+  lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
+  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
+  longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
   _ -> 0
 
-genExport m n = ("void f"++) . showInt n . ("("++)
+genExport m n = ("void f"++) . shows n . ("("++)
   . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . showInt) [0..m - 1]
-  rt = ("root["++) . showInt n . ("]"++)
+  xs = map ((('x':) .) . shows) [0..m - 1]
+  rt = ("root["++) . shows n . ("]"++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
-  argc = ('(':) . showInt (length args)
+  argc = ('(':) . shows (length args)
   m = zip args [1..]
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
@@ -222,13 +228,17 @@ combExpr = foldl1 A <$> some
   (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
 comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
   Left e -> error e
-  Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
+  Right (xs, _) -> case parse (braceSep comb) $ offside xs of
     Left e -> error e
     Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 
-runFun = ([r|static void run() {
+runFun = ([r|
+static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
+static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
+
+static void run() {
   for(;;) {
     if (mem + hp > sp - 8) gc();
     u x = *sp;
@@ -250,18 +260,16 @@ void rts_init() {
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+#ifdef RUNFUN
+  RUNFUN;
+#else
   run();
+#endif
 }
 |]++)
 
 -- Hash consing.
-data Obj = Local String | Global String String | Code Int
-
-instance Eq Obj where
-  Local a == Local b = a == b
-  Global m a == Global n b = m == n && a == b
-  Code a == Code b = a == b
-  _ == _ = False
+data Obj = Local String | Global String String | Code Int deriving Eq
 
 instance Ord Obj where
   x <= y = case x of
@@ -283,7 +291,6 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    ForeignFun n -> Code <$> memget (Code $ comEnum "F", Code n)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -291,48 +298,57 @@ enc t = case t of
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
 
-encTop t = enc t >>= \case
-  Code n -> pure n
-  other -> memget (Code $ comEnum "I", other)
-
 asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
   Tip combs
 
-hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
-  \symtab (_, (hp, f)) -> let
-    mem = (\case
-        Code n -> Right n
-        Local s -> Right $ symtab ! s
-        Global m s -> Left (m, s)
-      ) <$> f []
-    in (symtab, (hp, mem))
-
-codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . (mem'++)))
+hashcons hp combs = (symtab', (hp', (mem++)))
   where
-  (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
+  (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
+  symtab' = resolveLocal <$> symtab
+  mem = resolveLocal <$> memF []
+  resolveLocal = \case
+    Code n -> Right n
+    Local s -> resolveLocal $ symtab ! s
+    Global m s -> Left (m, s)
 
-codegen mods = (bigmap, mem) where
+codegenLocal (name, neat) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . f'))
+  where
+  (localmap, (hp', f')) = hashcons hp $ optiComb $ toAscList $ snd <$> typedAsts neat
+
+codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
-  mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
+  bigmap' = (resolveGlobal <$>) <$> bigmap
+  mem = resolveGlobal <$> memF []
+  ffiIndex = fromList $ zip (keys ffis) [0..]
+  resolveGlobal = \case
+    Left (m, s) -> if m == "{foreign}"
+      then ffiIndex ! s
+      else resolveGlobal $ (bigmap ! m) ! s
+    Right n -> n
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-getIOType q = Left $ "main : " ++ showQual q ""
-
-ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
+getIOType q = Left $ "main : " ++ show q
 
 compile mods = do
   let
-    (bigmap, mem) = codegen mods
-    (ffis, ffes) = foldr ffcat ([], []) $ toAscList mods
-    mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
-      Just (Qual [] t) -> t
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
+    (bigmap, mem) = codegen ffis mods
+    ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
+      [ (expName, (addr, argcount))
+      | (modName, neat) <- toAscList mods
+      , (expName, ourName) <- toAscList $ ffiExports neat
+      , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
+      , let argcount = arrCount $ mustType modName ourName
+      ]
+    mustType modName s = case mlookup s $ typedAsts $ mods ! modName of
+      Just (Qual [] t, _) -> t
       _ -> error "TODO: report bad exports"
     mayMain = do
         tab <- mlookup "Main" bigmap
         mainAddr <- mlookup "main" tab
-        mainType <- mlookup "main" $ fst $ fst $ mods ! "Main"
+        mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")
         pure (mainAddr, mainType)
   mainStr <- case mayMain of
     Nothing -> pure ""
@@ -347,17 +363,16 @@ compile mods = do
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
-    . foldr (\(modName, (_, ourName)) f -> maybe undefined showInt (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id ffes
+    . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
-    . (concatMap ffiDeclare ffis ++)
+    . foldr (.) id (ffiDeclare <$> toAscList ffis)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . ffiDefine (length ffis - 1) ffis
+    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
     . ("\n  }\n}\n" ++)
     . runFun
-    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
-      . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
+    . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
     $ mainStr
