@@ -30,8 +30,7 @@ codegen ffis mods = (bigmap', mem) where
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
 
-compile s = either id id do
-  mods <- untangle s
+compile mods = do
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . fst . snd) $ elems mods
     (bigmap, mem) = codegen ffis mods
@@ -92,7 +91,7 @@ main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
-  _ -> interact compile
+  _ -> interact \s -> either id id $ untangle s >>= compile
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n-1]

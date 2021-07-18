@@ -162,14 +162,13 @@ instance Alternative Parser where
   empty = Parser \_ -> Left ""
   x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
 
-ro = E . Basic
 conOf (Constr s _) = s
 specialCase (h:_) = '|':conOf h
 mkCase t cs = (specialCase cs,
   ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
-  , ro "I"))
+  , E $ Basic "I"))
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
-scottEncode _ ":" _ = ro "CONS"
+scottEncode _ ":" _ = E $ Basic "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
 scottConstr t cs (Constr s sts) = (s,
   (Qual [] $ foldr arr t ts , scottEncode (map conOf cs) s $ mkStrs ts))

@@ -24,8 +24,7 @@ getIOType q = Left $ "main : " ++ showQual q ""
 
 ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 
-compile s = either id id do
-  mods <- untangle s
+compile mods = do
   let
     (bigmap, mem) = codegen mods
     (ffis, ffes) = foldr ffcat ([], []) $ toAscList mods
@@ -80,7 +79,7 @@ main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
-  _ -> interact compile
+  _ -> interact \s -> either id id $ untangle s >>= compile
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
   getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n-1]

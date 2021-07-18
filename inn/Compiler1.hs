@@ -7,7 +7,6 @@ import Map
 import Ast
 import Parser
 import Unify
-import RTS
 
 freeCount v expr = case expr of
   E _ -> 0
@@ -256,6 +255,67 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perCl
         ms <- mapM perMethod sigs
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
+
+primAdts =
+  [ (TC "()", [Constr "()" []])
+  , (TC "Bool", [Constr "True" [], Constr "False" []])
+  , (TAp (TC "[]") (TV "a"), [Constr "[]" [], Constr ":" [TV "a", TAp (TC "[]") (TV "a")]])
+  , (TAp (TAp (TC ",") (TV "a")) (TV "b"), [Constr "," [TV "a", TV "b"]])
+  ]
+
+prims = let
+  ro = E . Basic
+  dyad s = TC s `arr` (TC s `arr` TC s)
+  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
+  bin s = A (ro "Q") (ro s)
+  in map (second (first $ Qual [])) $
+    [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
+    , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
+    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
+    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
+
+    , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
+    , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
+    , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
+    , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
+    , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
+    , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
+    , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
+    , ("primitiveError", (arr (TAp (TC "[]") (TC "Char")) (TV "a"), ro "ERR"))
+    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
+      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
+    , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
+      A (ro "T") (ro "READREF")))
+    , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))),
+      A (A (ro "R") (ro "WRITEREF")) (ro "B")))
+    , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
+    , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
+    , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
+    ]
+    ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
+      [ ("intAdd", "ADD")
+      , ("intSub", "SUB")
+      , ("intMul", "MUL")
+      , ("intDiv", "DIV")
+      , ("intMod", "MOD")
+      , ("intQuot", "DIV")
+      , ("intRem", "MOD")
+      ]
+    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
+      [ ("wordAdd", "ADD")
+      , ("wordSub", "SUB")
+      , ("wordMul", "MUL")
+      , ("wordDiv", "U_DIV")
+      , ("wordMod", "U_MOD")
+      , ("wordQuot", "U_DIV")
+      , ("wordRem", "U_MOD")
+      ]
 
 neatNew = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
 
