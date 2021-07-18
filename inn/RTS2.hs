@@ -13,6 +13,7 @@ import Parser
 import_qq_here = import_qq_here
 
 libc = [r|
+#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
@@ -262,11 +263,7 @@ void rts_init() {
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-#ifdef RUNFUN
-  RUNFUN;
-#else
   run();
-#endif
 }
 |]++)
 
@@ -359,8 +356,7 @@ compile mods = do
       pure $ genMain a
 
   pure
-    $ ("#include<stdio.h>\n"++)
-    . ("typedef unsigned u;\n"++)
+    $ ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)

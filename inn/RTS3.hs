@@ -10,7 +10,8 @@ import Parser
 
 import_qq_here = import_qq_here
 
-libc = [r|
+libcHost = [r|
+#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
@@ -38,7 +39,6 @@ void errexit() { fputc('\n', stderr); return; }
 preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
-enum { TOP = 1<<24 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
 static u evac(u n) {
@@ -194,7 +194,7 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
   longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
+genMainHost n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
@@ -260,11 +260,7 @@ void rts_init() {
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-#ifdef RUNFUN
-  RUNFUN;
-#else
   run();
-#endif
 }
 |]++)
 
@@ -331,7 +327,7 @@ codegen ffis mods = (bigmap', mem) where
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
 
-compile mods = do
+compileWith topSize libc genMain mods = do
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
     (bigmap, mem) = codegen ffis mods
@@ -357,9 +353,10 @@ compile mods = do
       pure $ genMain a
 
   pure
-    $ ("#include<stdio.h>\n"++)
-    . ("typedef unsigned u;\n"++)
-    . ("enum{_UNDEFINED=0,"++)
+    $ ("typedef unsigned u;\n"++)
+    . ("enum{TOP="++)
+    . (topSize++)
+    . (",_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
@@ -376,3 +373,5 @@ compile mods = do
     . runFun
     . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
     $ mainStr
+
+compile = compileWith "1<<24" libcHost genMainHost

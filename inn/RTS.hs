@@ -9,6 +9,7 @@ import Parser
 import_qq_here = import_qq_here
 
 libc = [r|
+#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
@@ -321,8 +322,7 @@ compile mods = do
       pure $ genMain a
 
   pure
-    $ ("#include<stdio.h>\n"++)
-    . ("typedef unsigned u;\n"++)
+    $ ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)

@@ -16,7 +16,7 @@ ffi "getchar" getChar :: IO Int
 ffi "getargcount" getArgCount :: IO Int
 ffi "getargchar" getArgChar :: Int -> Int -> IO Char
 
-libc = [r|
+libc = [r|#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
@@ -1341,8 +1341,7 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 compile s = case untangle s of
   Left err -> err
   Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
-      ("#include<stdio.h>\n"++)
-    . ("typedef unsigned u;\n"++)
+      ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
