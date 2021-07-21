@@ -34,7 +34,7 @@ int getchar_shim() {
   return nextCh;
 }
 void errchar(int c) { fputc(c, stderr); }
-void errexit() { fputc('\n', stderr); return; }
+void errexit() { fputc('\n', stderr); }
 |]
 
 preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}

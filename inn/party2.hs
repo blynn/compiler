@@ -39,6 +39,7 @@ main = getArgs >>= \case
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
   "wasm":_ -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm genMainWasm
+  "warts":_ -> interact $ either id warts . untangle
   _ -> interact \s -> either id id $ untangle s >>= compile
   where
   getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n

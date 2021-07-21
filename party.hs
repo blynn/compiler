@@ -21,7 +21,7 @@ int getargcount() { return env_argc; }
 static char **env_argv;
 int getargchar(int n, int k) { return env_argv[n][k]; }
 void errchar(int c) { fputc(c, stderr); }
-void errexit() { fputc('\n', stderr); return; }
+void errexit() { fputc('\n', stderr); }
 |]
 
 class Functor f where fmap :: (a -> b) -> f a -> f b

@@ -35,23 +35,32 @@ methodically.c:methodically.hs marginally;time ./marginally < $< > $@
 party.c:party.hs methodically;time ./methodically < $< > $@
 
 define party
-$(1).c: $(2) $(addsuffix .hs, $(addprefix inn/, $3));cat $(addsuffix .hs, $(addprefix inn/, $3)) | time ./$(2) > $$@
+$(1): $(2) $(addsuffix .hs, $(addprefix inn/, $3));cat $(addsuffix .hs, $(addprefix inn/, $3)) | time ./$(2) > $$@
 endef
 
 define cat
-cat-$(1).hs: $(addsuffix .hs, $(addprefix inn/, $2));cat $(addsuffix .hs, $(addprefix inn/, $2)) > $$@
+$(1): $(addsuffix .hs, $(addprefix inn/, $2));cat $(addsuffix .hs, $(addprefix inn/, $2)) > $$@
 endef
 
-$(call party,multiparty,party,true.Base System Ast Map Parser Kiselyov Unify RTS Typer party)
-$(call party,party1,multiparty,true.Base System Ast Map Parser Kiselyov Unify RTS Typer1 party)
-$(call party,party2,party1,true.Base System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
-$(call party,party3,party2,true.Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
-$(call party,party4,party3,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
+$(call party,multiparty.c,party,true.Base System Ast Map Parser Kiselyov Unify RTS Typer party)
+$(call party,party1.c,multiparty,true.Base System Ast Map Parser Kiselyov Unify RTS Typer1 party)
+$(call party,party2.c,party1,true.Base System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
+$(call party,party3.c,party2,true.Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
+$(call party,crossly.c,party3,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
+$(call party,warts2hs.c,crossly,true.Base1 System1 warts2hs)
+$(call party,webby.c,crossly,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
 
-$(call cat,party1,true.Base System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
+$(call party,webby.wasm,webby,true.Base1 SystemWasm Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
 
-crossly.c:crossly.hs methodically;time ./methodically < $< > $@
-precisely.c:precisely.hs crossly;time ./crossly < $< > $@
+$(call cat,cat-party1.hs,true.Base System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
+
+warts.c:crossly;cat inn/true.Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
+warts.o:warts.c;$(WCC) $^ -c -o $@
+warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
+
+oldcrossly.c:crossly.hs methodically;time ./methodically < $< > $@
+precisely.c:precisely.hs oldcrossly;time ./oldcrossly < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
@@ -59,7 +68,7 @@ test/mandelbrot:test/mandelbrot.c
 
 WCC=clang -O3 -c --target=wasm32 -Wall
 ifeq ($(WASMLINK),)
-WASMLINK=wasm-ld-10
+WASMLINK=wasm-ld-11
 endif
 WLD=$(WASMLINK) --export-dynamic --allow-undefined --no-entry
 wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
@@ -68,14 +77,14 @@ wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
 
-wasm/env.c:crossly;./$< blah > $@
+wasm/env.c:oldcrossly;./$< blah > $@
 wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
 wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 
-wasm/tmp.hs:wasm/blah.hs crossly wasm/env.wasm wasm/section; \
+wasm/tmp.hs:wasm/blah.hs oldcrossly wasm/env.wasm wasm/section; \
 	(sed -n '/infix/,/Code generation/p' crossly.hs | sed '/^getContents =/d' \
-	&& ./crossly coms && cd wasm && cat blah.hs && ./section < env.wasm) > $@
-wasm/blah.c:wasm/tmp.hs crossly; ./crossly wasm < $< > $@
+	&& ./oldcrossly coms && cd wasm && cat blah.hs && ./section < env.wasm) > $@
+wasm/blah.c:wasm/tmp.hs oldcrossly; ./oldcrossly wasm < $< > $@
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 index.html:index.lhs index.js wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<

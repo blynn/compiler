@@ -210,7 +210,9 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn@(cs, n) = case ast of
+unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
+
+infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
     Const _ -> ((TC "Int", ast), csn)
@@ -220,12 +222,13 @@ infer typed loc ast csn@(cs, n) = case ast of
   V s -> maybe (Left $ "undefined: " ++ s) Right
     $ (\t -> ((t, ast), csn)) <$> lookup s loc
     <|> insta . fst <$> mlookup s typed
-  A x y -> infer typed loc x (cs, n + 1) >>=
-    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
-    \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
+  A x y -> rec loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> rec loc y csn1 >>=
+    \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
-  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, va):loc) x (cs, n + 1)
   where
+  rec = infer msg typed
   va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
@@ -271,8 +274,8 @@ inferno searcher typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
   go (acc, (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
-    ((t, a), (ms, n1)) <- infer typed loc expr (subs, n)
-    cs <- unify (TV (' ':s)) t ms
+    ((t, a), (ms, n1)) <- infer s typed loc expr (subs, n)
+    cs <- unifyMsg s (TV (' ':s)) t ms
     Right ((s, (t, a)):acc, (cs, n1))
   in do
     (stas, (soln, _)) <- foldM go ([], ([], 0)) syms
@@ -316,7 +319,7 @@ inferTypeclasses searcher ienv typed = foldM perClass typed $ toAscList ienv whe
           let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
           expr <- snd <$> patternCompile searcher rawExpr
           (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-            $ infer typed [] expr ([], 0)
+            $ infer s typed [] expr ([], 0)
           qc <- typeOfMethod searcher s
           let
             (tx, ax) = typeAstSub sub ta

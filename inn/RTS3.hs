@@ -33,7 +33,7 @@ int getchar_shim() {
   return nextCh;
 }
 void errchar(int c) { fputc(c, stderr); }
-void errexit() { fputc('\n', stderr); return; }
+void errexit() { fputc('\n', stderr); }
 |]
 
 preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
@@ -249,7 +249,9 @@ static void run() {
     }
   }
 }
+|]++)
 
+rtsAPI = ([r|
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
@@ -371,7 +373,57 @@ compileWith topSize libc genMain mods = do
     . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
     . ("\n  }\n}\n" ++)
     . runFun
+    . rtsAPI
     . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
     $ mainStr
 
 compile = compileWith "1<<24" libcHost genMainHost
+
+declWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
+enum {
+  ROOT_BASE = 1<<9,  // 0-terminated array of exported functions
+  // HEAP_BASE - 4: program size
+  HEAP_BASE = (1<<20) - 128 * sizeof(u),  // program
+  TOP = 1<<22
+};
+static u *root = (u*) ROOT_BASE;
+void errchar(int c) {}
+void errexit() {}
+|]++)
+
+rtsAPIWarts = ([r|
+static inline void rts_init() {
+  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
+  hp = 128 + mem[127];
+  spTop = mem + TOP - 1;
+}
+
+void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  run();
+}
+|]++)
+
+ffiDeclareWarts (name, t) = let tys = argList t in (concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ") IMPORT(\"env\", \"", name, "\");\n"]++)
+
+warts mods =
+  ("typedef unsigned u;\n"++)
+  . ("enum{_UNDEFINED=0,"++)
+  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+  . ("};\n"++)
+  . declWarts
+  . (preamble++)
+  . foldr (.) id (ffiDeclareWarts <$> toAscList ffis)
+  . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+  . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
+  . ("\n  }\n}\n" ++)
+  . runFun
+  . rtsAPIWarts
+  $ [r|
+void go(void) asm("go") __attribute__((visibility("default")));
+void go(void) { rts_reduce(*((u*)512)); }
+|]
+  where
+  ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods

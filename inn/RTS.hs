@@ -15,7 +15,7 @@ int getargcount() { return env_argc; }
 static char **env_argv;
 int getargchar(int n, int k) { return env_argv[n][k]; }
 void errchar(int c) { fputc(c, stderr); }
-void errexit() { fputc('\n', stderr); return; }
+void errexit() { fputc('\n', stderr); }
 |]
 
 preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}

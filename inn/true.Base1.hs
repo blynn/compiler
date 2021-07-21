@@ -75,7 +75,13 @@ x /= y = not $ x == y
 (.) f g x = f (g x)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
-take n xs = if n == 0 then [] else case xs of [] -> []; h:t -> h:take (n - 1) t
+take 0 xs = []
+take _ [] = []
+take n (h:t) = h : take (n - 1) t
+drop n xs     | n <= 0 = xs
+drop _ []              = []
+drop n (_:xs)          = drop (n-1) xs
+splitAt n xs = (take n xs, drop n xs)
 maybe n j m = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
