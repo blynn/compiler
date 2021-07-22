@@ -42,19 +42,19 @@ define cat
 $(1): $(addsuffix .hs, $(addprefix inn/, $2));cat $(addsuffix .hs, $(addprefix inn/, $2)) > $$@
 endef
 
-$(call party,multiparty.c,party,true.Base System Ast Map Parser Kiselyov Unify RTS Typer party)
-$(call party,party1.c,multiparty,true.Base System Ast Map Parser Kiselyov Unify RTS Typer1 party)
-$(call party,party2.c,party1,true.Base System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
-$(call party,party3.c,party2,true.Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
-$(call party,crossly.c,party3,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
-$(call party,warts2hs.c,crossly,true.Base1 System1 warts2hs)
-$(call party,webby.c,crossly,true.Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
+$(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS Typer party)
+$(call party,party1.c,multiparty,Base0 System Ast Map Parser Kiselyov Unify RTS Typer1 party)
+$(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
+$(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
+$(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
+$(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
+$(call party,webby.c,crossly,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
 
-$(call party,webby.wasm,webby,true.Base1 SystemWasm Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
+$(call party,webby.wasm,webby,Base1 SystemWasm Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
 
-$(call cat,cat-party1.hs,true.Base System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
+$(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
 
-warts.c:crossly;cat inn/true.Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
+warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
