@@ -1,7 +1,4 @@
--- Separate fixity phase.
--- Export lists.
--- Detect missing instances.
--- Top-level type annotations.
+-- Arbitrary precision integers.
 module Typer where
 
 import Base
@@ -30,7 +27,10 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
+patEq lit b x y = A (A (A (V "if") (A (A (V "==") lit') b)) x) y where
+  lit' = case lit of
+    Const _ -> A (V "fromInteger") (E lit)
+    _ -> E lit
 
 unpat searcher as t = case as of
   [] -> pure t
@@ -179,6 +179,7 @@ extendChain searcher stay down s s' =
 secondM f (a, b) = (a,) <$> f b
 patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
   go t = case t of
+    E (Const _) -> pure $ A (V "fromInteger") t
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)
@@ -210,12 +211,14 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
+-- Parser only supports nonnegative integer literals, hence sign is always `True`.
+integerify x = integerSignList x \True xs ->
+  A (A (E $ Link "Base" "Integer" $ Qual [] $ TC "Integer") (V "True")) $ listify $ E . ChrCon . chr . intFromWord <$> xs
 
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
-    Const n -> ((TC "Int", E $ ChrCon $ chr n), csn)
+    Const x -> ((TC "Integer", integerify x), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
@@ -270,6 +273,8 @@ addDep s = Dep \deps -> Right (if s `elem` deps then deps else s : deps, ())
 badDep s = Dep $ const $ Left s
 runDep (Dep f) = f []
 
+unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
+
 inferno searcher typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
   go (acc, (subs, n)) s = do
@@ -284,6 +289,25 @@ inferno searcher typed defmap syms = let
 prove searcher s t a = flip fmap (prove' searcher ([], 0) a) \((ps, _), x) -> let
   applyDicts expr = foldl A expr $ map (V . snd) ps
   in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
+
+f *** g = \(x, y) -> (f x, g y)
+
+defaultMagic searcher q@(Qual ps t) ast = do
+  (ps, ast) <- defaultize [] ps ast
+  pure (Qual ps t, ast)
+  where
+  rings = concatMap isRing ps
+  isRing (Pred "Ring" (TV v)) = [v]
+  isRing _ = []
+  defaultize astSub [] ast = Right ([], foldr (uncurry beta) ast astSub)
+  defaultize astSub (p:pt) (L s rest) = case p of
+    Pred cl (TV v) | not $ v `elem` typeVars t ->
+      if v `elem` rings then do
+        (_, ast) <- findProof searcher (Pred cl $ TC "Integer") ([], 0)
+        defaultize ((s, ast) : astSub) pt rest
+      else Left $ "ambiguous: " ++ show p
+    Pred _ x | not $ all (`elem` typeVars t) $ typeVars x -> Left $ "ambiguous: " ++ show p
+    _ -> ((p:) *** (L s)) <$> defaultize astSub pt rest
 
 reconcile searcher s t ast = \case
   Nothing -> snd <$> prove searcher s t ast
@@ -304,6 +328,7 @@ inferDefs searcher defs decls typed = do
     outs k = maybe [] id $ mlookup k $ snd graph
     add typed (s, (q, ast)) = do
       (q, ast) <- reconcile searcher s q ast $ mlookup s decls
+      (q, ast) <- defaultMagic searcher q ast
       pure $ insert s (q, ast) typed
     inferComponent typed syms = foldM add typed =<< inferno searcher typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap

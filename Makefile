@@ -47,6 +47,8 @@ $(call party,party1.c,multiparty,Base0 System Ast Map Parser Kiselyov Unify RTS 
 $(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
 $(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
 $(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
+$(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+
 $(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
 $(call party,webby.c,crossly,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
 
@@ -60,7 +62,7 @@ warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sect
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
 
 oldcrossly.c:crossly.hs methodically;time ./methodically < $< > $@
-precisely.c:precisely.hs oldcrossly;time ./oldcrossly < $< > $@
+oldprecisely.c:precisely.hs oldcrossly;time ./oldcrossly < $< > $@
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@

@@ -1,12 +1,11 @@
--- Separate fixity phase.
--- Module exports.
+-- Integer.
 module Ast where
 import Base
 import Map
 
 data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | Const Integer | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]

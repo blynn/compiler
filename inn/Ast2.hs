@@ -38,14 +38,15 @@ instance Show Pat where
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showAst prec t = case t of
-  E e -> shows e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . showAst False t) vsts)
-  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> shows p . (" -> "++) . showAst False a) as)
-  Proof p -> ("{Proof "++) . shows p . ("}"++)
+instance Show Ast where
+  showsPrec prec = \case
+    E e -> shows e
+    V s -> showVar s
+    A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
+    L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
+    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Ca x as -> ("case "++) . shows x . (" of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> shows p . (" -> "++) . shows a) as)
+    Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 showType = shows  -- for Unify.
 

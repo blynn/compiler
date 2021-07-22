@@ -1,5 +1,6 @@
 -- Separate fixity phase.
 -- Export lists.
+-- Requires `Const` values to be already rewritten.
 module RTS where
 
 import Base
@@ -289,10 +290,10 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
-    ChrCon c -> enc $ Lf $ Const $ ord c
+    ChrCon c -> Code <$> memget (Code $ comEnum "NUM", Code $ ord c)
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
     Link m s _ -> pure $ Global m s
+    _ -> error $ "BUG! " ++ show t
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
 
