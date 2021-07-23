@@ -270,7 +270,7 @@ addDep s = Dep \deps -> Right (if s `elem` deps then deps else s : deps, ())
 badDep s = Dep $ const $ Left s
 runDep (Dep f) = f []
 
-inferno searcher typed defmap syms = let
+inferno typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
   go (acc, (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
@@ -305,7 +305,7 @@ inferDefs searcher defs decls typed = do
     add typed (s, (q, ast)) = do
       (q, ast) <- reconcile searcher s q ast $ mlookup s decls
       pure $ insert s (q, ast) typed
-    inferComponent typed syms = foldM add typed =<< inferno searcher typed defmap syms
+    inferComponent typed syms = foldM add typed =<< inferno typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)

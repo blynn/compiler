@@ -27,10 +27,7 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") lit') b)) x) y where
-  lit' = case lit of
-    Const _ -> A (V "fromInteger") (E lit)
-    _ -> E lit
+patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
 unpat searcher as t = case as of
   [] -> pure t
@@ -179,7 +176,6 @@ extendChain searcher stay down s s' =
 secondM f (a, b) = (a,) <$> f b
 patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
   go t = case t of
-    E (Const _) -> pure $ A (V "fromInteger") t
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)
@@ -213,12 +209,13 @@ typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
 -- Parser only supports nonnegative integer literals, hence sign is always `True`.
 integerify x = integerSignList x \True xs ->
-  A (A (E $ Link "Base" "Integer" $ Qual [] $ TC "Integer") (V "True")) $ listify $ E . ChrCon . chr . intFromWord <$> xs
+  A (A (E $ Link "Base" "Integer" undefined) (V "True")) $ listify $ E . ChrCon . chr . intFromWord <$> xs
 
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
-    Const x -> ((TC "Integer", integerify x), csn)
+    Const x -> let (Qual [pred] ty1, n1) = instantiate (Qual [Pred "Ring" $ TV "a"] (TV "a")) n
+      in ((ty1, A (A (E $ Link "Base" "fromInteger" undefined) (Proof pred)) $ integerify x), (cs, n1))
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
@@ -275,7 +272,7 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-inferno searcher typed defmap syms = let
+inferno typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
   go (acc, (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
@@ -330,7 +327,7 @@ inferDefs searcher defs decls typed = do
       (q, ast) <- reconcile searcher s q ast $ mlookup s decls
       (q, ast) <- defaultMagic searcher q ast
       pure $ insert s (q, ast) typed
-    inferComponent typed syms = foldM add typed =<< inferno searcher typed defmap syms
+    inferComponent typed syms = foldM add typed =<< inferno typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
