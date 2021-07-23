@@ -49,16 +49,22 @@ $(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2
 $(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
 $(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
 
-$(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
-$(call party,webby.c,crossly,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
+$(call party,check.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
 
-$(call party,webby.wasm,webby,Base1 SystemWasm Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 Webby WartsBytes)
+$(call party,webby.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
+$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
 
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
 
+$(call cat,cat-pre.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+$(call cat,cat-webby.hs,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
+
+#warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
 warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
+
 warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+$(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
 
 oldcrossly.c:crossly.hs methodically;time ./methodically < $< > $@

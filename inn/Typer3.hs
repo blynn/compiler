@@ -92,9 +92,10 @@ resolveFieldBinds dcs t = go t where
   go t = case t of
     E _ -> t
     V _ -> t
-    A (E (Basic "{=")) (A expr fbsAst) -> let
+    A (E (Basic "{=")) (A rawExpr fbsAst) -> let
+      expr = go rawExpr
       fromAst t = case t of
-        A (A (E (StrCon f)) body) rest -> (f, body):fromAst rest
+        A (A (E (StrCon f)) body) rest -> (f, go body):fromAst rest
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
       (con, fields) = findField dcs firstField

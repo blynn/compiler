@@ -83,11 +83,13 @@ rewriteCase searcher as = acc . genCase searcher tab $ V "fail#" where
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
+    E (Const _) -> A (V "fromInteger") t
     E _ -> t
     V _ -> t
-    A (E (Basic "{=")) (A expr fbsAst) -> let
+    A (E (Basic "{=")) (A rawExpr fbsAst) -> let
+      expr = go rawExpr
       fromAst t = case t of
-        A (A (E (StrCon f)) body) rest -> (f, body):fromAst rest
+        A (A (E (StrCon f)) body) rest -> (f, go body):fromAst rest
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
       (con, fields) = findField searcher firstField
@@ -214,8 +216,7 @@ integerify x = integerSignList x \True xs ->
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
-    Const x -> let (Qual [pred] ty1, n1) = instantiate (Qual [Pred "Ring" $ TV "a"] (TV "a")) n
-      in ((ty1, A (A (E $ Link "Base" "fromInteger" undefined) (Proof pred)) $ integerify x), (cs, n1))
+    Const x -> ((TC "Integer", integerify x), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
@@ -248,11 +249,11 @@ findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
     insts -> findInstance searcher psn pred insts
   Just s -> Right (psn, V s)
 
-prove' searcher psn a = case a of
+prove searcher psn a = case a of
   Proof pred -> findProof searcher pred psn
-  A x y -> prove' searcher psn x >>= \(psn1, x1) ->
-    second (A x1) <$> prove' searcher psn1 y
-  L s t -> second (L s) <$> prove' searcher psn t
+  A x y -> prove searcher psn x >>= \(psn1, x1) ->
+    second (A x1) <$> prove searcher psn1 y
+  L s t -> second (L s) <$> prove searcher psn t
   _ -> Right (psn, a)
 
 data Dep a = Dep ([String] -> Either String ([String], a))
@@ -272,20 +273,40 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-inferno typed defmap syms = let
+forFree cond f bound t = case t of
+  E _ -> t
+  V s -> if (not $ s `elem` bound) && cond s then f t else t
+  A x y -> A (rec bound x) (rec bound y)
+  L s t' -> L s $ rec (s:bound) t'
+  where rec = forFree cond f
+
+inferno searcher decls typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
-  go (acc, (subs, n)) s = do
+  principal (acc, (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
     ((t, a), (ms, n1)) <- infer s typed loc expr (subs, n)
     cs <- unifyMsg s (TV (' ':s)) t ms
     Right ((s, (t, a)):acc, (cs, n1))
+  reconcile (subs, n) (s, (t, a)) = do
+    case mlookup s decls of
+      Nothing -> pure (subs, n)
+      Just (Qual _ tA) -> case match (apply subs t) tA of
+        Nothing -> Left $ ("type mismatch, annotation: "++) . shows tA . (", actual: "++) $ show (apply subs t)
+        Just sub -> pure (subs @@ sub, n)
+  gatherPreds (acc, psn) (s, (t, a)) = do
+    (psn, a) <- prove searcher psn a
+    pure ((s, (t, a)):acc, psn)
   in do
-    (stas, (soln, _)) <- foldM go ([], ([], 0)) syms
-    pure $ (\(s, ta) -> (s, typeAstSub soln ta)) <$> stas
-
-prove searcher s t a = flip fmap (prove' searcher ([], 0) a) \((ps, _), x) -> let
-  applyDicts expr = foldl A expr $ map (V . snd) ps
-  in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
+    (stas, (soln, n)) <- foldM principal ([], ([], 0)) syms
+    stas <- pure $ second (typeAstSub soln) <$> stas
+    (soln, _) <- foldM reconcile ([], n) $ second (typeAstSub soln) <$> stas
+    (stas, (ps, _)) <- foldM gatherPreds ([], ([], 0)) $ second (typeAstSub soln) <$> stas
+    let
+      preds = fst <$> ps
+      dicts = snd <$> ps
+      applyDicts (s, (t, a)) = (s, (Qual preds t,
+        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
+    pure $ map applyDicts stas
 
 f *** g = \(x, y) -> (f x, g y)
 
@@ -306,12 +327,6 @@ defaultMagic searcher q@(Qual ps t) ast = do
     Pred _ x | not $ all (`elem` typeVars t) $ typeVars x -> Left $ "ambiguous: " ++ show p
     _ -> ((p:) *** (L s)) <$> defaultize astSub pt rest
 
-reconcile searcher s t ast = \case
-  Nothing -> snd <$> prove searcher s t ast
-  Just qAnno@(Qual psA tA) -> case match t tA of
-    Nothing -> Left $ ("type mismatch, annotation: "++) . shows tA . (", actual: "++) $ show t
-    Just sub -> snd <$> prove searcher s tA (proofApply sub ast)
-
 inferDefs searcher defs decls typed = do
   let
     insertUnique m (s, (_, t)) = if isBuiltIn s then Left $ "reserved: " ++ s else case mlookup s m of
@@ -324,10 +339,9 @@ inferDefs searcher defs decls typed = do
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
     add typed (s, (q, ast)) = do
-      (q, ast) <- reconcile searcher s q ast $ mlookup s decls
       (q, ast) <- defaultMagic searcher q ast
       pure $ insert s (q, ast) typed
-    inferComponent typed syms = foldM add typed =<< inferno typed defmap syms
+    inferComponent typed syms = foldM add typed =<< inferno searcher decls typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
@@ -356,7 +370,7 @@ inferTypeclasses searcher ienv typed = foldM perClass typed $ toAscList ienv whe
           case match tx t2 of
             Nothing -> Left "class/instance type conflict"
             Just subx -> do
-              ((ps3, _), tr) <- prove' searcher (dictVars ps2 0) (proofApply subx ax)
+              ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
               if length ps2 /= length ps3
                 then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                 else pure tr

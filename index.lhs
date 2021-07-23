@@ -7,7 +7,11 @@ link:ioccc.html[An award-winning Haskell compiler], browser edition.
 <p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> Prelude</span></p>
 <p>
 <textarea spellcheck='false' readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
-include::wasm/blah.pre[]
+include::inn/BasePrecisely.hs[]
+include::inn/SystemWasm.hs[]
+module Main where
+import Base
+import System
 </textarea>
 </p>
 <p>
@@ -69,7 +73,7 @@ function setup() {
   }
   function pc(x) { blahOut.push(x); }
   function eof() { return blahInpCur == blahInpLen; }
-  WebAssembly.instantiateStreaming(fetch('blah.wasm'), {
+  WebAssembly.instantiateStreaming(fetch('webby.wasm'), {
       env:{ getchar:gc, putchar:pc, eof:eof }
     }).then(obj => { blah = obj.instance; });
 }
@@ -92,7 +96,7 @@ function compile() {
   // Timeout so message is displayed. Unreliable.
   return new Promise(function(resolve, reject) {
     setTimeout(function() {
-  blah.exports.compile();
+  blah.exports.go();
   if (blahOut[0] != 0) {
     msg.innerHTML = "compile error: " + String.fromCharCode.apply(null, blahOut);
     reject();
@@ -119,7 +123,7 @@ function run() {
   function eof() { return inpCur == inpLen; }
   WebAssembly.instantiate(new Uint8Array(blahOut),
       {env:{getchar:gc, putchar:pc, eof:eof}}).then(x => {
-    x.instance.exports.fun();
+    x.instance.exports.go();
     msg.innerHTML = "";
   });
 }

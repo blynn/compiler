@@ -22,16 +22,6 @@ dumpTypes neat = map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ secon
 dumpCombs neat = map go $ optiComb $ second snd <$> toAscList (typedAsts neat) where
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-libcWasm = [r|
-extern u __heap_base;
-void* malloc(unsigned long n) {
-  static u bump = (u) &__heap_base;
-  return (void *) ((bump += n) - n);
-}
-void errchar(int c) {}
-void errexit() {}
-|]
-
 genMainWasm n = "EXPORT(go,\"go\")\nvoid go(){rts_reduce(" ++ shows n ");}\n"
 
 main = getArgs >>= \case

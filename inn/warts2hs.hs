@@ -75,6 +75,6 @@ main = do
   case getByteParser wasm s of
     Left e -> putStrLn $ "parse error: " ++ e
     Right (xs, []) -> do
-      putStr "module WartsBytes where\nwartsBytes = "
+      putStr "module WartsBytes where\nimport Base\nwartsBytes = "
       print $ second xxd <$> filter (not . (`elem` [0, 6]) . fst) xs
     _ -> error "unreachable"

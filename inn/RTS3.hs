@@ -11,8 +11,7 @@ import Parser
 
 import_qq_here = import_qq_here
 
-libcHost = [r|
-#include<stdio.h>
+libcHost = [r|#include<stdio.h>
 static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
@@ -35,6 +34,16 @@ int getchar_shim() {
 }
 void errchar(int c) { fputc(c, stderr); }
 void errexit() { fputc('\n', stderr); }
+|]
+
+libcWasm = [r|
+extern u __heap_base;
+void* malloc(unsigned long n) {
+  static u bump = (u) &__heap_base;
+  return (void *) ((bump += n) - n);
+}
+void errchar(int c) {}
+void errexit() {}
 |]
 
 preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
