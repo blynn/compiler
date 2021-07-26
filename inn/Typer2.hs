@@ -260,7 +260,6 @@ inferDefs tycl defs typed = do
   let
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
-    typeTab = fst <$> typed
     inferComponent typed syms = foldr (uncurry insert) typed <$> inferno tycl typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 

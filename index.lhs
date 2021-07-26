@@ -273,6 +273,7 @@ include::hilsys.inc[]
 [id="douady.hs"]
 ------------------------------------------------------------------------
 -- Based on https://sametwice.com/4_line_mandelbrot.
+prec :: Int
 prec = 16384
 infixl 7 #
 x # y = x * y `div` prec

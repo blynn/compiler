@@ -74,6 +74,7 @@ snd (x, y) = y
 uncurry f (x, y) = f x y
 first f (x, y) = (f x, y)
 second f (x, y) = (x, f y)
+bool a b c = if c then b else a
 not a = if a then False else True
 x /= y = not $ x == y
 (.) f g x = f (g x)
@@ -114,6 +115,7 @@ xs!!n = tail xs!!(n - 1)
 replicate 0 _ = []
 replicate n x = x : replicate (n - 1) x
 repeat x = x : repeat x
+cycle = concat . repeat
 null [] = True
 null _ = False
 reverse = foldl (flip (:)) []
@@ -133,6 +135,7 @@ words s = case dropWhile isSpace s of
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap
+instance Alternative [] where empty = [] ; (<|>) = (++)
 concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
@@ -440,5 +443,6 @@ integerSignList (Integer xsgn xs) f = f xsgn xs
 
 unwords [] = ""
 unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
+unlines = concatMap (++"\n")
 abs x = if 0 <= x then x else 0 - x
 otherwise = True

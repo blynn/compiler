@@ -242,12 +242,7 @@ data Instance = Instance
   -- Method definitions
   (Map String Ast)
 
-data Tycl = Tycl
-  -- | Method names and their default implementations.
-  -- Their types are kept in a global table.
-  [(String, Maybe Ast)]
-  -- | Instances.
-  [Instance]
+data Tycl = Tycl [String] [Instance]
 
 data Neat = Neat
   (Map String Tycl)
@@ -488,14 +483,14 @@ addAdt t cs (Neat tycl fs typed dcs ffis exs) =
   Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis exs
 
 emptyTycl = Tycl [] []
-addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis exs) = let
+addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes) = let
   vars = take (size sigs) $ (`showInt` "") <$> upFrom 0
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
-  methods = map (\s -> (s, mlookup s defs)) $ fst <$> toAscList sigs
-  Tycl _ is = maybe emptyTycl id $ mlookup classId tycl
-  tycl' = insert classId (Tycl methods is) tycl
-  in Neat tycl' fs (selectors ++ typed) dcs ffis exs
+  defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
+  Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
+  tycl' = insert classId (Tycl (fst <$> toAscList sigs) is) tycl
+  in Neat tycl' (defaults ++ fs) (selectors ++ typed) dcs ffis ffes
 
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
@@ -1156,24 +1151,11 @@ dictVars ps n = (zip ps $ map (('*':) . flip showInt "") $ upFrom n, n + length 
 inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) where
   perClass (classId, Tycl sigs insts) = do
     let
-      checkDefault (s, Just expr) = do
-        (ta, (sub, _)) <- infer typed [] (patternCompile dcs expr) ([], 0)
-        (_, (Qual ps t, a)) <- prove tycl s $ typeAstSub sub ta
-        case ps of
-          [Pred cl _] | cl == classId -> Right ()
-          _ -> Left $ "bad method: " ++ s
-        Qual ps0 t0 <- maybe (Left "parse bug!") Right $ mlookup s typed
-        case match t t0 of
-          Nothing -> Left $ "bad method type: " ++ s
-          _ -> Right ()
-      checkDefault (s, Nothing) = pure ()
-    mapM_ checkDefault sigs
-    let
       perInstance (Instance ty name ps idefs) = do
         let
           dvs = map snd $ fst $ dictVars ps 0
-          perMethod (s, mayDefault) = do
-            let Just expr = mlookup s idefs <|> mayDefault <|> pure (V "fail#")
+          perMethod s = do
+            let Just expr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
             (ta, (sub, n)) <- infer typed [] (patternCompile dcs expr) ([], 0)
             let
               (tx, ax) = typeAstSub sub ta
@@ -1202,9 +1184,21 @@ untangle s = case program s of
   Right (prog, ParseState s _) -> case s of
     Ell [] [] -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
       Neat tycl defs typed dcs ffis exs -> do
-        (qas, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
-        mets <- inferTypeclasses tycl qas dcs
-        pure ((qas, lambF mets), (ffis, exs))
+        let
+          genDefaultMethod (qs, lambF) (classId, s) = case mlookup defName qs of
+            Nothing -> Right (insert defName q qs, lambF . ((defName, V "fail#"):))
+            Just (Qual ps t) -> case match t t0 of
+              Nothing -> Left $ "bad default method type: " ++ s
+              _ -> case ps of
+                [Pred cl _] | cl == classId -> Right (qs, lambF)
+                _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
+            where
+            defName = "{default}" ++ s
+            Just q@(Qual ps0 t0) = fst <$> lookup s typed
+        (qs, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
+        mets <- inferTypeclasses tycl qs dcs
+        (qs, lambF) <- foldM genDefaultMethod (qs, lambF) $ concatMap (\(classId, Tycl sigs _) -> map (classId,) sigs) $ toAscList tycl
+        pure ((qs, lambF mets), (ffis, exs))
     _ -> Left $ "parse error: " ++ case ell s of
       Left e -> e
       Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
