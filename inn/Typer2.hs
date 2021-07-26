@@ -155,7 +155,7 @@ infer typed loc ast csn@(cs, n) = case ast of
     Link im s q -> insta q
   V s -> maybe (Left $ "undefined: " ++ s) Right
     $ (\t -> ((t, ast), csn)) <$> lookup s loc
-    <|> insta <$> mlookup s typed
+    <|> insta . fst <$> mlookup s typed
   A x y -> infer typed loc x (cs, n + 1) >>=
     \((tx, ax), csn1) -> infer typed loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
@@ -179,11 +179,11 @@ findProof tycl pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
     insts -> findInstance tycl psn pred insts
   Just s -> Right (psn, V s)
 
-prove' tycl psn a = case a of
+prove tycl psn a = case a of
   Proof pred -> findProof tycl pred psn
-  A x y -> prove' tycl psn x >>= \(psn1, x1) ->
-    second (A x1) <$> prove' tycl psn1 y
-  L s t -> second (L s) <$> prove' tycl psn t
+  A x y -> prove tycl psn x >>= \(psn1, x1) ->
+    second (A x1) <$> prove tycl psn1 y
+  L s t -> second (L s) <$> prove tycl psn t
   _ -> Right (psn, a)
 
 data Dep a = Dep ([String] -> Either String ([String], a))
@@ -217,22 +217,34 @@ astLink typed locals imps mods ast = runDep $ go [] ast where
     L s t -> L s <$> go (s:bound) t
     _ -> pure ast
 
+forFree cond f bound t = case t of
+  E _ -> t
+  V s -> if (not $ s `elem` bound) && cond s then f t else t
+  A x y -> A (rec bound x) (rec bound y)
+  L s t' -> L s $ rec (s:bound) t'
+  where rec = forFree cond f
+
 inferno tycl typed defmap syms = let
   loc = zip syms $ TV . (' ':) <$> syms
-  in foldM (\(acc, (subs, n)) s ->
-    maybe (Left $ "missing: " ++ s) Right (mlookup s defmap) >>=
-    \expr -> infer typed loc expr (subs, n) >>=
-    \((t, a), (ms, n1)) -> unify (TV (' ':s)) t ms >>=
-    \cs -> Right ((s, (t, a)):acc, (cs, n1))
-  ) ([], ([], 0)) syms >>=
-  \(stas, (soln, _)) -> mapM id $ (\(s, ta) -> prove tycl s $ typeAstSub soln ta) <$> stas
+  principal (acc, (subs, n)) s = do
+    expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
+    ((t, a), (ms, n1)) <- infer typed loc expr (subs, n)
+    cs <- unify (TV (' ':s)) t ms
+    Right ((s, (t, a)):acc, (cs, n1))
+  gatherPreds (acc, psn) (s, (t, a)) = do
+    (psn, a) <- prove tycl psn a
+    pure ((s, (t, a)):acc, psn)
+  in do
+    (stas, (soln, _)) <- foldM principal ([], ([], 0)) syms
+    stas <- pure $ second (typeAstSub soln) <$> stas
+    (stas, (ps, _)) <- foldM gatherPreds ([], ([], 0)) $ second (typeAstSub soln) <$> stas
+    let
+      preds = fst <$> ps
+      dicts = snd <$> ps
+      applyDicts (s, (t, a)) = (s, (Qual preds t,
+        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
+    pure $ map applyDicts stas
 
-prove tycl s (t, a) = flip fmap (prove' tycl ([], 0) a) \((ps, _), x) -> let
-  applyDicts expr = foldl A expr $ map (V . snd) ps
-  in (s, (Qual (map fst ps) t, foldr L (overFree s applyDicts x) $ map snd ps))
-inferDefs' tycl defmap (typeTab, lambF) syms = let
-  add stas = foldr (\(s, (q, cs)) (tt, f) -> (insert s q tt, f . ((s, cs):))) (typeTab, lambF) stas
-  in add <$> inferno tycl typeTab defmap syms
 findImportSym imps mods s = concat [maybe [] (\t -> [(im, t)]) $ mlookup s qs | im <- imps, let qs = fst $ fst $ mods ! im]
 
 inferDefs tycl defs typed = do
@@ -249,43 +261,41 @@ inferDefs tycl defs typed = do
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
     typeTab = fst <$> typed
-    lambs = second snd <$> toAscList typed
-  foldM (inferDefs' tycl defmap) (typeTab, (lambs++)) $ scc ins outs $ keys defmap
+    inferComponent typed syms = foldr (uncurry insert) typed <$> inferno tycl typed defmap syms
+  foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
 
-inferTypeclasses tycl typeOfMethod typed dcs linker ienv = concat <$> mapM perClass (toAscList ienv) where
-  perClass (classId, Tycl sigs insts) = do
-    let
-      perInstance (Instance ty name ps idefs) = do
-        let
-          dvs = map snd $ fst $ dictVars ps 0
-          perMethod s = do
-            let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
-            expr <- snd <$> linker (patternCompile dcs rawExpr)
-            (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-              $ infer typed [] expr ([], 0)
-            let
-              (tx, ax) = typeAstSub sub ta
+inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed $ toAscList ienv where
+  perClass typed (classId, Tycl sigs insts) = foldM perInstance typed insts where
+    perInstance typed (Instance ty name ps idefs) = do
+      let
+        dvs = map snd $ fst $ dictVars ps 0
+        perMethod s = do
+          let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
+          expr <- snd <$> linker (patternCompile dcs rawExpr)
+          (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
+            $ infer typed [] expr ([], 0)
+          let
+            (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-              qc = typeOfMethod s
-              (Qual [Pred _ headT] tc, n1) = instantiate qc n
+            qc = typeOfMethod s
+            (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
 -- e.g. Eq a => [a] -> [a] -> Bool
-              Just subc = match headT ty
-              (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
-            case match tx t2 of
-              Nothing -> Left "class/instance type conflict"
-              Just subx -> do
-                ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
-                if length ps2 /= length ps3
-                  then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
-                  else pure tr
-        ms <- mapM perMethod sigs
-        pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
-    mapM perInstance insts
+            Just subc = match headT ty
+            (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
+          case match tx t2 of
+            Nothing -> Left "class/instance type conflict"
+            Just subx -> do
+              ((ps3, _), tr) <- prove tycl (dictVars ps2 0) (proofApply subx ax)
+              if length ps2 /= length ps3
+                then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                else pure tr
+      ms <- mapM perMethod sigs
+      pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
 primAdts =
   [ (TC "()", [Constr "()" []])
@@ -360,35 +370,36 @@ tabulateModules mods = foldM ins Tip $ go <$> mods where
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat rawIenv defs typed adtTab ffis ffes imps = tab ! name
+      Neat rawIenv defs typedList adtTab ffis ffes imps = tab ! name
+      typed = fromList typedList
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
         [] -> Tycl (findSigs cl) is
         _ -> Tycl sigs is
       findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList rawIenv
-      locals = fromList $ map (, ()) $ (fst <$> typed) ++ (fst <$> defs)
+      locals = fromList $ map (, ()) $ (fst <$> typedList) ++ (fst <$> defs)
       insts im (Tycl _ is) = (im,) <$> is
       classes im = if im == "" then ienv else typeclasses $ tab ! im
       tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
       dcs = adtTab : map (dataCons . (tab !)) imps
-      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> lookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
-      genDefaultMethod (qs, lambF) (classId, s) = case mlookup defName qs of
-        Nothing -> Right (insert defName q qs, lambF . ((defName, V "fail#"):))
-        Just (Qual ps t) -> case match t t0 of
+      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
+      genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
+        Nothing -> Right $ insert defName (q, V "fail#") qcs
+        Just (Qual ps t, _) -> case match t t0 of
           Nothing -> Left $ "bad default method type: " ++ s
           _ -> case ps of
-            [Pred cl _] | cl == classId -> Right (qs, lambF)
+            [Pred cl _] | cl == classId -> Right qcs
             _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
         where
         defName = "{default}" ++ s
-        Just q@(Qual ps0 t0) = fst <$> lookup s typed
+        (q@(Qual ps0 t0), _) = qcs ! s
     acc' <- foldM (inferModule tab) acc imps
-    let linker = astLink (fromList typed) locals imps acc'
+    let linker = astLink typed locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
-    (qs, lambF) <- inferDefs tycl depdefs (fromList typed)
-    mets <- inferTypeclasses tycl typeOfMethod qs dcs linker ienv
-    (qs, lambF) <- foldM genDefaultMethod (qs, lambF) [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
-    Right $ insert name ((qs, lambF mets), (ffis, ffes)) acc'
+    typed <- inferDefs tycl depdefs typed
+    typed <- inferTypeclasses tycl typeOfMethod typed dcs linker ienv
+    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
+    Right $ insert name ((fst <$> typed, toAscList $ snd <$> typed), (ffis, ffes)) acc'
   Just _ -> Right acc
 
 untangle s = case program s of

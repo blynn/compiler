@@ -8,9 +8,11 @@ link:ioccc.html[An award-winning Haskell compiler], browser edition.
 <p>
 <textarea spellcheck='false' readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
 include::inn/BasePrecisely.hs[]
+include::inn/Map1.hs[]
 include::inn/SystemWasm.hs[]
 module Main where
 import Base
+import Map
 import System
 </textarea>
 </p>
