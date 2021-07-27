@@ -56,12 +56,7 @@ $(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPr
 
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
 
-$(call cat,cat-pre.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
-$(call cat,cat-webby.hs,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
-
-#warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
 warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
-
 warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 $(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
@@ -95,7 +90,7 @@ wasm/tmp.hs:wasm/blah.hs oldcrossly wasm/env.wasm wasm/section; \
 wasm/blah.c:wasm/tmp.hs oldcrossly; ./oldcrossly wasm < $< > $@
 wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
 blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-index.html:index.lhs index.js wasm/blah.pre blah.wasm hilsys.inc menu;cobble mathbook menu $<
+index.html:index.lhs index.js webby.wasm hilsys.inc menu;cobble mathbook menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)

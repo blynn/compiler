@@ -4,7 +4,7 @@ link:ioccc.html[An award-winning Haskell compiler], browser edition.
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> Prelude</span></p>
+<p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> included code</span></p>
 <p>
 <textarea spellcheck='false' readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
 include::inn/BasePrecisely.hs[]

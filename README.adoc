@@ -72,7 +72,7 @@ type `IO ()`. It also outputs C code that should be appended to `rts.c`.
 In sum, after running the above to produce `raw`, we can build a standalone
 compiler with:
 
-  $ (cat rts.c; ./vm run effectively.hs) > lonely.c
+  $ (cat rts.c; ./vm run effectively.hs < lonely.hs) > lonely.c
   $ cc -O2 lonely.c -o lonely
 
 (A few generations later, our `virtually.hs` compiler bundles the runtime

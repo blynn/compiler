@@ -143,6 +143,12 @@ definitions, to find the type of a method we add `typeOfMethod`, whose logic is
 similar to `findImportSym`, but differs enough that we implement it
 independently.
 
+We modify the code to insert dictionaries one strongly-connected-component at a
+time rather than one function at a time. This is required to correctly compile
+mutually recursive functions that use typeclasses. Each function of the
+component may wind up calling any other, so it needs all the relevant
+dictionaries.
+
 ++++++++++
 <p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>
 <div id='party' style='display:none'>
@@ -165,15 +171,15 @@ instead of braces and semicolons. This would make it easier to compare against
 its successor "methodically".)
 
 ------------------------------------------------------------------------
-cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Compiler.hs party.hs
+cat Base0.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Typer.hs party.hs
 ------------------------------------------------------------------------
 
 ++++++++++
-<p><a onclick='hideshow("true.Base");'>&#9654; Toggle `Base.hs`</a></p><div id='true.Base' style='display:none'>
+<p><a onclick='hideshow("Base0");'>&#9654; Toggle `Base0.hs`</a></p><div id='Base' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/true.Base.hs[]
+include::inn/Base0.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -213,10 +219,12 @@ The main obstacle to compiling our modules with GHC is the Prelude. We define
 entities such as `Monad` and `(==)` from scratch, which breaks `do` notation
 for example because GHC always uses `Prelude.Monad`.
 
-We remove this obstacle by simply removing any overlap with the Prelude. We
-use `true.Base.hs` with our compilers, and use a stripped-down `Base.hs` when
-testing with GHC. This implies much of our `Base` code is untested, but for
-this special case, perhaps we can add a wrapper to test it on its own with GHC.
+We remove this obstacle by simply removing any overlap with the Prelude. We use
+a stripped-down `Base.hs` when testing with GHC, whereas our compilers really
+use files like `Base0.hs`.
+
+This implies much of our `Base` code is untested, but for this special case,
+perhaps we can add a wrapper to test it on its own with GHC.
 
 ++++++++++
 <p><a onclick='hideshow("Base");'>&#9654; Toggle `Base.hs` for GHC</a></p><div id='Base' style='display:none'>
@@ -299,7 +307,7 @@ ambiguity. Every module now defines and exports `True`, for example, and we
 must exempt such entities from duplicate detection. On the other hand, our
 compiler can better optimize locally defined primitives.
 
-To explore this solution, we copy `Compiler.hs` to `Compiler1.hs`, modify a few
+To explore this solution, we copy `Typer.hs` to `Typer1.hs`, modify a few
 lines, and add a new `Makefile` rule.
 
 We also remove `encTop` and the I combinator insertion trick, and instead
@@ -310,15 +318,15 @@ right-hand side, and the absence of cycles among module dependencies.
 While we're in the neighbourhood, we eliminate `flst` and `fpair`.
 
 ------------------------------------------------------------------------
-cat true.Base.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Compiler1.hs party.hs
+cat Base0.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Typer1.hs party.hs
 ------------------------------------------------------------------------
 
 ++++++++++
-<p><a onclick='hideshow("Compiler1");'>&#9654; Toggle `Compiler1.hs`</a></p><div id='Compiler1' style='display:none'>
+<p><a onclick='hideshow("Typer1");'>&#9654; Toggle `Typer1.hs`</a></p><div id='Typer1' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Compiler1.hs[]
+include::inn/Typer1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -449,7 +457,7 @@ Once again, a proto-chicken comes first.
 To test with GHC, we create a new directory containing appropriately named
 symlinks to the desired versions of the modules. Incremental development means
 we only need to change a few symlinks at a time, but in the long run, we ought
-to write a program to generate all symlinks from a given set of module files.
+to automate symlinking from a given set of module files.
 
 ++++++++++
 <p><a onclick='hideshow("Ast1");'>&#9654; Toggle `Ast1.hs`</a></p><div id='Ast1' style='display:none'>
@@ -476,16 +484,27 @@ include::inn/Parser1.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("Compiler2");'>&#9654; Toggle `Compiler2.hs`</a></p><div id='Compiler2' style='display:none'>
+<p><a onclick='hideshow("Typer2");'>&#9654; Toggle `Typer2.hs`</a></p><div id='Typer2' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Compiler2.hs[]
+include::inn/Typer2.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
 </div>
 ++++++++++
+
+We wish to change `getChar` and `isEOF` to behave like GHC's. This takes two
+steps.
+
+The current compiler, whose RTS was generated by the previous compiler, must
+use the `getChar` and `isEOF` of the previous compiler. The most we can do is
+have it generate a new RTS that has functions to support future `getChar` and
+`isEOF` functions that behave differently.
+
+This allows programs compiled by this compiler to use the new `getChar` and
+`isEOF` functions. Our next compiler is one such program.
 
 ++++++++++
 <p><a onclick='hideshow("RTS1");'>&#9654; Toggle `RTS1.hs`</a></p><div id='RTS1' style='display:none'>
@@ -519,15 +538,27 @@ We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
 We take advantage of our new ability to derive `Eq` and `Show` instances,
 and also name the fields of the `Neat` data type.
 
-We continue our revamp of `getChar`, as our previous iteration laid the
-groundwork.
+We now use the revamped `getChar` and `isEOF`; our previous iteration laid the
+groundwork, and the new `System1.hs` imports them.
 
 ++++++++++
-<p><a onclick='hideshow("true.Base1");'>&#9654; Toggle `true.Base1.hs`</a></p><div id='true.Base1' style='display:none'>
+<p><a onclick='hideshow("Base1");'>&#9654; Toggle `Base1.hs`</a></p><div id='Base1' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/true.Base1.hs[]
+include::inn/Base1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+++++++++++
+<p><a onclick='hideshow("System1");'>&#9654; Toggle `System1.hs`</a></p><div id='System1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/System1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -559,11 +590,11 @@ include::inn/Parser2.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("Compiler3");'>&#9654; Toggle `Compiler3.hs`</a></p><div id='Compiler3' style='display:none'>
+<p><a onclick='hideshow("Typer3");'>&#9654; Toggle `Typer3.hs`</a></p><div id='Typer3' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Compiler3.hs[]
+include::inn/Typer3.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -588,111 +619,6 @@ include::inn/RTS2.hs[]
 
 ------------------------------------------------------------------------
 include::inn/party1.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-== Party4 ==
-
-Recall we require a fixity declaration to precede the use of its corresponding
-operator, which forces us to concatenate module sources in a particular order.
-We remove this wart by adding a new phase. Once done, not only may we paste
-together modules in any order, but we may also declare fixities anywhere within
-a module.
-
-During parsing, operators have the same precedence. When a chain of two or more
-appear in a row, we abuse the syntax tree to store them in a right-associative
-list, for example: `[1 + 2, * 3, - 4, + 5]`.
-
-For patterns, we use the list field of a `PatCon` value; a made-up data
-constructor `"{+"` indicates the beginning of such a list. Expressions are
-clumsier; we bookend chains with the made-up basic combinators `"{+"` and
-`"+}"`, and fashion a list out of `A` and `V` nodes.
-
-By the time we call `patternCompile`, we have access to all modules. During
-this phase, we traverse the syntax tree, and we re-associate each specially
-marked infix chain now that we can look up the fixities of all operators.
-
-The algorithm is conceptually straightforward. Starting from the first binary
-infix expression, that is, two operands and one operator, for each operator and
-operand we add on the right, we walk down the right spine of the current syntax
-tree until we reach a node of higher precedence; leaf nodes are considered to
-have maximum precedence. Then we insert the operator and operand at this point.
-We also check for illegal infix operator conflicts.
-
-The code is messy due to a couple of wrinkles. Firstly, we have two distinct ad
-hoc representations of lists for holding infix chains. Secondly, we temporarily
-mark operands with more ad hoc conventions to avoid descending too far when
-reshaping syntax trees. For example, in the expression `1 + (2 + 3) * 4`, the
-subexpression `(2 + 3)` is atomic.
-
-We only allow top-level fixity declarations. We could add support for scoped
-fixity declarations with yet more ad hoc encodings that we later use to create
-scoped fixity lookup tables that override the global ones.
-
-We do some housekeeping. Given a `Neat`, type inference had produced a tuple of
-a particular type that contained the data needed by the next phase. We change
-it to produce a new `Neat` with an updated `typedAsts` field, so there's one
-fewer data type to occupy our thoughts and APIs. We no longer need to pick out
-specific fields to pass to the next phase, as we simply pass everything.
-
-We also change `typedAsts` from a list to a map, which should be faster.
-Perhaps we should propagate this change further back, because compilation is
-growing even slower.
-
-We add support for top-level type declarations, and check they agree with
-definitions, and in some cases specialize by substituting in typeclass
-dictionaries.
-
-Adding modules has made a mess of our various functions for looking up data
-constructors, top-level variables, typeclasses, and so on. We reorganize them
-a little to standardize the logic for searching through the list of imports.
-This makes it easier to add support for lists of export symbols.
-
-++++++++++
-<p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Ast3.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Parser3");'>&#9654; Toggle `Parser3.hs`</a></p><div id='Parser3' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Parser3.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Compiler4");'>&#9654; Toggle `Compiler4.hs`</a></p><div id='Compiler4' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Compiler4.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("party2");'>&#9654; Toggle `party2.hs`</a></p><div id='party2' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/party2.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
