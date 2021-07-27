@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz blah.wasm index.js
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm index.js
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
@@ -62,9 +62,6 @@ warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sect
 $(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
 
-oldcrossly.c:crossly.hs methodically;time ./methodically < $< > $@
-oldprecisely.c:precisely.hs oldcrossly;time ./oldcrossly < $< > $@
-
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
 test/mandelbrot:test/mandelbrot.c
@@ -80,16 +77,6 @@ wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
 
-wasm/env.c:oldcrossly;./$< blah > $@
-wasm/env.o:wasm/env.c;$(WCC) $^ -c -o $@
-wasm/env.wasm:wasm/env.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-
-wasm/tmp.hs:wasm/blah.hs oldcrossly wasm/env.wasm wasm/section; \
-	(sed -n '/infix/,/Code generation/p' crossly.hs | sed '/^getContents =/d' \
-	&& ./oldcrossly coms && cd wasm && cat blah.hs && ./section < env.wasm) > $@
-wasm/blah.c:wasm/tmp.hs oldcrossly; ./oldcrossly wasm < $< > $@
-wasm/blah.o:wasm/blah.c;$(WCC) $^ -c -o $@
-blah.wasm:wasm/blah.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 index.html:index.lhs index.js webby.wasm hilsys.inc menu;cobble mathbook menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 

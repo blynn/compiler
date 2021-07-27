@@ -144,18 +144,18 @@ integers are great for indexing a 2D rectangular board, especially when we want
 to rotate by a right angle (multiplication by 'i') or talk about the cardinal
 directions (which correspond the units).
 
-The integers are the initial ring, so `Integer` deserves special treatment.
-Accordingly, we translate the integer constant 'n' as `fromInteger n`; if this
-results in ambiguity, then the constant is an `Integer`.
+The integers are https://en.wikipedia.org/wiki/Initial_algebra[the initial
+ring], so we treat the integer constant 'n' as `fromInteger n`; if this results
+in ambiguity, then we drop `fromInteger`.
 
 Thus the laws that we know to be true in our bones, such as `a*(b + c) = a*b +
 a*c`, will never lead us astray. We must explcitly write `fromIntegral` to,
-say, map a `Word32` to a `Word64`. Other languages do this silently, and defy
-our algebraic intuition.
+say, map a `Word32` to a `Word64`. Other languages convert silently, and wind
+up defying our algebraic intuition.
 
 To represent an integer, we use a list of `Word32` numbers, plus a boolean to
-represent its sign. For GHC compatibility we call a `integerSignList` function
-instead of pattern matching on `Integer` values.
+represent its sign. For GHC compatibility we call the function
+`integerSignList` instead of pattern matching on `Integer` values.
 
 We implement schoolbook algorithms for basic arithmetic, which is
 straightforward except for division. I realized that when doing long division
@@ -245,7 +245,7 @@ the host environment.
 
 ++++++++++
 <p><a onclick='hideshow("SystemWasm");'>&#9654; Toggle `SystemWasm.hs`</a></p>
-<div id='Webby' style='display:none'>
+<div id='SystemWasm' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
