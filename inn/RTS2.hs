@@ -310,10 +310,12 @@ hashcons hp combs = (symtab', (hp', (mem++)))
     Local s -> resolveLocal $ symtab ! s
     Global m s -> Left (m, s)
 
-codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
+lambsList typed = toAscList $ snd <$> typed
+
+codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . f'))
   where
-  (localmap, (hp', f')) = hashcons hp $ optiComb lambs
+  (localmap, (hp', f')) = hashcons hp $ optiComb $ lambsList typed
 
 codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
@@ -340,14 +342,13 @@ compile mods = do
       , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
       , let argcount = arrCount $ mustType modName ourName
       ]
-    mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
-      Just (Qual [] t) -> t
+    mustType modName s = case mlookup s $ fst $ mods ! modName of
+      Just (Qual [] t, _) -> t
       _ -> error "TODO: report bad exports"
     mayMain = do
-        tab <- mlookup "Main" bigmap
-        mainAddr <- mlookup "main" tab
-        mainType <- mlookup "main" $ fst $ fst $ mods ! "Main"
-        pure (mainAddr, mainType)
+      mainAddr <- mlookup "main" =<< mlookup "Main" bigmap
+      (mainType, _) <- mlookup "main" $ fst $ mods ! "Main"
+      pure (mainAddr, mainType)
   mainStr <- case mayMain of
     Nothing -> pure ""
     Just (a, q) -> do

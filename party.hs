@@ -1179,7 +1179,7 @@ inferno tycl typed defmap syms = let
         foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
     pure $ map applyDicts stas
 
-findImportSym imps mods s = concat [maybe [] (\t -> [(im, t)]) $ mlookup s qs | im <- imps, let qs = fst $ fst $ mods ! im]
+findImportSym imps mods s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s qas | im <- imps, let qas = fst $ mods ! im]
 
 inferDefs tycl defs typed = do
   let
@@ -1239,9 +1239,7 @@ typedAsts (Neat _ _ tas _ _ _ _) = tas
 typeclasses (Neat tcs _ _ _ _ _ _) = tcs
 dataCons (Neat _ _ _ dcs _ _ _) = dcs
 
-soloPrim = singleton "#" ((qs, as), ([], [])) where
-  qs = fst <$> fromList (typedAsts neatPrim)
-  as = second snd <$> typedAsts neatPrim
+soloPrim = singleton "#" (fromList $ typedAsts neatPrim, ([], []))
 
 tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -1286,7 +1284,7 @@ inferModule tab acc name = case mlookup name acc of
     typed <- inferDefs tycl depdefs typed
     typed <- inferTypeclasses tycl typeOfMethod typed dcs linker ienv
     typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
-    Right $ insert name ((fst <$> typed, toAscList $ snd <$> typed), (ffis, ffes)) acc'
+    Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
 untangle s = case program s of
@@ -1346,13 +1344,13 @@ dumpWith dumper s = case untangle s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
 
-dumpCombs ((_, lambs), _) = map disasm $ optiComb lambs
+dumpCombs (typed, _) = map disasm $ optiComb $ lambsList typed
 
-dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
+dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . showAst False t . ('\n':)) $ toAscList typed
 
 showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
 
-dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
 -- Hash consing.
 data Obj = Local String | Global String String | Code Int
@@ -1444,10 +1442,12 @@ ffiDefine n ffis = case ffis of
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
 
-codegenLocal (name, ((_, lambs), _)) (bigmap, (hp, f)) =
+lambsList typed = toAscList $ snd <$> typed
+
+codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem'++)))
   where
-  (localmap, (hp', mem')) = hashcons hp $ optiComb lambs
+  (localmap, (hp', mem')) = hashcons hp $ optiComb $ lambsList typed
 
 codegen mods = (bigmap, mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
@@ -1463,14 +1463,14 @@ compile s = either id id do
   let
     (bigmap, mem) = codegen mods
     (ffis, ffes) = foldr ffcat ([], []) $ toAscList mods
-    mustType modName s = case mlookup s $ fst $ fst $ mods ! modName of
-      Just (Qual [] t) -> t
+    mustType modName s = case mlookup s (fst $ mods ! modName) of
+      Just (Qual [] t, _) -> t
       _ -> error "TODO: report bad exports"
     mayMain = do
-        tab <- mlookup "Main" bigmap
-        mainAddr <- mlookup "main" tab
-        mainType <- mlookup "main" $ fst $ fst $ mods ! "Main"
-        pure (mainAddr, mainType)
+      tab <- mlookup "Main" bigmap
+      mainAddr <- mlookup "main" tab
+      (mainType, _) <- mlookup "main" (fst $ mods ! "Main")
+      pure (mainAddr, mainType)
   mainStr <- case mayMain of
     Nothing -> pure ""
     Just (a, q) -> do

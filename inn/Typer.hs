@@ -212,7 +212,7 @@ inferno tycl typed defmap syms = let
         foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
     pure $ map applyDicts stas
 
-findImportSym imps mods s = concat [maybe [] (\t -> [(im, t)]) $ mlookup s qs | im <- imps, let qs = fst $ fst $ mods ! im]
+findImportSym imps mods s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s qas | im <- imps, let qas = fst $ mods ! im]
 
 inferDefs tycl defs typed = do
   let
@@ -328,9 +328,7 @@ prims = let
 
 neatPrim = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
 
-soloPrim = singleton "#" ((qs, as), ([], [])) where
-  qs = fst <$> fromList (typedAsts neatPrim)
-  as = second snd <$> typedAsts neatPrim
+soloPrim = singleton "#" (fromList $ typedAsts neatPrim, ([], []))
 
 tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -371,7 +369,7 @@ inferModule tab acc name = case mlookup name acc of
     typed <- inferDefs tycl depdefs typed
     typed <- inferTypeclasses tycl typeOfMethod typed dcs linker ienv
     typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
-    Right $ insert name ((fst <$> typed, toAscList $ snd <$> typed), (ffis, ffes)) acc'
+    Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
 untangle s = case program s of

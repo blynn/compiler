@@ -354,10 +354,9 @@ compileWith topSize libc genMain mods = do
       Just (Qual [] t, _) -> t
       _ -> error "TODO: report bad exports"
     mayMain = do
-        tab <- mlookup "Main" bigmap
-        mainAddr <- mlookup "main" tab
-        mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")
-        pure (mainAddr, mainType)
+      mainAddr <- mlookup "main" =<< mlookup "Main" bigmap
+      mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")
+      pure (mainAddr, mainType)
   mainStr <- case mayMain of
     Nothing -> pure ""
     Just (a, q) -> do

@@ -67,10 +67,6 @@ it to produce a new `Neat` with an updated `typedAsts` field, so there's one
 fewer data type to occupy our thoughts and APIs. We no longer need to pick out
 specific fields to pass to the next phase, as we simply pass everything.
 
-We also change `typedAsts` from a list to a map, which should be faster.
-Perhaps we should propagate this change further back, because compilation is
-growing even slower.
-
 We take a first stab at top-level type declarations. We check a function's
 annotated type agrees with its inferred type, and in some cases specialize by
 substituting in typeclass dictionaries. However, we fail to take into account
@@ -209,6 +205,9 @@ include::inn/warts2hs.hs[]
 ++++++++++
 </div>
 ++++++++++
+
+The RTS includes generate code that wraps foreign imports. It can only be used
+with programs that declare the same foreign imports.
 
 == Webby ==
 

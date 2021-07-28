@@ -149,6 +149,11 @@ mutually recursive functions that use typeclasses. Each function of the
 component may wind up calling any other, so it needs all the relevant
 dictionaries.
 
+Up until now we had preserved topological order of the top-level definitions
+as they made their way through our compiler. We change the code generator so
+it no longer needs this precondition, so that we can store compiled functions
+and modules in maps rather than delicately manicured lists.
+
 ++++++++++
 <p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>
 <div id='party' style='display:none'>

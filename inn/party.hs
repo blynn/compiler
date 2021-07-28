@@ -14,11 +14,11 @@ dumpWith dumper s = case untangle s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
 
-dumpLambs ((_, lambs), _) = map (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) lambs
+dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . showAst False t . ('\n':)) $ toAscList typed
 
-dumpTypes ((typed, _), _) = map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
 
-dumpCombs ((_, lambs), _) = go <$> optiComb lambs where
+dumpCombs (typed, _) = go <$> optiComb (lambsList typed) where
   go (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
 
 main = getArgs >>= \case
