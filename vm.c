@@ -96,7 +96,7 @@ void loadRaw(u (*get)()) {
   hp = 128 - 1;
   for (;;) {
     u c;
-		do c = get(); while (c && (c < '0' || c > '9'));
+    do c = get(); while (c && (c < '0' || c > '9'));
     if (!c) break;
     u n = 0;
     for (;;) {
@@ -476,8 +476,8 @@ void runTests() {
 
 FILE *fp;
 void fp_reset(char *f) {
-	fp = fopen(f, "r");
-	if (!fp) die("fopen failed");
+  fp = fopen(f, "r");
+  if (!fp) die("fopen failed");
 }
 u fp_get() {
   u c = fgetc(fp);
@@ -550,7 +550,7 @@ void rpg() {
 
 void dis(char *file) {
   fp_reset("raw");
-	loadRaw(fp_get);
+  loadRaw(fp_get);
   fp_reset("disassembly.hs");
   buf_reset();
   run(fp_get, buf_put);
@@ -562,7 +562,7 @@ void dis(char *file) {
 
 void runFile(char *f) {
   fp_reset("raw");
-	loadRaw(fp_get);
+  loadRaw(fp_get);
   fp_reset(f);
   buf_reset();
   run(fp_get, buf_put);
@@ -573,7 +573,7 @@ void runFile(char *f) {
 
 void ioccc(char *f) {
   fp_reset("raw");
-	loadRaw(fp_get);
+  loadRaw(fp_get);
   ioccc_reset(f);
   buf_reset();
   run(ioccc_get, buf_put);
@@ -584,7 +584,7 @@ void ioccc(char *f) {
 
 void iotest() {
   fp_reset("raw");
-	loadRaw(fp_get);
+  loadRaw(fp_get);
   str =
     "ioBind2 m k = ioBind m (\\_ -> k);"
     "flst xs n c = case xs of { [] -> n; (:) h t -> c h t };"
@@ -638,9 +638,9 @@ int main(int argc, char **argv) {
       run(ioget, pc);
       return 0;
     }
-		return puts("bad command"), 0;
-	}
-	rpg();
+    return puts("bad command"), 0;
+  }
+  rpg();
   puts(buf);
   return 0;
 }
