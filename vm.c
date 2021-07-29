@@ -12,7 +12,7 @@ enum { TOP = 1<<23, TABMAX = 1<<10, BUFMAX = 1<<20 };
 //enum { TOP = 1000000, TABMAX = 1<<10, BUFMAX = 1<<20 };
 u *mem, *altmem, *sp, *spTop, hp, tab[TABMAX], tabn;
 
-void stats() { printf("[HP = %u, stack usage = %ld]\n", hp, spTop - sp); }
+void stats() { printf("[HP = %u, stack usage = %td]\n", hp, spTop - sp); }
 
 static inline u isAddr(u n) { return n>=128; }
 
@@ -190,7 +190,7 @@ void run(u (*get)(), void (*put)(u)) {
       case FORWARD: stats(); die("stray forwarding pointer");
       case '.': {
         clock_t end = clock();
-        fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000 / (double) CLOCKS_PER_SEC, hp);
+        fprintf(stderr, "gcs = %u, time = %lfms, HP = %u\n", gccount, (end - start) * 1000.0 / (double) CLOCKS_PER_SEC, hp);
         return;
       }
       case 'Y': lazy(1, arg(1), sp[1]); break;
