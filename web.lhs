@@ -67,13 +67,11 @@ it to produce a new `Neat` with an updated `typedAsts` field, so there's one
 fewer data type to occupy our thoughts and APIs. We no longer need to pick out
 specific fields to pass to the next phase, as we simply pass everything.
 
-We take a first stab at top-level type declarations. We check a function's
-annotated type agrees with its inferred type, and in some cases specialize by
-substituting in typeclass dictionaries. However, we fail to take into account
-the entire strongly connected component, so this feature may fail for mutually
-reacursive definitions using typeclasses. Also, it'd be better if we first
-trust the annotated type during type inference, and only later verify that it
-matches.
+We take a first stab at top-level type declarations. We treat them similarly to
+default typeclass methods, in that during type inference, we trust the symobl
+has its annotated type, and only atterwards that we verify the annotated type
+matches the inferred type. It's more complex because we must process an entire
+strongly connected component at a time.
 
 Adding modules has made a mess of our various functions for looking up data
 constructors, top-level variables, typeclasses, and so on. We reorganize them

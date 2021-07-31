@@ -219,13 +219,13 @@ infer msg typed loc ast csn@(cs, n) = case ast of
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
   V s -> maybe (Left $ "undefined: " ++ s) Right
-    $ (\t -> ((t, ast), csn)) <$> lookup s loc
+    $ either (\t -> ((t, ast), csn)) insta <$> lookup s loc
     <|> insta . fst <$> mlookup s typed
   A x y -> rec loc x (cs, n + 1) >>=
     \((tx, ax), csn1) -> rec loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
-  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, va):loc) x (cs, n + 1)
+  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, Left va):loc) x (cs, n + 1)
   where
   rec = infer msg typed
   va = TV $ show n
@@ -279,26 +279,26 @@ forFree cond f bound t = case t of
   where rec = forFree cond f
 
 inferno searcher decls typed defmap syms = let
-  loc = zip syms $ TV . (' ':) <$> syms
-  principal (acc, (subs, n)) s = do
+  anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
+  loc = zip syms $ anno <$> syms
+  principal ((acc, preds), (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
-    ((t, a), (ms, n1)) <- infer s typed loc expr (subs, n)
-    cs <- unifyMsg s (TV (' ':s)) t ms
-    Right ((s, (t, a)):acc, (cs, n1))
-  reconcile (subs, n) (s, (t, a)) = do
+    ((t, a), (ms, n)) <- infer s typed loc expr (subs, n)
     case mlookup s decls of
-      Nothing -> pure (subs, n)
-      Just (Qual _ tA) -> case match (apply subs t) tA of
-        Nothing -> Left $ ("type mismatch, annotation: "++) . shows tA . (", actual: "++) $ show (apply subs t)
-        Just sub -> pure (subs @@ sub, n)
+      Nothing -> do
+        soln <- unifyMsg s (TV (' ':s)) t ms
+        Right (((s, (t, a)):acc, preds), (soln, n))
+      Just qAnno -> do
+        let (Qual pAnno tAnno, n1) = instantiate qAnno n
+        soln <- maybe (Left $ s ++ ": match failed: " ++ show qAnno ++ " vs " ++ show (apply ms t)) Right $ match (apply ms t) tAnno
+        Right (((s, (t, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
   gatherPreds (acc, psn) (s, (t, a)) = do
     (psn, a) <- prove searcher psn a
     pure ((s, (t, a)):acc, psn)
   in do
-    (stas, (soln, n)) <- foldM principal ([], ([], 0)) syms
-    stas <- pure $ second (typeAstSub soln) <$> stas
-    (soln, _) <- foldM reconcile ([], n) $ second (typeAstSub soln) <$> stas
-    (stas, (ps, _)) <- foldM gatherPreds ([], ([], 0)) $ second (typeAstSub soln) <$> stas
+    ((stas, preds), (soln, _)) <- foldM principal (([], []), ([], 0)) syms
+    let ps = zip preds $ ("anno*"++) . show  <$> [0..]
+    (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     let
       preds = fst <$> ps
       dicts = snd <$> ps
