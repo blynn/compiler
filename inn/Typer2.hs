@@ -306,14 +306,10 @@ primAdts =
 prims = let
   ro = E . Basic
   dyad s = TC s `arr` (TC s `arr` TC s)
-  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
   in map (second (first $ Qual [])) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
-    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
-    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
-
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
@@ -332,11 +328,6 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
-    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
-    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
-    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
-    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
@@ -347,16 +338,6 @@ prims = let
       , ("intQuot", "DIV")
       , ("intRem", "MOD")
       ]
-    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
-      [ ("wordAdd", "ADD")
-      , ("wordSub", "SUB")
-      , ("wordMul", "MUL")
-      , ("wordDiv", "U_DIV")
-      , ("wordMod", "U_MOD")
-      , ("wordQuot", "U_DIV")
-      , ("wordRem", "U_MOD")
-      ]
-
 
 neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip [] [] []) primAdts
 

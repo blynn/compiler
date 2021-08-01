@@ -167,6 +167,14 @@ of truncating division to zero, ultimately
 https://github.com/WebAssembly/design/issues/250[forcing languages like C and
 WebAssembly and even hardware to conform].)
 
+Our treatment of integer literals causes a bootstrapping issue. Suppose a
+literal "0" is to be converted to an `Int`. Then our compiler applies the `Int`
+edition of `fromInteger` to the `Integer` 0, which involves a call to `mpView`,
+whose implementation needs the `Int` 0. If we simply code this as `0`, then we
+wind up with a circular definition, because our compiler would insert another
+`fromInteger` call. We work around this with a definition that bypasses
+overloading by returning `ord '\0'`.
+
 ++++++++++
 <p><a onclick='hideshow("BasePrecisely");'>&#9654; Toggle `BasePrecisely.hs`</a></p><div id='BasePrecisely' style='display:none'>
 ++++++++++

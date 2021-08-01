@@ -780,19 +780,14 @@ primAdts =
 
 prims = let
   dyad s = TC s `arr` (TC s `arr` TC s)
-  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
   in map (second (first $ Qual [])) $
     [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
-    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
-    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
-
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
-    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
@@ -807,11 +802,6 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
-    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
-    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
-    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
-    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
@@ -821,15 +811,6 @@ prims = let
       , ("intMod", "MOD")
       , ("intQuot", "DIV")
       , ("intRem", "MOD")
-      ]
-    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
-      [ ("wordAdd", "ADD")
-      , ("wordSub", "SUB")
-      , ("wordMul", "MUL")
-      , ("wordDiv", "U_DIV")
-      , ("wordMod", "U_MOD")
-      , ("wordQuot", "U_DIV")
-      , ("wordRem", "U_MOD")
       ]
 
 -- Conversion to De Bruijn indices.
@@ -1518,7 +1499,6 @@ comdefsrc = [r|
 F x = "foreign(arg(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
-QQ f a b c d = d(c(b(a(f))))
 S x y z = x z(y z)
 B x y z = x (y z)
 C x y z = x z y
@@ -1529,11 +1509,6 @@ K x y = "_I" x
 I x = "sp[1] = arg(1); sp++;"
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
-DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
-DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
-DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
-DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
-DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
@@ -1541,9 +1516,6 @@ DIV x y = "_NUM" "num(1) / num(2)"
 MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
-U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
-U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
-U_LE x y = "(u) num(1) <= (u) num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
@@ -1641,9 +1613,6 @@ static inline void lazy2(u height, u f, u x) {
   *sp = f;
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
-typedef unsigned long long uu;
-static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
-static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 |]
 
 runFun = ([r|static void run() {

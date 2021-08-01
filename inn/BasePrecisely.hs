@@ -307,7 +307,7 @@ instance Enum Integer where
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
-zeroWord = wordFromInt $ ord '\x0'
+zeroWord = wordFromInt $ ord '\0'
 oneWord = wordFromInt 1
 
 mpView [] = (zeroWord, [])
