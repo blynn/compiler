@@ -95,6 +95,8 @@ instance Functor IO where fmap f x = ioPure f <*> x
 putStr = mapM_ putChar
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
+getArgs = getArgCount >>= \n -> mapM (go 0) [1..n-1] where
+  go k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> go (k + 1) n
 error s = unsafePerformIO $ putStr s >> putChar '\n' >> exitSuccess
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
@@ -1660,9 +1662,6 @@ main = getArgs >>= \case
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
   _ -> interact compile
-  where
-  getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n - 1]
 
 iterate f x = x : iterate f (f x)
 takeWhile _ [] = []

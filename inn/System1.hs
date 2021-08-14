@@ -16,3 +16,6 @@ putStrLn = (>> putChar '\n') . putStr
 print = putStrLn . show
 getContents = isEOF >>= \b -> if b then pure [] else getChar >>= \c -> (c:) <$> getContents
 interact f = getContents >>= putStr . f
+
+getArgs = getArgCount >>= \n -> mapM (go 0) [1..n-1] where
+  go k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> go (k + 1) n

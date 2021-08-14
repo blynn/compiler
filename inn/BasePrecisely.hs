@@ -2,6 +2,7 @@
 module Base where
 
 infixr 9 .
+infixr 8 ^
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
 infixr 5 ++
@@ -97,7 +98,12 @@ length :: [a] -> Int
 length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
+forM = flip mapM
+sequence = mapM id
+replicateM = (sequence .) . replicate
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
+when x y = if x then y else pure ()
+unless x y = if x then pure () else y
 error = primitiveError
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
@@ -151,6 +157,11 @@ and = foldr (&&) True
 or = foldr (||) False
 zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
+unzip [] = ([], [])
+unzip ((a, b):rest) = (a:at, b:bt) where (at, bt) = unzip rest
+transpose []             = []
+transpose ([]     : xss) = transpose xss
+transpose ((x:xs) : xss) = (x : [h | (h:_) <- xss]) : transpose (xs : [ t | (_:t) <- xss])
 data State s a = State (s -> (a, s))
 runState (State f) = f
 instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
@@ -192,6 +203,19 @@ takeWhile _ [] = []
 takeWhile p xs@(x:xt)
   | p x  = x : takeWhile p xt
   | True = []
+
+divMod a b = (q, a - b*q) where q = div a b
+
+a ^ b = case b of
+  0 -> 1
+  1 -> a
+  _ -> case r of
+    0 -> h2
+    1 -> h2*a
+  where
+  (q, r) = divMod b 2
+  h = a^q
+  h2 = h*h
 
 class Enum a where
   succ           :: a -> a

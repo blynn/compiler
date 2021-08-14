@@ -9,11 +9,10 @@ data ByteParser a = ByteParser
 instance Functor ByteParser where fmap f (ByteParser x) = ByteParser $ fmap (first f) . x
 instance Applicative ByteParser where
   pure a = ByteParser $ \s -> Right (a, s)
-  f <*> x = ByteParser \inp -> case getByteParser f inp of
-    Left e -> Left e
-    Right (fun, t) -> case getByteParser x t of
-      Left e -> Left e
-      Right (arg, u) -> Right (fun arg, u)
+  f <*> x = ByteParser \inp -> do
+    (fun, t) <- getByteParser f inp
+    (arg, u) <- getByteParser x t
+    pure (fun arg, u)
 instance Monad ByteParser where
   ByteParser f >>= g = ByteParser $ (good =<<) . f
     where good (r, t) = getByteParser (g r) t

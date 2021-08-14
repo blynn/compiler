@@ -27,6 +27,3 @@ main = getArgs >>= \case
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
   _ -> interact \s -> either id id $ untangle s >>= compile
-  where
-  getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n
-  getArgs = getArgCount >>= \n -> mapM (getArg' 0) [1..n-1]
