@@ -114,7 +114,7 @@ it with `IK`.
 
 == The numbers game ==
 
-For primitve functions, we use a trick described in depth by Naylor and
+For primitive functions, we use a trick described in depth by Naylor and
 Runciman, "The Reduceron reconfigured and re-evaluated": we introduce a
 combinator called `#` and reduce, say, `# 42 f` to `f(# 42)` for any `f`.
 For example, the term `(I#2)(K(#3)S)(+))` reduces to `(+)(#3)(#2)`.

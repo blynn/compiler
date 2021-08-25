@@ -169,7 +169,7 @@ antecedent proposition starts off in the active list. Then:
   to the head of the list, then move the head to the passive list.
   Pfenning calls these cases 'left asynchronous'.
 
-	3. The active list is empty and we must choose a non-invertible rule.
+  3. The active list is empty and we must choose a non-invertible rule.
   We branch on each such rule. We can apply standard strategies such as
   breadth-first search, depth-first search, or iterative deepening. Pfenning
   calls these cases 'synchronous'.
