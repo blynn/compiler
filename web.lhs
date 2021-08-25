@@ -68,8 +68,8 @@ fewer data type to occupy our thoughts and APIs. We no longer need to pick out
 specific fields to pass to the next phase, as we simply pass everything.
 
 We take a first stab at top-level type declarations. We treat them similarly to
-default typeclass methods, in that during type inference, we trust the symobl
-has its annotated type, and only atterwards that we verify the annotated type
+default typeclass methods, in that during type inference, we trust the symbol
+has its annotated type, and only afterwards that we verify the annotated type
 matches the inferred type. It's more complex because we must process an entire
 strongly connected component at a time.
 
@@ -143,7 +143,7 @@ ring], so we treat the integer constant 'n' as `fromInteger n`; if this results
 in ambiguity, then we drop `fromInteger`.
 
 Thus the laws that we know to be true in our bones, such as `a*(b + c) = a*b +
-a*c`, will never lead us astray. We must explcitly write `fromIntegral` to,
+a*c`, will never lead us astray. We must explicitly write `fromIntegral` to,
 say, map a `Word32` to a `Word64`. Other languages convert silently, and wind
 up defying our algebraic intuition.
 

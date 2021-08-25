@@ -376,7 +376,7 @@ subst f = ffix \h -> \case
 == Skolemization ==
 
 Skolemization transforms an NNF formula to an 'equisatisfiable' formula with no
-existential quantifiers, that is, the output is satisifable if and only if the
+existential quantifiers, that is, the output is satisifiable if and only if the
 input is. Skolemization is "lossy" because validity might not be preserved.
 
 We may need to mint new function names along the way. To avoid name clashes,
@@ -446,7 +446,7 @@ pnf = prenex . nnf . simplify
 
 A 'quantifier-free' formula is one where every variable is free. Each variable
 is implicitly universally quantified, that is, for each variable `x`, we behave
-as if `forall x.` has been prepended to the forumla.
+as if `forall x.` has been prepended to the formula.
 
 We can remove all quantifiers from a skolemized NNF formula by pulling all the
 universal quantifiers to the front and then dropping them.
