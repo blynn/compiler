@@ -273,12 +273,12 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-forFree cond f bound t = case t of
-  E _ -> t
-  V s -> if (not $ s `elem` bound) && cond s then f t else t
-  A x y -> A (rec bound x) (rec bound y)
-  L s t' -> L s $ rec (s:bound) t'
-  where rec = forFree cond f
+forFree cond f t = go [] t where
+  go bound t = case t of
+    E _ -> t
+    V s -> if (not $ s `elem` bound) && cond s then f t else t
+    A x y -> A (go bound x) (go bound y)
+    L s t' -> L s $ go (s:bound) t'
 
 inferno searcher decls typed defmap syms = let
   anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
@@ -301,31 +301,25 @@ inferno searcher decls typed defmap syms = let
     ((stas, preds), (soln, _)) <- foldM principal (([], []), ([], 0)) syms
     let ps = zip preds $ ("anno*"++) . show  <$> [0..]
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
+    (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
     let
-      preds = fst <$> ps
-      dicts = snd <$> ps
-      applyDicts (s, (t, a)) = (s, (Qual preds t,
-        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
-    pure $ map applyDicts stas
+      applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t,
+        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts)
+          $ foldr (uncurry beta) a subs) dicts))
+    pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
-f *** g = \(x, y) -> (f x, g y)
-
-defaultMagic searcher q@(Qual ps t) ast = do
-  (ps, ast) <- defaultize [] ps ast
-  pure (Qual ps t, ast)
-  where
-  rings = concatMap isRing ps
+defaultRing searcher (ps, subs) (s, (t, a)) = foldM go ([], subs) ps where
+  rings = concatMap isRing $ fst <$> ps
   isRing (Pred "Ring" (TV v)) = [v]
   isRing _ = []
-  defaultize astSub [] ast = Right ([], foldr (uncurry beta) ast astSub)
-  defaultize astSub (p:pt) (L s rest) = case p of
+  go (ps, subs) p@(pred, dictVar) = case pred of
     Pred cl (TV v) | not $ v `elem` typeVars t ->
       if v `elem` rings then do
         (_, ast) <- findProof searcher (Pred cl $ TC "Integer") ([], 0)
-        defaultize ((s, ast) : astSub) pt rest
-      else Left $ "ambiguous: " ++ show p
-    Pred _ x | not $ all (`elem` typeVars t) $ typeVars x -> Left $ "ambiguous: " ++ show p
-    _ -> ((p:) *** (L s)) <$> defaultize astSub pt rest
+        pure $ (ps, (dictVar, ast):subs)
+      else Left $ "ambiguous: " ++ s ++ ": " ++ show pred
+    Pred _ x | not $ all (`elem` typeVars t) $ typeVars x -> Left $ "ambiguous: " ++ show pred
+    _ -> pure $ (p:ps, subs)
 
 inferDefs searcher defs decls typed = do
   let
@@ -338,10 +332,7 @@ inferDefs searcher defs decls typed = do
   let
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
-    add typed (s, (q, ast)) = do
-      (q, ast) <- defaultMagic searcher q ast
-      pure $ insert s (q, ast) typed
-    inferComponent typed syms = foldM add typed =<< inferno searcher decls typed defmap syms
+    inferComponent typed syms = foldr (uncurry insert) typed <$> inferno searcher decls typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
