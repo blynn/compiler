@@ -209,3 +209,20 @@ include::e4096.hs[]
 ++++++++++
 </div>
 ++++++++++
+
+== A rematch? ==
+
+See
+https://codesync.global/media/open-sourcing-miranda-david-turner-code-mesh-v-2020-codemeshv2020/[David Turner's talk, 'Open Sourcing Miranda'], especially for
+tips on updating C code written 30 years ago! I was pleased to hear that:
+
+  * Miranda's VM has an ATOMLIMIT that is like our scheme of addressses starting
+  at 128, with lower values representing combinators. (Though unlike Miranda,
+  we box our characters.)
+  * Turner talks about rewriting Miranda's fragile conservative garbage
+  collector. We began with a robust copying garbage collector.
+  * Turner also talks about rewriting much of the C in Miranda. Been there,
+  done that: we wrote everything but the VM in Haskell from the start.
+
+But most of all, I'm pleased Miranda is alive again, and look forward to
+rematches with future releases.

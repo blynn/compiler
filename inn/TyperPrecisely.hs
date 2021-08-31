@@ -516,8 +516,8 @@ searcherNew tab neat ienv = Searcher
 
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
+    neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
     let
-      neat = tab ! name
       imps = moduleImports neat
       typed = typedAsts neat
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
@@ -544,12 +544,6 @@ inferModule tab acc name = case mlookup name acc of
     Right $ insert name neat { typedAsts = typed } acc'
   Just _ -> Right acc
 
-untangle s = case program s of
-  Left e -> Left $ "parse error: " ++ e
-  Right (mods, st) -> case st of
-    Ell [] [] -> do
-      tab <- tabulateModules mods
-      foldM (inferModule tab) Tip $ keys tab
-    _ -> Left $ "parse error: " ++ case ell st of
-      Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""
+untangle s = do
+  tab <- parseProgram s >>= tabulateModules
+  foldM (inferModule tab) Tip $ keys tab

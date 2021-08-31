@@ -523,7 +523,13 @@ mayModule = res "module" *> ((,) <$> wantConId <*> exports <* res "where")
   <|> pure ("Main", Nothing)
 
 offside xs = Ell (landin xs) []
-program s = case lexer posLexemes $ LexState s (1, 1) of
-  Left e -> Left e
-  Right (xs, LexState [] _) -> parse haskell $ offside xs
-  Right (_, st) -> Left "unlexable"
+parseProgram s = do
+  (xs, st) <- lexer posLexemes $ LexState s (1, 1)
+  (mods, s) <- case st of
+    LexState [] _ -> parse haskell $ offside xs
+    _ -> Left "unlexable"
+  case s of
+    Ell [] [] -> pure mods
+    _ -> Left $ ("parse error: "++) $ case ell s of
+      Left e -> e
+      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""

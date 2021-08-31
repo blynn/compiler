@@ -20,7 +20,7 @@ problems, and make a tiny dent on the third, while taking care of a few other
 issues.
 
 This leads to a compiler that I found surprisingly usable, at least when I could
-mostly spot mistakes on my own.
+spot mistakes on my own.
 
 == Mutually ==
 

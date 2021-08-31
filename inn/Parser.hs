@@ -467,7 +467,13 @@ topdecls = braceSep
 haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
 
 offside xs = Ell (landin xs) []
-program s = case lexer posLexemes $ LexState s (1, 1) of
-  Left e -> Left e
-  Right (xs, LexState [] _) -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
-  Right (_, st) -> Left "unlexable"
+parseProgram s = do
+  (xs, st) <- lexer posLexemes $ LexState s (1, 1)
+  (mods, ParseState s _) <- case st of
+    LexState [] _ -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
+    _ -> Left "unlexable"
+  case s of
+    Ell [] [] -> pure mods
+    _ -> Left $ ("parse error: "++) $ case ell s of
+      Left e -> e
+      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""

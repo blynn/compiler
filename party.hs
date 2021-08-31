@@ -767,10 +767,16 @@ topdecls = braceSep
 haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
 
 offside xs = Ell (landin xs) []
-program s = case lexer posLexemes $ LexState s (1, 1) of
-  Left e -> Left e
-  Right (xs, LexState [] _) -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
-  Right (_, st) -> Left "unlexable"
+parseProgram s = do
+  (xs, st) <- lexer posLexemes $ LexState s (1, 1)
+  (mods, ParseState s _) <- case st of
+    LexState [] _ -> parse haskell $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
+    _ -> Left "unlexable"
+  case s of
+    Ell [] [] -> pure mods
+    _ -> Left $ ("parse error: "++) $ case ell s of
+      Left e -> e
+      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
 
 -- Primitives.
 primAdts =
@@ -1270,15 +1276,9 @@ inferModule tab acc name = case mlookup name acc of
     Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
-untangle s = case program s of
-  Left e -> Left $ "parse error: " ++ e
-  Right (mods, ParseState s _) -> case s of
-    Ell [] [] -> do
-      tab <- tabulateModules mods
-      foldM (inferModule tab) soloPrim $ keys tab
-    _ -> Left $ "parse error: " ++ case ell s of
-      Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+untangle s = do
+  tab <- parseProgram s >>= tabulateModules
+  foldM (inferModule tab) soloPrim $ keys tab
 
 optiComb' (subs, combs) (s, lamb) = let
   gosub t = case t of

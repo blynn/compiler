@@ -354,12 +354,6 @@ inferModule tab acc name = case mlookup name acc of
     Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
-untangle s = case program s of
-  Left e -> Left $ "parse error: " ++ e
-  Right (mods, ParseState s _) -> case s of
-    Ell [] [] -> do
-      tab <- tabulateModules mods
-      foldM (inferModule tab) soloPrim $ keys tab
-    _ -> Left $ "parse error: " ++ case ell s of
-      Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+untangle s = do
+  tab <- parseProgram s >>= tabulateModules
+  foldM (inferModule tab) soloPrim $ keys tab
