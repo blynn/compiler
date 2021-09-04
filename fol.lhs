@@ -1291,7 +1291,7 @@ main = do
   let
     addPreset (k, v) = do
       a <- createElem "div"
-      setProp a "innerHTML" k
+      setProp a "innerText" k
       addEventListener a "click" $ const $ do
         setProp out "value" ""
         setProp log "value" ""

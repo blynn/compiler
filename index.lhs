@@ -4,18 +4,26 @@ link:ioccc.html[An award-winning Haskell compiler], browser edition.
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> included code</span></p>
-<p>
-<textarea spellcheck='false' readonly id='pre' rows='32' style='display:none;box-sizing:border-box;width:100%;'>
+<textarea id='mod_base' hidden>
 include::inn/BasePrecisely.hs[]
-include::inn/Map1.hs[]
-include::inn/SystemWasm.hs[]
-module Main where
-import Base
-import Map
-import System
 </textarea>
+<textarea id='mod_map' hidden>
+include::inn/Map1.hs[]
+</textarea>
+<textarea id='mod_system' hidden>
+include::inn/SystemWasm.hs[]
+</textarea>
+<p><span style='cursor:pointer;' onclick='hideshow("pre");'><span id='pre_toggle'>[+] Show</span> modules</span></p>
+<div id='pre' style='display:none;'>
+<style>#modlist li:hover{text-decoration:underline;}</style>
+<ul id='modlist'></ul>
+<p>
+<textarea spellcheck='false' id='modinp' rows='16' style='box-sizing:border-box;width:100%;'></textarea>
+<button onclick="update_module()">Update Module</button>
 </p>
+</div>
+
+<div id='compiler' style='display:none;'>
 <p>
 <label for="prog">Program:</label>
 <button id="hello">&#127760;</button>
@@ -48,63 +56,104 @@ style='box-sizing:border-box;width:100%;'>
 <p>
 <textarea spellcheck='false' readonly id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
+</div>
 
 <script>
 "use strict";
 function hideshow(s) {
-  var x = document.getElementById(s);
-  var xt = document.getElementById(s + "_toggle");
+  const x = document.getElementById(s);
+  const xt = document.getElementById(s + "_toggle");
   if (x.style.display === "none") {
     x.style.display = "block";
-    xt.innerHTML = "[-] Hide"
+    xt.innerText = "[-] Hide"
   } else {
     x.style.display = "none";
-    xt.innerHTML = "[+] Show"
+    xt.innerText = "[+] Show"
   }
 }
 
 var blah;
 var blahInp, blahInpLen, blahInpCur;
-var blahOut;
-
-function setup() {
-  function gc() {
-    if (blahInpCur == blahInpLen) throw "eof";
-    blahInpCur++;
-    return blahInp.charCodeAt(blahInpCur - 1);
-  }
-  function pc(x) { blahOut.push(x); }
-  function eof() { return blahInpCur == blahInpLen; }
-  WebAssembly.instantiateStreaming(fetch('webby.wasm'), {
-      env:{ getchar:gc, putchar:pc, eof:eof }
-    }).then(obj => { blah = obj.instance; });
+function setInput(s) {
+  blahInp = s;
+  blahInpLen = s.length;
+  blahInpCur = 0;
 }
-setup();
+var blahOut;
+const modmap = new Map();
+modmap.set('Base', document.getElementById('mod_base').value);
+modmap.set('Map', document.getElementById('mod_map').value);
+modmap.set('System', document.getElementById('mod_system').value);
 
-var msg = document.getElementById("msg");
-var lastProg = "";
-var prelude = document.getElementById("pre");
-var program = document.getElementById("prog");
-var stdin = document.getElementById("inp");
-var stdout = document.getElementById("out");
+WebAssembly.instantiateStreaming(fetch('imp.wasm'), { env:
+  { getchar: () => {
+      if (blahInpCur == blahInpLen) throw "eof";
+      blahInpCur++;
+      return blahInp.charCodeAt(blahInpCur - 1);
+    }
+  , putchar: c => blahOut.push(c)
+  , eof: () => blahInpCur == blahInpLen
+  , get_module: () => {
+      const mod = String.fromCharCode.apply(null, blahOut);
+      blahOut = [];
+      setInput("");
+      if (modmap.has(mod)) setInput(modmap.get(mod));
+    }
+  }}).then(obj => {
+    document.getElementById('compiler').style.display = "block";
+    blah = obj.instance;
+  });
+
+const modlist = document.getElementById('modlist');
+const modinp = document.getElementById('modinp');
+
+function populate_modlist() {
+  modlist.innerText = "";
+  for (const key of modmap.keys()) {
+    const x = document.createElement("li");
+    const y = document.createTextNode(key);
+    x.addEventListener('click', function(){ modinp.value = modmap.get(key); });
+    x.appendChild(y);
+    modlist.appendChild(x);
+  }
+}
+populate_modlist();
+
+function update_module() {
+  setInput(modinp.value);
+  blahOut = [];
+  blah.exports.single_module();
+  const mod = String.fromCharCode.apply(null, blahOut);
+  if (mod == "") {
+    console.log("module update failed");
+  } else {
+    modmap.set(mod, blahInp);
+    populate_modlist();
+  }
+}
+
+const msg = document.getElementById("msg");
+let lastProg = "";
+const program = document.getElementById("prog");
+const stdin = document.getElementById("inp");
+const stdout = document.getElementById("out");
 
 function compile() {
-  msg.innerHTML = "compiling...";
+  msg.innerText = "compiling...";
   stdout.value = "";
-  blahInp = prelude.value + program.value;
+  setInput(program.value);
   if (lastProg == blahInp) return new Promise(function(resolve) { resolve() });
-  blahInpLen = blahInp.length, blahInpCur = 0;
+  lastProg = blahInp;
   blahOut = [];
   // Timeout so message is displayed. Unreliable.
   return new Promise(function(resolve, reject) {
     setTimeout(function() {
   blah.exports.go();
   if (blahOut[0] != 0) {
-    msg.innerHTML = "compile error: " + String.fromCharCode.apply(null, blahOut);
+    msg.innerText = "compile error: " + String.fromCharCode.apply(null, blahOut);
     reject();
   } else {
-    lastProg = blahInp;
-    msg.innerHTML = "";
+    msg.innerText = "";
     resolve();
   }
     }, 0);
@@ -112,9 +161,10 @@ function compile() {
 }
 
 function run() {
-  msg.innerHTML = "running...";
-  var inp = stdin.value;
-  var inpLen = inp.length, inpCur = 0;
+  msg.innerText = "running...";
+  const inp = stdin.value;
+  const inpLen = inp.length;
+  let inpCur = 0;
   stdout.value = "";
   function pc(x) { stdout.value += String.fromCharCode(x); }
   function gc() {
@@ -126,17 +176,17 @@ function run() {
   WebAssembly.instantiate(new Uint8Array(blahOut),
       {env:{getchar:gc, putchar:pc, eof:eof}}).then(x => {
     x.instance.exports.go();
-    msg.innerHTML = "";
+    msg.innerText = "";
   });
 }
 
 function downloadWasm() {
   compile().then(x => {
-    var blob = new Blob([new Uint8Array(blahOut)], {type: "application/octet-stream"});
-    var a = document.createElement('a');
+    const blob = new Blob([new Uint8Array(blahOut)], {type: "application/octet-stream"});
+    const a = document.createElement('a');
     a.style.display = 'none';
     document.body.append(a);
-    var url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     a.href = url;
     a.download = "out.wasm";
     a.click();
@@ -146,7 +196,7 @@ function downloadWasm() {
 function go() { compile().then(x => { run(); }); }
 
 function genlink() {
-  var s = "https://"
+  const s = "https://"
     + window.location.hostname
     + window.location.pathname
     + "?a=0&p="
@@ -156,8 +206,8 @@ function genlink() {
   out.value = s;
 }
 
-var params = (new URL(window.location.href)).searchParams;
-function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
+const params = (new URL(window.location.href)).searchParams;
+function parm(k) { const r = params.get(k); if (r) return r; else return ""; }
 
 </script>
 <script src='index.js'></script>
@@ -169,11 +219,14 @@ function parm(k) { var r = params.get(k); if (r) return r; else return ""; }
 
 [id="hello.hs"]
 ------------------------------------------------------------------------
+import System
 main = putStrLn "Hello, World!"
 ------------------------------------------------------------------------
 
 [id="edigits.hs"]
 ------------------------------------------------------------------------
+import Base
+import System
 -- Digits of e. See http://miranda.org.uk/examples.
 mkdigit n | n <= 9 = chr (n + ord '0')
 norm c (d:e:x)
@@ -188,6 +241,8 @@ main = putStr $ take 1024 edigits
 
 [id="primes.hs"]
 ------------------------------------------------------------------------
+import Base
+import System
 primes = sieve [2..]
 sieve (p:x) = p : sieve [n | n <- x, n `mod` p /= 0]
 main = print $ take 100 $ primes
@@ -196,6 +251,8 @@ main = print $ take 100 $ primes
 [id="queens.hs"]
 ------------------------------------------------------------------------
 -- Eight queens puzzle. See http://miranda.org.uk/examples.
+import Base
+import System
 safe q b = and[not $ q==p || abs(q-p)==i|(p,i) <- zip b [1..]]
 queens sz = go sz where
   go 0 = [[]]
@@ -206,11 +263,15 @@ main = print $ queens 8
 [id="lindon.hs"]
 ------------------------------------------------------------------------
 -- King, are you glad you are king?
+import Base
+import System
 main = interact $ unwords . reverse . words
 ------------------------------------------------------------------------
 
 [id="sort.hs"]
 ------------------------------------------------------------------------
+import Base
+import System
 main = interact $ unwords . sorta . words
 sorta [] = []
 sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt)
@@ -219,6 +280,9 @@ sorta (x:xt) = sorta (filter (<= x) xt) ++ [x] ++ sorta (filter (> x) xt)
 [id="hexmaze.hs"]
 ------------------------------------------------------------------------
 -- https://fivethirtyeight.com/features/can-you-escape-this-enchanted-maze/
+import Base
+import Map
+import System
 maze = fromList $ concat $ zipWith row [0..]
   [ "."
   , "IF"
@@ -258,6 +322,8 @@ main = putStrLn $ bfs [Hex (5, 0) (1, 1) ""]
 [id="gray.hs"]
 ------------------------------------------------------------------------
 -- Gray code.
+import Base
+import System
 gray 0 = [""]
 gray n = ('0':) <$> gray (n - 1) <|> reverse (('1':) <$> gray (n - 1))
 main = putStrLn $ unwords $ gray 4
@@ -267,12 +333,16 @@ main = putStrLn $ unwords $ gray 4
 ------------------------------------------------------------------------
 -- Theorem prover based on a Hilbert system.
 -- https://crypto.stanford.edu/~blynn/compiler/hilsys.html
+import Base
+import System
 include::hilsys.inc[]
 ------------------------------------------------------------------------
 
 [id="douady.hs"]
 ------------------------------------------------------------------------
 -- Based on https://sametwice.com/4_line_mandelbrot.
+import Base
+import System
 prec :: Int
 prec = 16384
 infixl 7 #
@@ -288,6 +358,8 @@ main = putStr $ unlines
 [id="enigma.hs"]
 ------------------------------------------------------------------------
 -- https://crypto.stanford.edu/~blynn/haskell/enigma.html
+import Base
+import System
 wI   = ("EKMFLGDQVZNTOWYHXUSPAIBRCJ", "Q")
 wII  = ("AJDKSIRUXBLHWTMCQGZNPYFVOE", "E")
 wIII = ("BDFHJLCPRTXVZNYEIWGAKMUSQO", "V")

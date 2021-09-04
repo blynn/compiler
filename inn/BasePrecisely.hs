@@ -313,7 +313,7 @@ instance Ring Integer where
   Integer xsgn xs * Integer ysgn ys = Integer (xsgn == ysgn) $ mpMul xs ys
   fromInteger = id
 instance Integral Integer where
-  -- TODO: Trucate `div` towards zero.
+  -- TODO: Trucate `quot` towards zero.
   div (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
   mod (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
   quot (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
