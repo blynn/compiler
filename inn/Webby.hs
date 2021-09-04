@@ -24,9 +24,6 @@ unxxd s = (go s, length s `div` 2) where
     [] -> id
     (d1:d0:rest) -> ((chr $ hexValue d1 * 16 + hexValue d0):) . go rest
 
-foreign export ccall "compile" straightToWasm
-straightToWasm = interact toWasm
-
 main = interact toWasm
 
 toWasm s = case untangle s of

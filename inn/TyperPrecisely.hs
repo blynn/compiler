@@ -545,5 +545,7 @@ inferModule tab acc name = case mlookup name acc of
   Just _ -> Right acc
 
 untangle s = do
-  tab <- parseProgram s >>= tabulateModules
+  tab <- singleFile s
   foldM (inferModule tab) Tip $ keys tab
+
+singleFile s = parseProgram s >>= tabulateModules

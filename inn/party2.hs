@@ -22,12 +22,10 @@ dumpTypes neat = map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ secon
 dumpCombs neat = map go $ optiComb $ second snd <$> toAscList (typedAsts neat) where
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-genMainWasm n = "EXPORT(go,\"go\")\nvoid go(){rts_reduce(" ++ shows n ");}\n"
-
 main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
-  "wasm":_ -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm genMainWasm
+  "wasm":_ -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm (const "")
   "warts":_ -> interact $ either id warts . untangle
   _ -> interact \s -> either id id $ untangle s >>= compile
