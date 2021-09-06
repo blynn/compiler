@@ -10,6 +10,9 @@ instance Functor (Map k) where
   fmap f m = case m of
     Tip -> Tip
     Bin sz k x l r -> Bin sz k (f x) (fmap f l) (fmap f r)
+instance Ord k => Monoid (Map k a) where
+  mempty = Tip
+  x <> y = foldr (\(k, v) m -> insertWith const k v m) y $ assocs x
 size m = case m of Tip -> 0 ; Bin sz _ _ _ _ -> sz
 node k x l r = Bin (1 + size l + size r) k x l r
 singleton k x = Bin 1 k x Tip Tip

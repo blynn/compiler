@@ -14,6 +14,14 @@ infixl 1 >> , >>=
 infixr 1 =<<
 infixr 0 $
 
+class Monoid a where
+  mempty :: a
+  (<>) :: a -> a -> a
+  mconcat :: [a] -> a
+  mconcat = foldr (<>) mempty
+instance Monoid [a] where
+  mempty = []
+  (<>) = (++)
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
   pure :: a -> f a
