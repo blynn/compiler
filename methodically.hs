@@ -1074,9 +1074,9 @@ findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
       <$> findProof tycl (Pred cl1 $ apply subs ty1) qn1) (qn, V name) ps
 
 findProof tycl pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
-  Nothing -> case mlookup classId tycl of
-    Nothing -> Left $ "no instance: " ++ showPred pred ""
-    Just (Tycl _ insts) -> findInstance tycl psn pred insts
+  Nothing -> findInstance tycl psn pred $ case mlookup classId tycl of
+    Nothing -> []
+    Just (Tycl _ insts) -> insts
   Just s -> Right (psn, V s)
 
 prove' tycl psn a = case a of

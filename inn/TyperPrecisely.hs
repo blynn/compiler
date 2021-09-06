@@ -244,9 +244,7 @@ findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
       <$> findProof searcher (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name undefined) ps
 
 findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
-  Nothing -> case findTypeclass searcher classId of
-    [] -> Left $ classId ++ " has no instances"
-    insts -> findInstance searcher psn pred insts
+  Nothing -> findInstance searcher psn pred $ findTypeclass searcher classId
   Just s -> Right (psn, V s)
 
 prove searcher psn a = case a of
