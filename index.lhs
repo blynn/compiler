@@ -175,7 +175,7 @@ function run() {
   function eof() { return inpCur == inpLen; }
   WebAssembly.instantiate(new Uint8Array(blahOut),
       {env:{getchar:gc, putchar:pc, eof:eof}}).then(x => {
-    x.instance.exports.go();
+    x.instance.exports.main();
     msg.innerText = "";
   });
 }

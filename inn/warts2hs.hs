@@ -3,51 +3,50 @@ module Main where
 import Base
 import System
 
-data ByteParser a = ByteParser
-  { getByteParser :: String -> Either String (a, String) }
+data Charser a = Charser
+  { getCharser :: String -> Either String (a, String) }
 
-instance Functor ByteParser where fmap f (ByteParser x) = ByteParser $ fmap (first f) . x
-instance Applicative ByteParser where
-  pure a = ByteParser $ \s -> Right (a, s)
-  f <*> x = ByteParser \inp -> do
-    (fun, t) <- getByteParser f inp
-    (arg, u) <- getByteParser x t
+instance Functor Charser where fmap f (Charser x) = Charser $ fmap (first f) . x
+instance Applicative Charser where
+  pure a = Charser $ \s -> Right (a, s)
+  f <*> x = Charser \inp -> do
+    (fun, t) <- getCharser f inp
+    (arg, u) <- getCharser x t
     pure (fun arg, u)
-instance Monad ByteParser where
-  ByteParser f >>= g = ByteParser $ (good =<<) . f
-    where good (r, t) = getByteParser (g r) t
+instance Monad Charser where
+  Charser f >>= g = Charser $ (good =<<) . f
+    where good (r, t) = getCharser (g r) t
   return = pure
 
-bad :: String -> ByteParser a
-bad = ByteParser . const . Left
+bad :: String -> Charser a
+bad = Charser . const . Left
 
 headerAndVersion :: String
 headerAndVersion = "\0asm\x1\0\0\0"
 
-repNext :: Int -> ByteParser String
-repNext n = ByteParser f where
-  f s | length s < n = Left "length mismatch"
-      | True = Right $ splitAt n s
+eof :: Charser Bool
+eof = Charser \s -> Right (null s, s)
 
-eof :: ByteParser Bool
-eof = ByteParser \s -> Right (null s, s)
-
-next :: ByteParser Int
-next = ByteParser \case
+next :: Charser Int
+next = Charser \case
   [] -> Left "unexpected EOF"
   h:t -> Right (ord h, t)
 
-remainder :: ByteParser String
-remainder = ByteParser \s -> Right (s, "")
+sat f = Charser \case
+  h:t | f h -> Right (h, t)
+  _ -> Left "unsat"
+
+remainder :: Charser String
+remainder = Charser \s -> Right (s, "")
 
 varuint7 = next
 varuint32 = varuint
 
-varuint :: ByteParser Int
+varuint :: Charser Int
 varuint = unleb 1 0
 -- varuint = fromIntegral <$> unleb 1 0
 
--- unleb :: Integer -> Integer -> ByteParser Integer
+-- unleb :: Integer -> Integer -> Charser Integer
 unleb m acc = do
   -- d <- fromIntegral <$> next
   d <- next
@@ -55,11 +54,11 @@ unleb m acc = do
 
 sections = eof >>= \b -> if b then pure [] else do
   n <- varuint7
-  s <- repNext =<< varuint32
+  s <- vec (chr <$> next)
   ((n, s):) <$> sections
 
 wasm = do
-  s <- repNext 8
+  s <- replicateM 8 (chr <$> next)
   if s /= headerAndVersion then bad "bad header or version" else sections
 
 hexDigit n | n < 10 = chr $ n + ord '0'
@@ -69,11 +68,54 @@ xxd = \case
   "" -> ""
   h:t -> let n = ord h in hexDigit (div n 16) : hexDigit (mod n 16) : xxd t
 
+replicateM = (mapM id .) . replicate
+vec f = varuint >>= (`replicateM` f)
+
+search00type xs = do
+  fts <- maybe (Left "missing section 1") Right $ lookup 1 xs
+  ios <- fst <$> getCharser go fts
+  maybe (Left "missing (0, 0) functype") Right $ lookup (0, 0) $ zip ios [0..]
+  where
+  go = vec $ do
+    sat (== '\x60')
+    inCount <- varuint
+    replicateM inCount next
+    outCount <- varuint
+    replicateM outCount next
+    pure (inCount, outCount)
+
+searchExport needle xs = do
+  exs <- maybe (Left "missing section 7") Right $ lookup 7 xs
+  maybe (Left "not found") Right =<< asum . fst <$> getCharser go exs
+  where
+  go = vec $ do
+    s <- vec $ chr <$> next
+    next
+    n <- varuint
+    pure $ if s == "reduce" then Just n else Nothing
+
+allFunCount xs = do
+  impCount <- maybe (Right 0) countImps $ lookup 2 xs
+  funCount <- maybe (Right 0) countFuns $ lookup 3 xs
+  pure $ impCount + funCount
+  where
+  countImps imps = length . fst <$> getCharser goImps imps
+  goImps = vec $ do
+    vec next
+    vec next
+    sat (== '\0')
+    varuint
+    pure ()
+  countFuns funs = fst <$> getCharser varuint funs
+
 main = do
   s <- getContents
-  case getByteParser wasm s of
+  case getCharser wasm s of
     Left e -> putStrLn $ "parse error: " ++ e
     Right (xs, []) -> do
       putStr "module WartsBytes where\nimport Base\nwartsBytes = "
       print $ second xxd <$> filter (not . (`elem` [0, 6]) . fst) xs
+      putStrLn $ either error (("allFunCount = "++) . show) $ allFunCount xs
+      putStrLn $ either error (("funType00Idx = "++) . show) $ search00type xs
+      putStrLn $ either error (("reduceFunIdx = "++) . show) $ searchExport "reduce" xs
     _ -> error "unreachable"

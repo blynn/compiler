@@ -1,4 +1,3 @@
--- Support `delete`.
 module Map where
 
 import Base

@@ -27,5 +27,5 @@ main = getArgs >>= \case
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes
   "wasm":opts -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm ("no-main":opts)
-  "warts":_ -> interact $ either id warts . untangle
+  "warts":opts -> interact $ either id (warts opts) . untangle
   _ -> interact \s -> either id id $ untangle s >>= compile

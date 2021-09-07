@@ -4,6 +4,7 @@ module Base where
 infixr 9 .
 infixr 8 ^
 infixl 7 * , `div` , `mod`
+infixr 6 <>
 infixl 6 + , -
 infixr 5 ++
 infixl 4 <*> , <$> , <* , *>
