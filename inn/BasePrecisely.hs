@@ -478,3 +478,5 @@ unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
 unlines = concatMap (++"\n")
 abs x = if 0 <= x then x else 0 - x
 otherwise = True
+sum = foldr (+) 0
+product = foldr (*) 1

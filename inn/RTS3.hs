@@ -204,8 +204,6 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
   longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
 
-genMainHost n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
-
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
   _ -> 0
@@ -261,20 +259,22 @@ static void run() {
 }
 |]++)
 
-rtsAPI = ([r|
+rtsAPI opts = ([r|
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
-
+|]++)
+  . (if "pre-post-run" `elem` opts then ("void pre_run(void); void post_run(void);\n"++) else id)
+  . ([r|
 void rts_reduce(u n) {
   static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-  run();
-}
 |]++)
+  . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
+  . ("\n}\n"++)
 
 -- Hash consing.
 data Obj = Local String | Global String String | Code Int deriving Eq
@@ -339,7 +339,7 @@ codegen ffis mods = (bigmap', mem) where
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
 
-compileWith topSize libc genMain mods = do
+compileWith topSize libc opts mods = do
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
     (bigmap, mem) = codegen ffis mods
@@ -361,7 +361,7 @@ compileWith topSize libc genMain mods = do
     Nothing -> pure ""
     Just (a, q) -> do
       getIOType q
-      pure $ genMain a
+      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
 
   pure
     $ ("typedef unsigned u;\n"++)
@@ -382,11 +382,11 @@ compileWith topSize libc genMain mods = do
     . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
     . ("\n  }\n}\n" ++)
     . runFun
-    . rtsAPI
+    . rtsAPI opts
     . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
     $ mainStr
 
-compile = compileWith "1<<24" libcHost genMainHost
+compile = compileWith "1<<24" libcHost []
 
 declWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 enum {
