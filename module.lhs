@@ -73,7 +73,7 @@ ADTs and generated types and selector functions for typeclass methods, we
 simply threw them on a big pile in a `Neat` value being passed around.
 Modules force us to be more careful.
 
-We invent a special module "#" preloaded with built-in defintions required by
+We invent a special module "#" preloaded with built-in definitions required by
 the Haskell syntax we support:
 
   * The unit type and value `()` is part of the language.
@@ -90,7 +90,7 @@ the Haskell syntax we support:
   * Primitives for IO monad methods.
   * The RTS reduces `fail#` on failed case matches.
 
-Then each module implicity imports this special "#" module, so these built-in
+Then each module implicitly imports this special "#" module, so these built-in
 primitives are accessible to all.
 
 This is a good time to mention that rewriting means:
@@ -101,7 +101,7 @@ This is a good time to mention that rewriting means:
   * Patterns containing integer and character literals require `(==)`.
   * List comprehensions are expressed in terms of `concatMap` and `pure`.
 
-None of these are built-in; they must be explicity defined at the top level if
+None of these are built-in; they must be explicitly defined at the top level if
 these language features are used. The last of these implies we must define an
 `Applicative` instance for lists if `pure` has its standard meaning. To remove
 these gotchas, we could define low-level primitives as we do for the others.
@@ -419,7 +419,7 @@ add them to the C source to the runtime in the `RTS` module. Thus our next
 compiler will print the new runtime in its output. However, it is unable to use
 any new runtime features itself; only the programs it builds can do that.
 
-If an FFI call enocunters an error, instead of unceremoniously calling
+If an FFI call encounters an error, instead of unceremoniously calling
 `exit()`, we ought to push an exception-handling combinator on the stack. With
 this in mind, I experimented with setting a global flag on failure to trigger
 exception handling, but it caused a massive performance hit. Compiler build
@@ -454,7 +454,7 @@ symbol per type to represent corresponding case expressions, the function
 
 We barely modify this map for named fields. As a result, there's no easy way
 for `findField` to look up relevant information based on a field name. We
-ineffiicently search linearly through possibly repeated entries. It may be
+inefficiently search linearly through possibly repeated entries. It may be
 better to add a separate map for named fields, but it's tedious to add fields
 to the `Neat` type when our current compiler lacks support for naming them!
 Once again, a proto-chicken comes first.
