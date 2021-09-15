@@ -50,12 +50,13 @@ mlookup kx t = case t of
 fromList = foldl (\t (k, x) -> insert k x t) Tip
 member k t = maybe False (const True) $ mlookup k t
 t ! k = maybe undefined id $ mlookup k t
-
 foldrWithKey f = go where
   go z t = case t of
     Tip -> z
     Bin _ kx x l r -> go (f kx x (go z r)) l
-
+mapWithKey _ Tip = Tip
+mapWithKey f (Bin sx kx x l r) =
+  Bin sx kx (f kx x) (mapWithKey f l) (mapWithKey f r)
 toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 keys = map fst . toAscList
 elems = map snd . toAscList

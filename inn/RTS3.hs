@@ -299,24 +299,27 @@ enc t = case t of
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
 
+encSym s t = case t of
+  Nd _ _ -> do
+    hy <- enc t
+    Code <$> memget (Code $ comEnum "I" , hy)
+  _ -> enc t
+
 asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> encSym s t)
   Tip combs
 
-hashcons hp combs = (symtab', (hp', (mem++)))
+codegenLocal (name, neat) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . (mem++)))
   where
+  combs = optiComb $ toAscList $ snd <$> typedAsts neat
   (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
-  symtab' = resolveLocal <$> symtab
+  localmap = resolveLocal <$> symtab
   mem = resolveLocal <$> memF []
   resolveLocal = \case
     Code n -> Right n
     Local s -> resolveLocal $ symtab ! s
     Global m s -> Left (m, s)
-
-codegenLocal (name, neat) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . f'))
-  where
-  (localmap, (hp', f')) = hashcons hp $ optiComb $ toAscList $ snd <$> typedAsts neat
 
 codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods

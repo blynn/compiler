@@ -59,6 +59,7 @@ imp.o:imp.c;$(WCC) $^ -c -o $@
 imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
+$(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
 
 warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.o:warts.c;$(WCC) $^ -c -o $@
@@ -94,7 +95,7 @@ clean: ; -rm $(SITE)
 fol.js fol.wasm: fol.lhs
 	mkdir -p fol-asterius
 	cp fol.cabal fol.lhs fol-asterius/
-	podman run -it --rm -v $(PWD)/fol-asterius/:/mirror -w /mirror terrorjack/asterius ahc-link --bundle --browser --ghc-option -O --input-hs fol.lhs
+	podman run -it --rm -v $(PWD)/fol-asterius/:/mirror -w /mirror docker.io/terrorjack/asterius ahc-link --bundle --browser --ghc-option -O --input-hs fol.lhs
 	cd fol-asterius && cp fol.js fol.wasm ..
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^

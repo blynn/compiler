@@ -288,22 +288,19 @@ asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
   Tip combs
 
-hashcons hp combs = (symtab', (hp', (mem++)))
+lambsList typed = toAscList $ snd <$> typed
+
+codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
+  (insert name localmap bigmap, (hp', f . (mem++)))
   where
+  combs = optiComb $ lambsList typed
   (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
-  symtab' = resolveLocal <$> symtab
+  localmap = resolveLocal <$> symtab
   mem = resolveLocal <$> memF []
   resolveLocal = \case
     Code n -> Right n
     Local s -> resolveLocal $ symtab ! s
     Global m s -> Left (m, s)
-
-lambsList typed = toAscList $ snd <$> typed
-
-codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . f'))
-  where
-  (localmap, (hp', f')) = hashcons hp $ optiComb $ lambsList typed
 
 codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
