@@ -51,3 +51,6 @@ integerSignList x f = f (x >= 0) $ go x where
   go n = r : go q where (q, r) = divMod n $ 2^32
 
 intFromWord = fromIntegral
+
+when x y = if x then y else pure ()
+unless x y = if x then pure () else y

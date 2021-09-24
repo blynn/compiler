@@ -252,7 +252,7 @@ addForeignImport foreignname ourname t neat = neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
 addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
-addImport im neat = neat { moduleImports = im:moduleImports neat }
+addImport im f neat = neat { moduleImports = (im, f):moduleImports neat }
 addFixities os prec neat = neat { opFixity = foldr (\o tab -> insert o prec tab) (opFixity neat) os }
 
 want f = Parser \inp -> case ell inp of
@@ -493,7 +493,15 @@ dclass = wantConId
 _deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` res ","))) <|> pure []
 adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|") <*> _deriving
 
-impDecl = addImport <$> (res "import" *> wantConId)
+impDecl = addImport <$> (res "import" *> wantConId) <*>
+  ( paren (flip elem <$> sepBy var (res ","))
+  <|> (do
+    s <- var
+    unless (s == "hiding") $ Parser $ const $ Left "expected `hiding`"
+    paren ((not .) . flip elem <$> sepBy var (res ","))
+    )
+  <|> pure (const True)
+  )
 
 topdecls = braceSep
   (   adt

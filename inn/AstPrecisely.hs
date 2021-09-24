@@ -75,7 +75,7 @@ data Neat = Neat
   , type2Cons :: Map String [String]
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
-  , moduleImports :: [String]
+  , moduleImports :: [(String, String -> Bool)]
   , moduleExports :: Maybe [String]
   , opFixity :: Map String (Int, Assoc)
   }

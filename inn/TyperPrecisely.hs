@@ -467,7 +467,7 @@ data Searcher = Searcher
   , findTypeclass :: String -> [(String, Instance)]
   }
 
-isExportOf s neat = case moduleExports neat of
+isLegalExport s neat = case moduleExports neat of
   Nothing -> True
   Just es -> elem s es
 
@@ -482,11 +482,11 @@ searcherNew tab neat ienv = Searcher
   , findCon = findAmong dataCons visible
   , findField = findField'
   , typeOfMethod = fmap fst . findAmong typedAsts visible
-  , findTypeclass = \s -> concat [maybe [] (\(Tycl _ is) -> (im,) <$> is) $ mlookup s $ classes im | im <- "":imps]
+  , findTypeclass = \s -> concat [maybe [] (\(Tycl _ is) -> (im,) <$> is) $ mlookup s $ classes im | im <- "":map fst imps]
   }
   where
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
-  importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
+  importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
   classes im = if im == "" then ienv else typeclasses $ tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
@@ -516,12 +516,14 @@ inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
     let
-      imps = moduleImports neat
+      imps = fst <$> moduleImports neat
       typed = typedAsts neat
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
         [] -> Tycl (findSigs cl) is
         _ -> Tycl sigs is
-      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
+      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
+        find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
+          typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
       genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
         Nothing -> Right $ insert defName (q, V "fail#") qcs
