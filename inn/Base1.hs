@@ -92,6 +92,8 @@ length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
+when x y = if x then y else pure ()
+unless x y = if x then pure () else y
 error = primitiveError
 undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
@@ -138,6 +140,8 @@ intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
 intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
+and = foldr (&&) True
+or = foldr (||) False
 zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))

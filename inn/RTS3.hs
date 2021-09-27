@@ -231,14 +231,12 @@ genComb (s, (args, body)) = let
     E (StrCon s) -> (s++)
   ) . ("break;\n"++)
 
-comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
+comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
-  (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
-comdefs = case lexer posLexemes $ LexState comdefsrc (1, 1) of
+  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
+comdefs = case parse (lexemePrelude *> braceSep comb) comdefsrc of
   Left e -> error e
-  Right (xs, _) -> case parse (braceSep comb) $ offside xs of
-    Left e -> error e
-    Right (cs, _) -> cs
+  Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
 comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
 

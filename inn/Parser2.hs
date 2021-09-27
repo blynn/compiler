@@ -512,7 +512,7 @@ adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> ma
 impDecl = addImport <$> (res "import" *> wantConId)
 
 topdecls = braceSep
-  (   adt
+  $   adt
   <|> classDecl
   <|> instDecl
   <|> res "foreign" *>
@@ -522,7 +522,6 @@ topdecls = braceSep
   <|> addDefs <$> defSemi
   <|> fixity *> pure id
   <|> impDecl
-  )
 
 haskell = some $ (,) <$> (res "module" *> wantConId <* res "where" <|> pure "Main") <*> topdecls
 
