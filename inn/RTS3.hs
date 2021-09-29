@@ -234,7 +234,7 @@ genComb (s, (args, body)) = let
 comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
   (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
-comdefs = case parse (lexemePrelude *> braceSep comb) comdefsrc of
+comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
   Left e -> error e
   Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
