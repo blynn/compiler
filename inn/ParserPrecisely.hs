@@ -392,14 +392,15 @@ sqExpr = between lSquare rSquare $
 
 fbind = A <$> (E . StrCon <$> var) <*> (res "=" *> expr)
 
-mayUpdate v = (do
+fBinds v = (do
     fbs <- between lBrace rBrace $ sepBy1 fbind comma
     pure $ A (E $ Basic "{=") $ foldr A (E $ Basic "=}") $ v:fbs
   ) <|> pure v
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren comma *> pure (V ","))
-  <|> ((qvar <|> V <$> con) >>= mayUpdate) <|> E <$> literal
+  <|> qvar <|> V <$> con <|> E <$> literal
+  >>= fBinds
 
 aexp = foldl1 A <$> some atom
 

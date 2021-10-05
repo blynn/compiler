@@ -420,14 +420,15 @@ sqExpr = between (res "[") (res "]") $
 
 fbind = A <$> (E . StrCon <$> var) <*> (res "=" *> expr)
 
-mayUpdate v = (do
+fBinds v = (do
     fbs <- between (res "{") (res "}") $ sepBy1 fbind (res ",")
     pure $ A (E $ Basic "{=") $ foldr A (E $ Basic "=}") $ v:fbs
   ) <|> pure v
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> ((V <$> (con <|> var)) >>= mayUpdate) <|> E <$> wantLit
+  <|> V <$> (con <|> var) <|> E <$> wantLit
+  >>= fBinds
 
 aexp = foldl1 A <$> some atom
 
