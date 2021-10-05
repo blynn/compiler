@@ -476,7 +476,7 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
   [unique] -> Right unique
   _ -> Left $ "ambiguous: " ++ s
 
-searcherNew tab neat ienv = Searcher
+searcherNew thisModule tab neat ienv = Searcher
   { astLink = astLink'
   , findPrec = \s -> if s == ":" then Right (5, RAssoc) else findAmong opFixity visible s
   , findCon = findAmong dataCons visible
@@ -507,6 +507,15 @@ searcherNew tab neat ienv = Searcher
           _ -> badDep $ "ambiguous: " ++ s
       A x y -> A <$> go bound x <*> go bound y
       L s t -> L s <$> go (s:bound) t
+      E (Link im s _)
+        | im == thisModule -> go bound $ V s
+        | otherwise -> case mlookup im tab of
+          Nothing -> badDep $ "missing module: " ++ im
+          Just n
+            | isLegalExport s n -> case mlookup s $ typedAsts n of
+              Nothing -> badDep $ "missing: " ++ s
+              Just (t, _) -> pure $ E $ Link im s t
+            | otherwise -> badDep $ "missing: " ++ s
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
@@ -536,7 +545,7 @@ inferModule tab acc name = case mlookup name acc of
         defName = "{default}" ++ s
         (q@(Qual ps0 t0), _) = qcs ! s
     acc' <- foldM (inferModule tab) acc imps
-    let searcher = searcherNew acc' neat ienv
+    let searcher = searcherNew name acc' neat ienv
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
     typed <- inferDefs searcher depdefs (topDecls neat) typed
     typed <- inferTypeclasses searcher ienv typed

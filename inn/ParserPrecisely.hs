@@ -114,6 +114,7 @@ quasiquoteBody = (char '|' *> char ']' *> pure []) <|> (:) <$> rawSat (const Tru
 tokStr = quoteStr <|> quasiquoteStr
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = lexeme $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
+modId = fmap (intercalate ",") $ many $ liftA2 (:) large (many $ small <|> large <|> digit <|> char '\'') <* char '.'
 varish = lexeme $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'')
 bad s = Parser \pasta -> badpos pasta s
 badpos pasta s = Left $ loc $ ": " ++ s where
@@ -121,15 +122,21 @@ badpos pasta s = Left $ loc $ ": " ++ s where
     [] -> ("EOF"++)
     (_, (r, c)):_ -> ("row "++) . shows r . (" col "++) . shows c
 
+reservedId s = elem s
+  ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+
 varId = do
   s <- varish
-  if elem s
-    ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
-    then bad $ "reserved: " ++ s else pure s
+  when (reservedId s) $ bad $ "reserved: " ++ s
+  pure s
+
+reservedSym s = elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
+
 varSymish = lexeme $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol)
 varSym = lexeme $ do
   s <- varSymish
-  if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then bad $ "reserved: " ++ s else pure s
+  when (reservedSym s) $ bad $ "reserved: " ++ s
+  pure s
 
 conId = lexeme $ liftA2 (:) large $ many (small <|> large <|> digit <|> char '\'')
 conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
@@ -295,6 +302,14 @@ op = qconsym <|> varSym <|> between backquote backquote (conId <|> varId)
 con = conId <|> paren qconsym
 var = varId <|> paren varSym
 
+qvarId = liftA2 (,) modId varId
+qvarSym = liftA2 (,) modId varSym
+qvar = do
+  (im, s) <- qvarId <|> paren qvarSym
+  pure $ case im of
+    [] -> V s
+    _ -> E $ Link im s undefined
+
 tycon = do
   s <- conId
   pure $ if s == "String" then TAp (TC "[]") (TC "Char") else TC s
@@ -384,7 +399,7 @@ mayUpdate v = (do
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren comma *> pure (V ","))
-  <|> ((V <$> (con <|> var)) >>= mayUpdate) <|> E <$> literal
+  <|> ((qvar <|> V <$> con) >>= mayUpdate) <|> E <$> literal
 
 aexp = foldl1 A <$> some atom
 
