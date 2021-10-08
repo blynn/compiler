@@ -114,7 +114,6 @@ quasiquoteBody = (char '|' *> char ']' *> pure []) <|> (:) <$> rawSat (const Tru
 tokStr = quoteStr <|> quasiquoteStr
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = lexeme $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
-modId = fmap (intercalate ",") $ many $ liftA2 (:) large (many $ small <|> large <|> digit <|> char '\'') <* char '.'
 varish = lexeme $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'')
 bad s = Parser \pasta -> badpos pasta s
 badpos pasta s = Left $ loc $ ": " ++ s where
@@ -294,21 +293,22 @@ addLets ls x = foldr triangle x components where
     redef tns expr = foldr L (suball expr) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined id $ lookup x ls) (suball expr) tnames
 
-qconop = conSym <|> res ":" <|> between backquote backquote conId
+op = conSym <|> varSym <|> between backquote backquote (conId <|> varId)
 
-qconsym = conSym <|> res ":"
-
-op = qconsym <|> varSym <|> between backquote backquote (conId <|> varId)
-con = conId <|> paren qconsym
+qop = modded (varSym <|> conSym) <|> between backquote backquote (modded $ conId <|> varId) <|> V <$> res ":"
+con = conId <|> paren conSym
 var = varId <|> paren varSym
 
-qvarId = liftA2 (,) modId varId
-qvarSym = liftA2 (,) modId varSym
-qvar = do
-  (im, s) <- qvarId <|> paren qvarSym
-  pure $ case im of
+modded parser = do
+  mods <- many $ liftA2 (:) large (many $ small <|> large <|> digit <|> char '\'') <* char '.'
+  s <- parser
+  pure $ case mods of
     [] -> V s
-    _ -> E $ Link im s undefined
+    _ -> E $ Link (intercalate "," mods) s undefined
+
+gconsym = V <$> res ":" <|> modded conSym
+qcon = modded conId <|> paren gconsym
+qvar = modded varId <|> paren (modded varSym)
 
 tycon = do
   s <- conId
@@ -361,8 +361,8 @@ lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 flipPairize y x = A (A (V ",") x) y
 moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr comma
 thenComma = comma *> ((flipPairize <$> moreCommas) <|> pure (A (V ",")))
-parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id)
-rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (:"") <$> comma)) <*> expr
+parenExpr = (&) <$> expr <*> (((\o a -> A o a) <$> qop) <|> thenComma <|> pure id)
+rightSect = ((\o a -> L "@" $ A (A o $ V "@") a) <$> (qop <|> V . (:"") <$> comma)) <*> expr
 section = lParen *> (parenExpr <* rParen <|> rightSect <* rParen <|> rParen *> pure (V "()"))
 
 maybePureUnit = maybe (V "pure" `A` V "()") id
@@ -399,7 +399,7 @@ fBinds v = (do
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren comma *> pure (V ","))
-  <|> qvar <|> V <$> con <|> E <$> literal
+  <|> qvar <|> qcon <|> E <$> literal
   >>= fBinds
 
 aexp = foldl1 A <$> some atom
@@ -410,9 +410,10 @@ chain a = \case
     [] -> A (A f a) b
     _ -> A (E $ Basic "{+") $ A (A (A f a) b) $ foldr A (E $ Basic "+}") rest
   _ -> error "unreachable"
-expr = chain <$> aexp <*> many (A <$> (V <$> op) <*> aexp)
+expr = chain <$> aexp <*> many (A <$> qop <*> aexp)
 
-gcon = conId <|> paren (qconsym <|> (:"") <$> comma) <|> lSquare *> rSquare *> pure "[]"
+gcon = conId <|> paren (conSym <|> res ":" <|> (:"") <$> comma) <|> lSquare *> rSquare *> pure "[]"
+qconop = conSym <|> res ":" <|> between backquote backquote conId
 
 apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatVar Nothing <$> (res "_" *> pure "_")

@@ -129,14 +129,14 @@ infixer searcher (A (A (A s x) y) t) = go seed t where
     t -> t
   go acc t = case t of
     E (Basic "+}") -> pure $ unprotectAll acc
-    A (A (V s) z) rest -> go (rebase s (protect z) acc) rest
+    A (A op z) rest -> go (rebase op (protect z) acc) rest
     _ -> error "unreachable"
-  rebase s z = \case
-    A (A (V s') x) y -> let
-      stay = A (A (V s) $ A (A (V s') x) y) z
-      down = A (A (V s') x) $ rebase s z y
-      in extendChain searcher stay down s s'
-    x -> A (A (V s) x) z
+  rebase op z = \case
+    A (A op' x) y -> let
+      stay = A (A op $ A (A op' x) y) z
+      down = A (A op' x) $ rebase op z y
+      in extendChain searcher stay down op op'
+    x -> A (A op x) z
 
 patFixFixity searcher p = case p of
   PatLit _ -> p
@@ -157,23 +157,23 @@ patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldr rebase seed rest
     PatCon s' [x, y] -> let
       stay = PatCon s [PatCon s' [x, y], z]
       down = PatCon s' [x, rebase sz y]
-      in extendChain searcher stay down s s'
+      in extendChain searcher stay down (V s) (V s')
     x -> PatCon s [x, z]
 
-extendChain searcher stay down s s' =
+extendChain searcher stay down op op' =
   if prec <= prec'
     then if prec == prec'
       then if assoc == assoc'
         then case assoc of
           LAssoc -> stay
           RAssoc -> down
-          NAssoc -> error $ "adjacent NAssoc: " ++ s ++ " vs " ++ s'
-        else error $ "assoc mismatch: " ++ s ++ " vs " ++ s'
+          NAssoc -> error $ "adjacent NAssoc: " ++ show op ++ " vs " ++ show op'
+        else error $ "assoc mismatch: " ++ show op ++ " vs " ++ show op'
       else stay
     else down
   where
-  (prec, assoc) = either (const (9, LAssoc)) id $ findPrec searcher s
-  (prec', assoc') = either (const (9, LAssoc)) id $ findPrec searcher s'
+  (prec, assoc) = findPrec searcher op
+  (prec', assoc') = findPrec searcher op'
 
 secondM f (a, b) = (a,) <$> f b
 patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
@@ -460,7 +460,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
 
 data Searcher = Searcher
   { astLink :: Ast -> Either String ([String], Ast)
-  , findPrec :: String -> Either String (Int, Assoc)
+  , findPrec :: Ast -> (Int, Assoc)
   , findCon :: String -> Either String [Constr]
   , findField :: String -> (String, [(String, Type)])
   , typeOfMethod :: String -> Either String Qual
@@ -478,13 +478,28 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
 
 searcherNew thisModule tab neat ienv = Searcher
   { astLink = astLink'
-  , findPrec = \s -> if s == ":" then Right (5, RAssoc) else findAmong opFixity visible s
+  , findPrec = findPrec'
   , findCon = findAmong dataCons visible
   , findField = findField'
   , typeOfMethod = fmap fst . findAmong typedAsts visible
   , findTypeclass = \s -> concat [maybe [] (\(Tycl _ is) -> (im,) <$> is) $ mlookup s $ classes im | im <- "":map fst imps]
   }
   where
+  defPrec = (9, LAssoc)
+  findPrec' = \case
+    V s
+      | s == ":" -> (5, RAssoc)
+      | otherwise -> either (const defPrec) id $ findAmong opFixity visible s
+    E (Link im s _)
+      | im == thisModule -> findPrec' $ V s
+      | otherwise -> case mlookup im tab of
+        Nothing -> defPrec
+        Just n
+          | isLegalExport s n -> case mlookup s $ opFixity n of
+            Nothing -> defPrec
+            Just prec -> prec
+          | otherwise -> defPrec
+    _ -> error "unreachable"
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
   importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
