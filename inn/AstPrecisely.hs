@@ -108,6 +108,8 @@ typeVars = \case
   TV v -> [v]
   TAp x y -> typeVars x `union` typeVars y
 
+dependentModules neat = map fst $ moduleImports neat
+
 depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
   if vertex `elem` visited then st else second (vertex:)
     $ depthFirstSearch relation (vertex:visited, sequence) (relation vertex)

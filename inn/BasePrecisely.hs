@@ -73,10 +73,14 @@ instance Ord a => Ord [a] where
     [] -> True
     x:xt -> case ys of
       [] -> False
-      y:yt -> case compare x y of
-        LT -> True
-        GT -> False
-        EQ -> xt <= yt
+      y:yt -> if x <= y then if y <= x then xt <= yt else True else False
+  compare xs ys = case xs of
+    [] -> case ys of
+      [] -> EQ
+      _ -> LT
+    x:xt -> case ys of
+      [] -> GT
+      y:yt -> if x <= y then if y <= x then compare xt yt else LT else GT
 data Maybe a = Nothing | Just a deriving (Eq, Show)
 data Either a b = Left a | Right b deriving (Eq, Show)
 fst (x, y) = x

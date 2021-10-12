@@ -42,8 +42,14 @@ id x = x
 const x y = x
 flip f x y = f y x
 (&) x f = f x
-class Ord a where (<=) :: a -> a -> Bool
-compare x y = if x <= y then if y <= x then EQ else LT else GT
+class Ord a where
+  (<=) :: a -> a -> Bool
+  x <= y = case compare x y of
+    LT -> True
+    EQ -> True
+    GT -> False
+  compare :: a -> a -> Ordering
+  compare x y = if x <= y then if y <= x then EQ else LT else GT
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
 data Ordering = LT | GT | EQ
@@ -52,10 +58,14 @@ instance Ord a => Ord [a] where
     [] -> True
     x:xt -> case ys of
       [] -> False
-      y:yt -> case compare x y of
-        LT -> True
-        GT -> False
-        EQ -> xt <= yt
+      y:yt -> if x <= y then if y <= x then xt <= yt else True else False
+  compare xs ys = case xs of
+    [] -> case ys of
+      [] -> EQ
+      _ -> LT
+    x:xt -> case ys of
+      [] -> GT
+      y:yt -> if x <= y then if y <= x then compare xt yt else LT else GT
 data Maybe a = Nothing | Just a
 data Either a b = Left a | Right b
 fpair (x, y) f = f x y

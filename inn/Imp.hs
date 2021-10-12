@@ -109,7 +109,7 @@ slebPos n
 
 foreign import ccall "get_module" getModule :: IO ()
 
-needed tab = filter (not . (`member` tab)) $ map fst $ concatMap moduleImports $ elems tab
+needed tab = filter (not . (`member` tab)) $ concatMap dependentModules $ elems tab
 complete tab = case needed tab of
   [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) Tip (keys tab)
   f:_ -> do
