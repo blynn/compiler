@@ -258,7 +258,9 @@ addForeignImport foreignname ourname t neat = neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
 addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
-addImport im f neat = neat { moduleImports = (im, f):moduleImports neat }
+addImport isQual im mayAs f neat = neat { moduleImports = insertWith (++) (maybe im id mayAs) imf
+  $ (if isQual then id else insertWith (++) "" imf) $ moduleImports neat }
+  where imf = [(im, f)]
 addFixities os prec neat = neat { opFixity = foldr (\o tab -> insert o prec tab) (opFixity neat) os }
 
 parseErrorRule = Parser \pasta -> case indents pasta of
@@ -472,11 +474,18 @@ dclass = conId
 _deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` comma))) <|> pure []
 adt = addAdt <$> between (res "data") (res "=") (simpleType <$> conId <*> many varId) <*> sepBy constr (res "|") <*> _deriving
 
-impDecl = addImport <$> (res "import" *> conId) <*>
-  ( paren (flip elem <$> sepBy var comma)
-  <|> res "hiding" *> paren ((not .) . flip elem <$> sepBy var comma)
-  <|> pure (const True)
-  )
+impDecl = do
+  res "import"
+  preQual <- const True <$> res "qualified" <|> pure False
+  q <- conId
+  postQual <- const True <$> res "qualified" <|> pure False
+  when (preQual && postQual) $ bad "overqualified"
+  addImport (preQual || postQual) q <$>
+    (res "as" *> (Just <$> conId) <|> pure Nothing) <*>
+    ( paren (flip elem <$> sepBy var comma)
+    <|> res "hiding" *> paren ((not .) . flip elem <$> sepBy var comma)
+    <|> pure (const True)
+    )
 
 topdecls = braceSep
   $   adt

@@ -467,7 +467,7 @@ data Searcher = Searcher
   , findTypeclass :: String -> [(String, Instance)]
   }
 
-isLegalExport s neat = case moduleExports neat of
+isLegalExport s neat = not (isBuiltIn s) && case moduleExports neat of
   Nothing -> True
   Just es -> elem s es
 
@@ -490,24 +490,22 @@ searcherNew thisModule tab neat ienv = Searcher
     V s
       | s == ":" -> (5, RAssoc)
       | otherwise -> either (const defPrec) id $ findAmong opFixity visible s
-    E (Link im s _)
-      | im == thisModule -> findPrec' $ V s
-      | otherwise -> case mlookup im tab of
-        Nothing -> defPrec
-        Just n
-          | isLegalExport s n -> case mlookup s $ opFixity n of
-            Nothing -> defPrec
-            Just prec -> prec
-          | otherwise -> defPrec
+    E (Link q s _)
+      | q == thisModule -> findPrec' $ V s
+      | otherwise -> either (const defPrec) id $ findAmong opFixity (map snd . qualNeats q) s
     _ -> error "unreachable"
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
-  importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
+  findQualifiedSym q s = do
+    (im, n) <- qualNeats q s
+    maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n
+  qualNeats q s = [(im, n) | (im, isLegalImport) <- maybe [] id $ mlookup q $ moduleImports neat, let n = tab ! im, isLegalImport s && isLegalExport s n]
+  importedNeats s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
   classes im = if im == "" then ienv else typeclasses $ tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
     [] -> error $ "no such field: " ++ f
     h:_ -> h
-  imps = moduleImports neat
+  imps = moduleImports neat ! ""
   defs = fromList $ topDefs neat
   astLink' ast = runDep $ go [] ast where
     go bound ast = case ast of
@@ -522,15 +520,12 @@ searcherNew thisModule tab neat ienv = Searcher
           _ -> badDep $ "ambiguous: " ++ s
       A x y -> A <$> go bound x <*> go bound y
       L s t -> L s <$> go (s:bound) t
-      E (Link im s _)
-        | im == thisModule -> go bound $ V s
-        | otherwise -> case mlookup im tab of
-          Nothing -> badDep $ "missing module: " ++ im
-          Just n
-            | isLegalExport s n -> case mlookup s $ typedAsts n of
-              Nothing -> badDep $ "missing: " ++ s
-              Just (t, _) -> pure $ E $ Link im s t
-            | otherwise -> badDep $ "missing: " ++ s
+      E (Link q s _)
+        | q == thisModule -> go bound $ V s
+        | otherwise -> case findQualifiedSym q s of
+          [] -> badDep $ "missing: " ++ q ++ "." ++ s
+          [(truename, t)] -> pure $ E $ Link truename s t
+          _ -> badDep $ "ambiguous: " ++ q ++ "." ++ s
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
@@ -540,7 +535,7 @@ inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
     let
-      imps = fst <$> moduleImports neat
+      imps = dependentModules neat
       typed = typedAsts neat
       fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
         [] -> Tycl (findSigs cl) is

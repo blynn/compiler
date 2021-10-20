@@ -75,12 +75,12 @@ data Neat = Neat
   , type2Cons :: Map String [String]
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
-  , moduleImports :: [(String, String -> Bool)]
+  , moduleImports :: Map String [(String, String -> Bool)]
   , moduleExports :: Maybe [String]
   , opFixity :: Map String (Int, Assoc)
   }
 
-neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip [] Nothing Tip
+neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip
 
 patVars = \case
   PatLit _ -> []
@@ -108,7 +108,7 @@ typeVars = \case
   TV v -> [v]
   TAp x y -> typeVars x `union` typeVars y
 
-dependentModules neat = map fst $ moduleImports neat
+dependentModules neat = map fst $ concat $ elems $ moduleImports neat
 
 depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
   if vertex `elem` visited then st else second (vertex:)
