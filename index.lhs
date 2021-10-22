@@ -37,6 +37,7 @@ include::inn/SystemWasm.hs[]
 <button id="hilbert">Hilbert</button>
 <button id="douady">Douady</button>
 <button id="enigma">Enigma</button>
+<button id="sha256">SHA-256</button>
 </p>
 <p>
 <textarea spellcheck='false' rows='12' id="prog" name="prog"
@@ -387,6 +388,90 @@ enigma grundstellung = zipWith zap $ tail $ iterate turn grundstellung
 main = interact $ enigma "AAA"
 ------------------------------------------------------------------------
 
+[id="sha256.hs"]
+------------------------------------------------------------------------
+-- SHA-256.
+--
+-- To make this more fun, we compute the algorithm's constants ourselves.
+-- They are the first 32 bits of the fractional parts of the square roots
+-- and cube roots of primes and hence are nothing-up-my-sleeve numbers.
+module Main where
+import Base
+import System
+
+-- Fixed-point arithmetic with scaling 1/2^40.
+-- We break the ring laws but get away with it.
+denom = 2^40
+data Fixie = Fixie Integer deriving Eq
+instance Ring Fixie where
+  Fixie a + Fixie b = Fixie (a + b)
+  Fixie a - Fixie b = Fixie (a - b)
+  Fixie a * Fixie b = Fixie (a * b `div` denom)
+  fromInteger = Fixie . (denom *)
+
+properFraction (Fixie f) = (q, Fixie $ f - q) where q = div f denom
+truncate (Fixie f) = div f denom
+recip (Fixie f) = Fixie $ denom^2 `div` f
+a / b = a * recip b
+
+-- Square roots and cube roots via Newton-Raphson.
+-- In theory, the lowest bits may be wrong since we approach the root from one
+-- side, but everything turns out fine for our constants.
+newton f f' = iterate $ \x -> x - f x / f' x
+agree (a:t@(b:_)) = if a == b then a else agree t
+fracBits n = (`mod` 2^n) . agree . map (truncate . (2^n*))
+
+primes = sieve [2..] where sieve (p:t) = p : sieve [n | n <- t, n `mod` p /= 0]
+rt2 n = newton (\x -> x^2 - n) (\x -> 2*x)   1
+rt3 n = newton (\x -> x^3 - n) (\x -> 3*x^2) 1
+
+initHash :: [Word]
+initHash = fromIntegral . fracBits 32 . rt2 . fromIntegral <$> take 8  primes
+roundKs  :: [Word]
+roundKs  = fromIntegral . fracBits 32 . rt3 . fromIntegral <$> take 64 primes
+
+-- A pale imitation of parts of `Data.Bits`.
+rshift :: Int -> Word -> Word
+rshift d = (`div` 2^d)
+rotr :: Int -> Word -> Word
+rotr d n = (n `div` 2^d) + (n * 2^(32 - d))
+xor x y = wordFromInt $ intXor (intFromWord x) (intFromWord y)
+x .&. y = wordFromInt $ intAnd (intFromWord x) (intFromWord y)
+complement x = 0-1-x
+
+-- Swiped from `Data.List.Split`.
+chunksOf i ls = map (take i) (go ls) where
+  go [] = []
+  go l  = l : go (drop i l)
+
+-- Big-endian conversions and hex dumping for 32-bit words.
+be4 n = [div n (256^k) `mod` 256 | k <- reverse [0..3]]
+unbe4 cs = sum $ zipWith (*) cs $ (256^) <$> reverse [0..3]
+hexdigit n = chr $ n + (if n <= 9 then ord '0' else ord 'a' - 10)
+hex32 n = [hexdigit $ fromIntegral $ div n (16^k) `mod` 16 | k <- reverse [0..7]]
+
+-- SHA-256, at last.
+sha256 s = concatMap hex32 $ foldl chunky initHash $ chunksOf 16 ws where
+  l = fromIntegral $ length s
+  pad = 128 : replicate (4 + mod (64 - l - 9) 64) 0 ++ be4 (l * 8)
+  ws = map unbe4 $ chunksOf 4 $ map (fromIntegral . fromEnum) s ++ pad
+
+chunky h c = zipWith (+) h $ foldl hashRound h $ zipWith (+) roundKs w where
+  w = c ++ foldr1 (zipWith (+)) [w, s0, drop 9 w, s1] where
+    s0 = foldr1 (zipWith xor) $ map (<$> tail w) [rotr 7, rotr 18, rshift 3]
+    s1 = foldr1 (zipWith xor) $ map (<$> drop 14 w) [rotr 17, rotr 19, rshift 10]
+
+hashRound [a,b,c,d,e,f,g,h] kw = [t1 + t2, a, b, c, d + t1, e, f, g] where
+  s1 = foldr1 xor $ map (`rotr` e) [6, 11, 25]
+  ch = (e .&. f) `xor` (complement e .&. g)
+  t1 = h + s1 + ch + kw
+  s0 = foldr1 xor $ map (`rotr` a) [2, 13, 22]
+  maj = (a .&. b) `xor` (a .&. c) `xor` (b .&. c)
+  t2 = s0 + maj
+
+main = interact sha256
+------------------------------------------------------------------------
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -468,6 +553,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "hilbert" ""
   setup "douady" ""
   setup "enigma" "ATTACKATDAWN"
+  setup "sha256" ""
   go "hello" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString

@@ -48,6 +48,7 @@ $(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify RTS1 T
 $(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
 $(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
 $(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+$(call party,traced.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSTrace TyperPrecisely party2)
 
 $(call party,check.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
 

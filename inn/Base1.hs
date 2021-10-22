@@ -259,7 +259,8 @@ instance Show Int where
   showsPrec _ n
     | 0 == n = ('0':)
     | 1 <= n = showInt__ n
-    | True = ('-':) . showInt__ (0 - n)  -- Fails for INT_MIN.
+    | 2 * n == 0 = ("-2147483648"++)
+    | True = ('-':) . showInt__ (0 - n)
 showLitChar__ '\n' = ("\\n"++)
 showLitChar__ '\\' = ("\\\\"++)
 showLitChar__ c = (c:)

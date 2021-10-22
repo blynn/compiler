@@ -336,6 +336,9 @@ prims = let
       , ("intMod", "MOD")
       , ("intQuot", "QUOT")
       , ("intRem", "REM")
+      , ("intXor", "XOR")
+      , ("intAnd", "AND")
+      , ("intOr", "OR")
       ]
 
 neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip Tip Tip []) primAdts

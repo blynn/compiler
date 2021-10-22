@@ -155,6 +155,9 @@ QUOT x y = "_NUM" "num(1) / num(2)"
 REM x y = "_NUM" "num(1) % num(2)"
 DIV x y = "_NUM" "div(num(1), num(2))"
 MOD x y = "_NUM" "mod(num(1), num(2))"
+XOR x y = "_NUM" "num(1) ^ num(2)"
+AND x y = "_NUM" "num(1) & num(2)"
+OR x y = "_NUM" "num(1) | num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
@@ -232,10 +235,11 @@ genComb (s, (args, body)) = let
     E (StrCon s) -> (s++)
   ) . ("break;\n"++)
 
-comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
+comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
+comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
-  (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
-comdefs = case parse (lexemePrelude *> braceSep comb) comdefsrc of
+  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
+comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
   Left e -> error e
   Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]

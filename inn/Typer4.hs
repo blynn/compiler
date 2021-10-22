@@ -403,6 +403,9 @@ prims = let
       , ("intMod", "MOD")
       , ("intQuot", "QUOT")
       , ("intRem", "REM")
+      , ("intXor", "XOR")
+      , ("intAnd", "AND")
+      , ("intOr", "OR")
       ]
     ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
       [ ("wordAdd", "ADD")

@@ -3,7 +3,7 @@ module Base where
 
 infixr 9 .
 infixr 8 ^
-infixl 7 * , `div` , `mod`
+infixl 7 * , `div` , `mod` , `quot`, `rem`
 infixr 6 <>
 infixl 6 + , -
 infixr 5 ++
@@ -456,7 +456,8 @@ instance Show Int where
   showsPrec _ n
     | 0 == n = ('0':)
     | 1 <= n = showInt__ n
-    | True = ('-':) . showInt__ (0 - n)  -- Fails for INT_MIN.
+    | 2 * n == 0 = ("-2147483648"++)
+    | True = ('-':) . showInt__ (0 - n)
 showWord_ n
   | zeroWord == n = id
   | True = showWord_ (n`div`wordFromInt 10) . (chr (48+(intFromWord $ n`mod`wordFromInt 10)):)
@@ -482,6 +483,9 @@ unwords [] = ""
 unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
 unlines = concatMap (++"\n")
 abs x = if 0 <= x then x else 0 - x
+signum x | 0 == x = 0
+         | 0 <= x = 1
+         | otherwise = 0 - 1
 otherwise = True
 sum = foldr (+) 0
 product = foldr (*) 1
