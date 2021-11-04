@@ -164,8 +164,8 @@ last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
 init (x:xt) = case xt of [] -> []; _ -> x : init xt
 intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
 intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
-all f = foldr (&&) True . map f
-any f = foldr (||) False . map f
+all f = and . map f
+any f = or . map f
 and = foldr (&&) True
 or = foldr (||) False
 zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
@@ -309,6 +309,12 @@ instance Ord Word64 where
   Word64 a b <= Word64 c d
     | b == d = a <= c
     | True = b <= d
+instance Integral Word64 where
+  div (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
+  mod (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
+  quot (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
+  rem (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
+  toInteger (Word64 a b) = Integer True [a, b]
 
 -- Multiprecision arithmetic.
 data Integer = Integer Bool [Word] deriving Eq

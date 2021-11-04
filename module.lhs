@@ -546,6 +546,15 @@ and also name the fields of the `Neat` data type.
 We now use the revamped `getChar` and `isEOF`; our previous iteration laid the
 groundwork, and the new `System1.hs` imports them.
 
+https://www.haskell.org/onlinereport/syntax-iso.html[The Haskell report]
+describes layout parsing as a separate phase, and we had followed this closely
+in our first implementation of the feature.
+
+It turns out to be less code to inline the various bits and pieces of the
+layout logic in the parser. We do wind up with a touch more complexity, as
+comments and whitespace must be parsed in a different code path, but it's
+manageable.
+
 ++++++++++
 <p><a onclick='hideshow("Base1");'>&#9654; Toggle `Base1.hs`</a></p><div id='Base1' style='display:none'>
 ++++++++++

@@ -38,6 +38,7 @@ include::inn/SystemWasm.hs[]
 <button id="douady">Douady</button>
 <button id="enigma">Enigma</button>
 <button id="sha256">SHA-256</button>
+<button id="keccak">Keccak-256</button>
 </p>
 <p>
 <textarea spellcheck='false' rows='12' id="prog" name="prog"
@@ -472,6 +473,81 @@ hashRound [a,b,c,d,e,f,g,h] kw = [t1 + t2, a, b, c, d + t1, e, f, g] where
 main = interact sha256
 ------------------------------------------------------------------------
 
+[id="keccak.hs"]
+------------------------------------------------------------------------
+-- https://keccak.team/keccak_specs_summary.html
+-- https://en.wikipedia.org/wiki/SHA-3
+import Base
+import System
+
+-- Ersatz `Data.Bits`. We use `xor` for more than one type. The others are only used on `Word64` values.
+class Xor a where xor :: a -> a -> a
+instance Xor Word64 where xor (Word64 a b) (Word64 c d) = Word64 (xor a c) (xor b d)
+instance Xor Word where xor = wiw intXor
+instance Xor Int where xor = intXor
+complement x = 0-1-x
+(Word64 a b) .|. (Word64 c d) = Word64 (wiw intOr a c) (wiw intOr b d)
+(Word64 a b) .&. (Word64 c d) = Word64 (wiw intAnd a c) (wiw intAnd b d)
+rotateL w n = if n == 0 then w else w * 2^n + w `div` 2^(64 - n)
+wiw f a b = wordFromInt $ f (intFromWord a) (intFromWord b)
+
+-- Swiped from `Data.List.Split`.
+chunksOf i ls = map (take i) (go ls) where
+  go [] = []
+  go l  = l : go (drop i l)
+
+-- We lack the instance needed for the fancier `drop n <> take n`.
+drta n xs = drop n xs <> take n xs
+onHead f (h:t) = (f h:t)
+
+kRound :: [[Word64]] -> Word64 -> [[Word64]]
+kRound a rc = onHead (onHead $ xor rc) chi where
+  c = foldr1 (zipWith xor) a
+  d = zipWith xor (drta 4 c) (map (`rotateL` 1) $ drta 1 c)
+  theta = map (zipWith xor d) a
+  b = [[rotateL ((theta!!i)!!x) $ rotCon x i | i <- [0..4], let x = (3*j+i) `mod` 5] | j <- [0..4]]
+  chi = zipWith (zipWith xor) b $ zipWith (zipWith (.&.)) (map (map complement . drta 1) b) $ map (drta 2) b
+
+rotCon 0 0 = 0
+rotCon x y = t `mod` 64 where
+  Just t = lookup (x, y) hay
+  hay = zip (iterate go (1, 0)) tri
+  go (x, y) = (y, (3*y + 2*x) `mod` 5)
+  tri = 1 : zipWith (+) tri [2..]
+
+rcs :: [Word64]
+rcs = take 24 $ go $ iterate lfsr 1 where
+  go xs = sum (zipWith setOdd as [0..]) : go bs where
+    (as, bs) = splitAt 7 xs
+  setOdd n m = if mod n 2 == 1 then 2^(2^m - 1) else 0
+
+lfsr :: Int -> Int
+lfsr n
+  | n < 128   = 2*n
+  | otherwise = xor 0x71 $ 2*(n - 128)
+
+keccak256 s = concatMap bytes $ take 4 $ head final where
+  final = foldl go blank $ map fives $ chunksOf 17 $ word64s $ pad s
+  go a b = foldl kRound (zipWith (zipWith xor) a b) rcs
+  bytes n = take 8 $ chr . fromIntegral . (`mod` 256) <$> iterate (`div` 256) n
+
+fives = iterate (drop 5) . (++ repeat 0)
+blank = replicate 5 $ replicate 5 0
+pad s = (s++) $ if n == 1 then ['\x81'] else '\x01':replicate (n - 2) '\x00' ++ ['\x80'] where
+  n = 136 - mod (length s) 136
+
+word64s :: String -> [Word64]
+word64s [] = []
+word64s xs = foldr go 0 as : word64s bs where
+  (as, bs) = splitAt 8 xs
+  go d acc = fromIntegral (fromEnum d) + 256*acc
+
+hex c = (hexit q:) . (hexit r:) where (q, r) = divMod (ord c) 16
+hexit c = chr $ c + (if c < 10 then 48 else 87)
+xxd = concatMap (`hex` "")
+main = interact $ xxd . keccak256
+------------------------------------------------------------------------
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -554,6 +630,7 @@ main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
   setup "douady" ""
   setup "enigma" "ATTACKATDAWN"
   setup "sha256" ""
+  setup "keccak" ""
   go "hello" ""
 
   let parm = ffi "parm" :: JSString -> IO JSString
