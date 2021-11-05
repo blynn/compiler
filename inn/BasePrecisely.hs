@@ -271,8 +271,8 @@ instance Ring Int where
   (+) = intAdd
   (-) = intSub
   (*) = intMul
-  -- TODO: Negative case.
-  fromInteger (Integer xsgn xs) = intFromWord $ fst $ mpView xs
+  fromInteger = intFromWord . fromInteger
+  -- fromInteger (Integer xsgn xs) = intFromWord $ (if xsgn then id else wordSub zeroWord) $ fst $ mpView xs
 instance Integral Int where
   div = intDiv
   mod = intMod
@@ -285,8 +285,7 @@ instance Ring Word where
   (+) = wordAdd
   (-) = wordSub
   (*) = wordMul
-  -- TODO: Negative case.
-  fromInteger (Integer xsgn xs) = fst $ mpView xs
+  fromInteger (Integer xsgn xs) = (if xsgn then id else wordSub zeroWord) $ fst $ mpView xs
 instance Integral Word where
   div = wordDiv
   mod = wordMod
@@ -302,7 +301,8 @@ instance Ring Word64 where
   Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
   Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
   -- TODO: Negative case.
-  fromInteger (Integer xsgn xs) = Word64 x y where
+  -- fromInteger (Integer xsgn xs) = Word64 x y where
+  fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub zeroWord zeroWord x y where
     (x, xt) = mpView xs
     (y, _) = mpView xt
 instance Ord Word64 where
@@ -332,11 +332,20 @@ instance Ring Integer where
   Integer xsgn xs * Integer ysgn ys = Integer (xsgn == ysgn) $ mpMul xs ys
   fromInteger = id
 instance Integral Integer where
-  -- TODO: Trucate `quot` towards zero.
-  div (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
-  mod (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
+  div (Integer xsgn xs) (Integer ysgn ys) = if xsgn == ysgn
+    then Integer True qs
+    else case rs of
+      [] -> mpCanon0 False qs
+      _  -> mpCanon0 False $ mpAdd qs [oneWord]
+    where (qs, rs) = mpDivMod xs ys
+  mod (Integer xsgn xs) (Integer ysgn ys) = if xsgn == ysgn
+    then mpCanon0 xsgn rs
+    else case rs of
+      [] -> Integer True []
+      _  -> Integer ysgn $ mpSub ys rs
+    where rs = snd $ mpDivMod xs ys
   quot (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
-  rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 ysgn $ snd $ mpDivMod xs ys
+  rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 xsgn $ snd $ mpDivMod xs ys
   toInteger = id
 instance Ord Integer where
   compare (Integer xsgn xs) (Integer ysgn ys)
@@ -471,6 +480,8 @@ instance Show Word where
   showsPrec _ n
     | zeroWord == n = ('0':)
     | True = showWord_ n
+instance Show Word64 where
+  showsPrec p (Word64 x y) = showsPrec p $ Integer True [x, y]
 showLitChar__ '\n' = ("\\n"++)
 showLitChar__ '\\' = ("\\\\"++)
 showLitChar__ c = (c:)
