@@ -78,9 +78,10 @@ data Neat = Neat
   , moduleImports :: Map String [(String, String -> Bool)]
   , moduleExports :: Maybe [String]
   , opFixity :: Map String (Int, Assoc)
+  , typeAliases :: Map String Type
   }
 
-neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip
+neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip Tip
 
 patVars = \case
   PatLit _ -> []

@@ -534,9 +534,22 @@ searcherNew thisModule tab neat ienv = Searcher
       [] -> f
       _ -> badDep $ "ambiguous: " ++ s
 
+expandTypeAliases neat = pure $ if size als == 0 then neat else neat
+  { typedAsts = subTA <$> typedAsts neat
+  , dataCons = map subDataCons <$> dataCons neat
+  } where
+  als = typeAliases neat
+  subTA (Qual ps ty, t) = (Qual ps $ go ty, t)
+  go ty = case ty of
+    TC s -> maybe ty id $ mlookup s als
+    TAp x y -> TAp (go x) (go y)
+    _ -> ty
+  subDataCons (Constr s sts) = Constr s $ second go <$> sts
+
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
+    neat <- expandTypeAliases neat
     let
       imps = dependentModules neat
       typed = typedAsts neat

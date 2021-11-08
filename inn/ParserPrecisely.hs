@@ -337,16 +337,16 @@ fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl
 cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
 cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
-genDecl = (,) <$> var <* res "::" <*> (Qual <$> (scontext <* res "=>" <|> pure []) <*> _type)
+genDecl = (,) <$> var <* res "::" <*> (Qual <$> fatArrows <*> _type)
 
 classDecl = res "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (res "where" *> cDecls))
 
 simpleClass = Pred <$> conId <*> _type
 scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass comma)
+fatArrows = concat <$> many (scontext <* res "=>")
 
 instDecl = res "instance" *>
-  ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
-  (scontext <* res "=>" <|> pure [])
+  ((\ps cl ty defs -> addInstance cl ps ty defs) <$> fatArrows
     <*> conId <*> _type <*> (res "where" *> braceDef))
 
 letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
@@ -487,6 +487,10 @@ impDecl = do
     <|> pure (const True)
     )
 
+typeDecl = addTypeAlias <$> between (res "type") (res "=") conId <*> _type
+
+addTypeAlias s t neat = neat { typeAliases = insertWith (error $ "duplicate: " ++ s) s t $ typeAliases neat }
+
 topdecls = braceSep
   $   adt
   <|> classDecl
@@ -499,6 +503,7 @@ topdecls = braceSep
   <|> addDefs <$> defSemi
   <|> fixity
   <|> impDecl
+  <|> typeDecl
 
 export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
   (   paren ((:[]) <$> res ".." <|> sepBy (var <|> con) comma)
