@@ -146,7 +146,7 @@ patFixFixity searcher p = case p of
   where
   go = patFixFixity searcher
 
-patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldr rebase seed rest where
+patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldl (flip rebase) seed rest where
   seed = PatCon f [protect a, protect b]
   protect x = PatCon "!" [x]
   unprotectAll = \case
