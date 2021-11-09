@@ -130,6 +130,8 @@ f <$> x <*> y
 
 I should have defined `liftA2` to save room.
 
+Perhaps defining `(<)` instead of `(<=)` would have shaved off a byte.
+
 A different mixed-radix encoding would still be invisible to
 `iocccsize` but takes less room. The corresponding decoder needs more C, but
 the savings are worth it:

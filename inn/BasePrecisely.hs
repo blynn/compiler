@@ -244,11 +244,30 @@ instance Enum Int where
   fromEnum = id
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Bool where
+  succ False = True
+  pred True = False
+  toEnum 0 = False
+  toEnum 1 = True
+  fromEnum False = 0
+  fromEnum True = 1
+  enumFrom False = [False, True]
+  enumFrom True = [True]
+  enumFromTo False True = [False, True]
+  enumFromTo False False = [False]
+  enumFromTo True True = [True]
 instance Enum Char where
   succ = chr . (+1) . ord
   pred = chr . (+(0-1)) . ord
   toEnum = chr
   fromEnum = ord
+  enumFrom = iterate succ
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+instance Enum Word where
+  succ = (+oneWord)
+  pred = (+(zeroWord - oneWord))
+  toEnum = wordFromInt
+  fromEnum = intFromWord
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
@@ -300,8 +319,6 @@ instance Ring Word64 where
   Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
   Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
   Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  -- TODO: Negative case.
-  -- fromInteger (Integer xsgn xs) = Word64 x y where
   fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub zeroWord zeroWord x y where
     (x, xt) = mpView xs
     (y, _) = mpView xt

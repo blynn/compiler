@@ -409,6 +409,8 @@ prims = let
     , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
     , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
     , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
+    , ("word64Shl", (wordy, A (ro "QQ") (ro "DSHL")))
+    , ("word64Shr", (wordy, A (ro "QQ") (ro "DSHR")))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
@@ -418,9 +420,11 @@ prims = let
       , ("intMod", "MOD")
       , ("intQuot", "QUOT")
       , ("intRem", "REM")
-      , ("intXor", "XOR")
       , ("intAnd", "AND")
       , ("intOr", "OR")
+      , ("intXor", "XOR")
+      , ("intShl", "SHL")
+      , ("intShr", "SHR")
       ]
     ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
       [ ("wordAdd", "ADD")
@@ -430,6 +434,11 @@ prims = let
       , ("wordMod", "U_MOD")
       , ("wordQuot", "U_DIV")
       , ("wordRem", "U_MOD")
+      , ("wordAnd", "AND")
+      , ("wordOr", "OR")
+      , ("wordXor", "XOR")
+      , ("wordShl", "SHL")
+      , ("wordShr", "U_SHR")
       ]
 
 neatNew = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts

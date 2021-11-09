@@ -433,11 +433,11 @@ roundKs  = fromIntegral . fracBits 32 . rt3 . fromIntegral <$> take 64 primes
 
 -- A pale imitation of parts of `Data.Bits`.
 rshift :: Int -> Word -> Word
-rshift d = (`div` 2^d)
+rshift i = (`wordShr` fromIntegral i)
 rotr :: Int -> Word -> Word
-rotr d n = (n `div` 2^d) + (n * 2^(32 - d))
-xor x y = wordFromInt $ intXor (intFromWord x) (intFromWord y)
-x .&. y = wordFromInt $ intAnd (intFromWord x) (intFromWord y)
+rotr i n = (wordShr n u) + (wordShl n (32 - u)) where u = fromIntegral i
+xor = wordXor
+(.&.) = wordAnd
 complement x = 0-1-x
 
 -- Swiped from `Data.List.Split`.
@@ -483,13 +483,14 @@ import System
 -- Ersatz `Data.Bits`. We use `xor` for more than one type. The others are only used on `Word64` values.
 class Xor a where xor :: a -> a -> a
 instance Xor Word64 where xor (Word64 a b) (Word64 c d) = Word64 (xor a c) (xor b d)
-instance Xor Word where xor = wiw intXor
+instance Xor Word where xor = wordXor
 instance Xor Int where xor = intXor
 complement x = 0-1-x
-(Word64 a b) .|. (Word64 c d) = Word64 (wiw intOr a c) (wiw intOr b d)
-(Word64 a b) .&. (Word64 c d) = Word64 (wiw intAnd a c) (wiw intAnd b d)
-rotateL w n = if n == 0 then w else w * 2^n + w `div` 2^(64 - n)
-wiw f a b = wordFromInt $ f (intFromWord a) (intFromWord b)
+(Word64 a b) .|. (Word64 c d) = Word64 (wordOr a c) (wordOr b d)
+(Word64 a b) .&. (Word64 c d) = Word64 (wordAnd a c) (wordAnd b d)
+rotateL (Word64 a b) nInt = let n = wordFromInt nInt in
+  uncurry Word64 (word64Shl a b n 0) .|.
+  uncurry Word64 (word64Shr a b (64 - n) 0)
 
 -- Swiped from `Data.List.Split`.
 chunksOf i ls = map (take i) (go ls) where
