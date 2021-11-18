@@ -78,12 +78,15 @@ eof = Parser \pasta -> case pasta of
   ParserState [] [] _ -> Right ((), pasta)
   _ -> badpos pasta "want eof"
 
+blockComment = rawSat ('{' ==) *> rawSat ('-' ==) *> blockCommentBody
+blockCommentBody = rawSat ('-' ==) *> rawSat ('}' ==) *> pure False <|>
+  (||) <$> (blockComment <|> pure False) <*> ((||) <$> (isNewline <$> rawSat (const True)) <*> blockCommentBody)
 comment = rawSat ('-' ==) *> some (rawSat ('-' ==)) *>
   (rawSat isNewline <|> rawSat (not . isSymbol) *> many (rawSat $ not . isNewline) *> rawSat isNewline) *> pure True
 spaces = isNewline <$> rawSat isSpace
 whitespace = Parser \pasta -> case landin pasta of
   [] -> do
-    (offside, pasta') <- getParser (or <$> many (spaces <|> comment)) pasta
+    (offside, pasta') <- getParser (or <$> many (spaces <|> comment <|> blockComment)) pasta
     if offside
       then Right ((), angle (indentOf pasta') pasta')
       else Right ((), pasta')

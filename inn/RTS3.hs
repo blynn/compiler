@@ -135,6 +135,7 @@ Q x y z = z(y x)
 QQ f a b c d = d(c(b(a(f))))
 S x y z = x z(y z)
 B x y z = x (y z)
+BK x y z = x y
 C x y z = x z y
 R x y z = y z x
 V x y z = z x y

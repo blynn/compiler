@@ -76,6 +76,9 @@ optim t = case t of
   where
   go (Lf (Basic "I")) q = q
   go p q@(Lf (Basic c)) = case c of
+    "K" -> case p of
+      Lf (Basic "B") -> lf "BK"
+      _ -> Nd p q
     "I" -> case p of
       Lf (Basic "C") -> lf "T"
       Lf (Basic "B") -> lf "I"

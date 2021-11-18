@@ -123,6 +123,7 @@ Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
 B x y z = x (y z)
+BK x y z = x y
 C x y z = x z y
 R x y z = y z x
 V x y z = z x y

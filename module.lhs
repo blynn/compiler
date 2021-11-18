@@ -615,6 +615,44 @@ include::inn/Typer3.hs[]
 </div>
 ++++++++++
 
+We take the opportunity to introduce a single combinator to act as `BK` which
+frequently occurs due to Scott encoding.
+
+If `B K x y z = x y` is reduced individually, our virtual machine allocates
+a new app-cell for `K (x y)`, only to immediately rewrite it as `I (x y)`,
+which again must be reduced to yield `x y` at last. A dedicated `BK` combinator
+avoids this needless song and dance.
+
+In addition to saving space, we wind up with over 6% fewer reductions when
+compiling our next compiler.
+
+A dedicated `BK` combinator is also aesthetically pleasing. Consider some
+three-argument combinator given `x y z`. We can leave `x` alone or apply it to
+`z`, and similarly for `y`, and then apply the first thing to the second:
+
+------------------------------------------------------------------------
+(x  )(y  )
+(x  )(y z)
+(x z)(y  )
+(x z)(y z)
+------------------------------------------------------------------------
+
+The last 3 are the `B C S` combinators. The first one is `BK`.
+Smullyan appears not to have assigned a bird to this combinator, so we resort
+to the clunky name `BK` throughout our code.
+
+++++++++++
+<p><a onclick='hideshow("Kiselyov1");'>&#9654; Toggle `Kiselyov1.hs`</a></p><div id='Kiselyov1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Kiselyov1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
 ++++++++++
 <p><a onclick='hideshow("RTS2");'>&#9654; Toggle `RTS2.hs`</a></p><div id='RTS2' style='display:none'>
 ++++++++++
