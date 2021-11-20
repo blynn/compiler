@@ -41,13 +41,22 @@ indentOf pasta = case readme pasta of
 
 ins c pasta = pasta { landin = c:landin pasta }
 
+curlyCheck f = do
+  Parser \pasta -> Right ((), pasta { indents = 0:indents pasta })
+  r <- f
+  Parser \pasta -> let pasta' = pasta { indents = tail $ indents pasta } in case readme pasta of
+    []              -> Right ((), curly 0 pasta')
+    ('{', _):_      -> Right ((), pasta')
+    (_, (_, col)):_ -> Right ((), curly col pasta')
+  pure r
+
 angle n pasta = case indents pasta of
   m:ms | m == n -> ins ';' pasta
-       | n + 1 <= m -> ins '}' $ angle n pasta { indents = ms }
+       | n < m -> ins '}' $ angle n pasta { indents = ms }
   _ -> pasta
 
 curly n pasta = case indents pasta of
-  m:ms | m + 1 <= n -> ins '{' pasta { indents = n:m:ms }
+  m:ms | m < n -> ins '{' pasta { indents = n:m:ms }
   [] | 1 <= n -> ins '{' pasta { indents = [n] }
   _ -> ins '{' . ins '}' $ angle n pasta
 
@@ -84,13 +93,9 @@ blockCommentBody = rawSat ('-' ==) *> rawSat ('}' ==) *> pure False <|>
 comment = rawSat ('-' ==) *> some (rawSat ('-' ==)) *>
   (rawSat isNewline <|> rawSat (not . isSymbol) *> many (rawSat $ not . isNewline) *> rawSat isNewline) *> pure True
 spaces = isNewline <$> rawSat isSpace
-whitespace = Parser \pasta -> case landin pasta of
-  [] -> do
-    (offside, pasta') <- getParser (or <$> many (spaces <|> comment <|> blockComment)) pasta
-    if offside
-      then Right ((), angle (indentOf pasta') pasta')
-      else Right ((), pasta')
-  _ -> Right ((), pasta)
+whitespace = do
+  offside <- or <$> many (spaces <|> comment <|> blockComment)
+  Parser \pasta -> Right ((), if offside then angle (indentOf pasta) pasta else pasta)
 
 hexValue d
   | d <= '9' = ord d - ord '0'
@@ -162,11 +167,6 @@ lexemePrelude = whitespace *>
   Parser \pasta -> case getParser (res "module" <|> (:[]) <$> char '{') pasta of
     Left _ -> Right ((), curly (indentOf pasta) pasta)
     Right _ -> Right ((), pasta)
-
-curlyCheck = Parser \pasta -> case readme pasta of
-  []              -> Right ((), curly 0 pasta)
-  ('{', _):_      -> Right ((), pasta)
-  (_, (_, col)):_ -> Right ((), curly col pasta)
 
 conOf (Constr s _) = s
 specialCase (h:_) = '{':conOf h
@@ -270,11 +270,15 @@ parseErrorRule = Parser \pasta -> case indents pasta of
   m:ms | m /= 0 -> Right ('}', pasta { indents = ms })
   _ -> badpos pasta "missing }"
 
-res w = do
-  s <- varish <|> conSymish <|> varSymish
-  when (s /= w) $ bad $ "want \"" ++ w ++ "\""
-  when (elem w ["let", "where", "do", "of"]) $ curlyCheck
-  pure w
+res w
+  | elem w ["let", "where", "do", "of"] = do
+    s <- curlyCheck varish
+    when (s /= w) $ bad $ "want \"" ++ w ++ "\""
+    pure w
+  | otherwise = do
+    s <- varish <|> conSymish <|> varSymish
+    when (s /= w) $ bad $ "want \"" ++ w ++ "\""
+    pure w
 
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
@@ -359,7 +363,7 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = braceSep $ (,) <$> pat <*> guards "->"
 cas = Ca <$> between (res "case") (res "of") expr <*> alts
-lamCase = res "case" *> curlyCheck *> (L "\\case" . Ca (V "\\case") <$> alts)
+lamCase = curlyCheck (res "case") *> (L "\\case" . Ca (V "\\case") <$> alts)
 
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
@@ -463,7 +467,7 @@ coalesce = \case
       f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
       f _ _ = error "bad multidef"
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-defSemi = coalesce . concat <$> sepBy1 def semicolon
+defSemi = coalesce . concat <$> sepBy1 def (some semicolon)
 braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)

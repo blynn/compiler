@@ -555,6 +555,11 @@ layout logic in the parser. We do wind up with a touch more complexity, as
 comments and whitespace must be parsed in a different code path, but it's
 manageable.
 
+For parsing one of `let where do of`, and also `\case` since we act as if the
+`LambdaCase` is enabled, the `curlyCheck` function temporarily disables the
+angle-bracket indentation rule by placing an indent value of 0 at the head of
+the `indents` list.
+
 ++++++++++
 <p><a onclick='hideshow("Base1");'>&#9654; Toggle `Base1.hs`</a></p><div id='Base1' style='display:none'>
 ++++++++++

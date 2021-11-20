@@ -741,7 +741,7 @@ coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
   ; f _ _ = error "bad multidef"
   } in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
   ;
-defSemi = coalesce . concat <$> sepBy1 def (res ";");
+defSemi = coalesce . concat <$> sepBy1 def (some $ res ";");
 braceDef = concat <$> braceSep defSemi;
 
 simpleType c vs = foldl TAp (TC c) (map TV vs);
