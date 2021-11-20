@@ -453,8 +453,8 @@ hex32 n = [hexdigit $ fromIntegral $ div n (16^k) `mod` 16 | k <- reverse [0..7]
 
 -- SHA-256, at last.
 sha256 s = concatMap hex32 $ foldl chunky initHash $ chunksOf 16 ws where
-  l = fromIntegral $ length s
-  pad = 128 : replicate (4 + mod (64 - l - 9) 64) 0 ++ be4 (l * 8)
+  l = length s
+  pad = 128 : replicate (4 + mod (64 - l - 9) 64) 0 ++ be4 (fromIntegral l * 8)
   ws = map unbe4 $ chunksOf 4 $ map (fromIntegral . fromEnum) s ++ pad
 
 chunky h c = zipWith (+) h $ foldl hashRound h $ zipWith (+) roundKs w where

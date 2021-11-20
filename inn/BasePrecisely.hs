@@ -94,9 +94,11 @@ x /= y = not $ x == y
 (.) f g x = f (g x)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
+take :: Int -> [a] -> [a]
 take 0 xs = []
 take _ [] = []
 take n (h:t) = h : take (n - 1) t
+drop :: Int -> [a] -> [a]
 drop n xs     | n <= 0 = xs
 drop _ []              = []
 drop n (_:xs)          = drop (n-1) xs
@@ -129,8 +131,10 @@ concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
 head (h:_) = h
 tail (_:t) = t
+(!!) :: [a] -> Int -> a
 xs!!0 = head xs
 xs!!n = tail xs!!(n - 1)
+replicate :: Int -> a -> [a]
 replicate 0 _ = []
 replicate n x = x : replicate (n - 1) x
 repeat x = x : repeat x
