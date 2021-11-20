@@ -641,6 +641,12 @@ The last 3 are the `B C S` combinators. The first one is `BK`.
 Smullyan appears not to have assigned a bird to this combinator, so we resort
 to the clunky name `BK` throughout our code.
 
+The BK combinator makes it easier for `optim` to rewrite `B BK V` as `CONS`.
+We also add the `LEFT` combinator, which is equivalent to `B BK T` and also
+arises frequently in Scott encodings; indeed, the data constructor `Left`
+compiles to `LEFT`. We also add a combinator for KI to shave off a few more
+reductions.
+
 ++++++++++
 <p><a onclick='hideshow("Kiselyov1");'>&#9654; Toggle `Kiselyov1.hs`</a></p><div id='Kiselyov1' style='display:none'>
 ++++++++++

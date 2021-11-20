@@ -29,9 +29,9 @@ In Haskell we could write:
 
 ------------------------------------------------------------------------
 term acc (h:t)
-  | h == ')' || h == ';' -> (acc, t)
-  | h == '('             -> uncurry (app acc) (term "" t)
-  | otherwise            -> if h == '#' || h == '@'
+  | h == ')' || h == ';' = (acc, t)
+  | h == '('             = uncurry (app acc) (term "" t)
+  | otherwise            = if h == '#' || h == '@'
     then app acc (h:head t:"") (tail t)
     else app acc (h:"") t
   where app acc s = term (if null acc then s else '`':acc ++ s)

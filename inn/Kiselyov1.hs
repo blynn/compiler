@@ -82,6 +82,7 @@ optim t = case t of
     "I" -> case p of
       Lf (Basic "C") -> lf "T"
       Lf (Basic "B") -> lf "I"
+      Lf (Basic "K") -> lf "KI"
       Nd p1 p2 -> case p1 of
         Lf (Basic "B") -> p2
         Lf (Basic "R") -> Nd (lf "T") p2
@@ -89,6 +90,10 @@ optim t = case t of
       _ -> Nd p q
     "T" -> case p of
       Nd (Lf (Basic "B")) (Lf (Basic "C")) -> lf "V"
+      Nd (Lf (Basic "B")) (Lf (Basic "BK")) -> lf "LEFT"
+      _ -> Nd p q
+    "V" -> case p of
+      Nd (Lf (Basic "B")) (Lf (Basic "BK")) -> lf "CONS"
       _ -> Nd p q
     _ -> Nd p q
   go p q = Nd p q

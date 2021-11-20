@@ -129,7 +129,9 @@ R x y z = y z x
 V x y z = z x y
 T x y = y x
 K x y = "_I" x
+KI x y = "_I" y
 I x = "sp[1] = arg(1); sp++;"
+LEFT x y z = y x
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
 ADD x y = "_NUM" "num(1) + num(2)"
