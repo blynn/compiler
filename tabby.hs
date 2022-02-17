@@ -1,7 +1,12 @@
+-- Create element section from exports named e.g. "table 0", "table 1".
 module Main where
 
 import Base
 import System
+
+sortOn _ [] = []
+sortOn f (x:xt) = sortOn f (filter ((<= fx) . f) xt)
+  ++ [x] ++ sortOn f (filter ((> fx) . f) xt) where fx = f x
 
 data Charser a = Charser
   { getCharser :: String -> Either String (a, String) }
@@ -68,7 +73,7 @@ xxd = \case
   "" -> ""
   h:t -> let n = ord h in hexDigit (div n 16) : hexDigit (mod n 16) : xxd t
 
-replicateM = (mapM id .) . replicate
+-- replicateM = (mapM id .) . replicate
 vec f = varuint >>= (`replicateM` f)
 
 search00type xs = do
@@ -84,15 +89,15 @@ search00type xs = do
     replicateM outCount next
     pure (inCount, outCount)
 
-searchExport needle xs = do
+exports xs = do
   exs <- maybe (Left "missing section 7") Right $ lookup 7 xs
-  maybe (Left "not found") Right =<< asum . fst <$> getCharser go exs
+  fst <$> getCharser go exs
   where
   go = vec $ do
     s <- vec $ chr <$> next
     next
     n <- varuint
-    pure $ if s == needle then Just n else Nothing
+    pure (s, n)
 
 allFunCount xs = do
   impCount <- maybe (Right 0) countImps $ lookup 2 xs
@@ -108,14 +113,31 @@ allFunCount xs = do
     pure ()
   countFuns funs = fst <$> getCharser varuint funs
 
+leb n
+  | n <= 127 = [chr n]
+  | True = chr (128 + n `mod` 128) : leb (n `div` 128)
+
+unsection (n, s) = chr n : leb (length s) ++ s
+
 main = do
   s <- getContents
-  case getCharser wasm s of
-    Left e -> putStrLn $ "parse error: " ++ e
-    Right (xs, []) -> do
-      putStr "module WartsBytes where\nimport Base\nwartsBytes = "
-      print $ second xxd <$> filter (not . (`elem` [0, 6]) . fst) xs
-      putStrLn $ either error (("allFunCount = "++) . show) $ allFunCount xs
-      putStrLn $ either error (("funType00Idx = "++) . show) $ search00type xs
-      putStrLn $ either error (("reduceFunIdx = "++) . show) $ searchExport "reduce" xs
-    _ -> error "unreachable"
+  either (putStrLn . ("error: " ++)) putStr $ go s
+  where
+  go s = do
+    (xs, dregs) <- getCharser wasm s
+    when (not $ null dregs) $ Left $ show (length dregs) ++ " trailing bytes"
+    exs <- exports xs
+    -- Create an element section from "table" exports, assuming they are
+    -- numbered consecutively from 0 in some order.
+    -- Also assumes LEB128 encoding of `length es` fits in a byte.
+    let
+      es = sortOn fst $ map mkElem $ filter (\((w:_), _) -> w == "table") $ first words <$> exs
+      elementSection = (9, map chr $ [1, 0, 0x41, 0, 0xb, length es] ++ map snd es)
+      tableSection = (4, chr <$> [1, 0x70, 0, length es])  -- Already present?!
+    pure $ (headerAndVersion ++) $ concatMap unsection $ sortOn fst $ ([tableSection, elementSection]++) $ filter (not . (`elem` [4, 9, 0]) . fst) xs
+
+readInt s = go 0 s where
+  go acc [] = acc
+  go acc (h:t) = acc*10 + (ord h - ord '0')
+
+mkElem (["table", kStr], v) = (readInt kStr, v)

@@ -289,6 +289,10 @@ BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$)
 
 == Term rewriting; bootstrapping ==
 
+https://arxiv.org/pdf/1812.02243.pdf[Corrado Bőhm's PhD thesis (1951)]
+discusses self-compilation and presents a high-level language that can compile
+itself.
+
 https://tromp.github.io/cl/LC.pdf[John Tromp lists rewrite rules] to further
 reduce the size of the output combinatory logic term after bracket abstraction.
 

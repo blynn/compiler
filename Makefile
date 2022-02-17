@@ -67,6 +67,7 @@ warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 $(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
+$(call party,tabby.c,precisely,BasePrecisely System1 ../tabby)
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@

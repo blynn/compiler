@@ -357,7 +357,7 @@ compileWith topSize libc opts mods = do
       ]
     mustType modName s = case mlookup s $ typedAsts $ mods ! modName of
       Just (Qual [] t, _) -> t
-      _ -> error "TODO: report bad exports"
+      _ -> error $ "TODO: bad export: " ++ s
     mayMain = do
       mainAddr <- mlookup "main" =<< mlookup "Main" bigmap
       mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")

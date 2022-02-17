@@ -343,6 +343,10 @@ formal semantics; see Backhouse,
 'https://link.springer.com/content/pdf/10.1007/3-540-46002-0_11.pdf[A
 Functional Semantics of Attribute Grammars]' for a modern take.)
 
+https://smlfamily.github.io/sml97-defn.pdf[Standard ML] is the gold standard.
+
+https://webassembly.github.io/spec/core/exec/index.html[WebAssembly] was also designed hand-in-hand with its formal semantics.
+
 Incredibly, formal semantics exist for a substantial subset of C.
 Attempting to formalize all of C is a fool's errand. For example:
 
