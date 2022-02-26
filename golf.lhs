@@ -151,10 +151,10 @@ Kiselyov's algorithm yields:
 We define the Y combinator with:
 
 ------------------------------------------------------------------------
-Y = ``B``TT``CB``STT
+Y = ``B``STT``CB``STT
 ------------------------------------------------------------------------
 
-so our self-interpreter takes 232 bits, beating Tromp's Theorem 4 record of 263
+so our self-interpreter takes 236 bits, beating Tromp's Theorem 4 record of 263
 bits.
 
 The following demonstrates this self-interpreter in our "Fixity" compiler:
@@ -205,7 +205,7 @@ import Data.Map (Map, (!))
 import Data.Ord
 import Data.Tree
 
-coms = "```B``TT``CB``STT``B`BT``B`S``BV``BT``S``BV``BT``B`BT``S``BV``S``BV``BT``CB``VCK`TS``CB``VTV`TB``SB``C``BBBB"
+coms = "```B``STT``CB``STT``B`BT``B`S``BV``BT``S``BV``BT``B`BT``S``BV``S``BV``BT``CB``VCK`TS``CB``VTV`TB``SB``C``BBBB"
 
 histo = M.fromListWith (+) $ (\c -> ([c], 1)) <$> coms
 
