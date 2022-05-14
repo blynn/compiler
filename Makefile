@@ -75,7 +75,7 @@ test/mandelbrot:test/mandelbrot.c
 
 WCC=clang -O3 -c --target=wasm32 -Wall
 ifeq ($(WASMLINK),)
-WASMLINK=wasm-ld-11
+WASMLINK=wasm-ld
 endif
 WLD=$(WASMLINK) --export-dynamic --allow-undefined --no-entry
 wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@

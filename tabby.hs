@@ -138,6 +138,6 @@ main = do
 
 readInt s = go 0 s where
   go acc [] = acc
-  go acc (h:t) = acc*10 + (ord h - ord '0')
+  go acc (h:t) = go (acc*10 + (ord h - ord '0')) t
 
 mkElem (["table", kStr], v) = (readInt kStr, v)
