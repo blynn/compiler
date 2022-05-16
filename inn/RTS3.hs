@@ -215,18 +215,23 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
   longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
 
-arrCount = \case
-  TAp (TAp (TC "->") _) y -> 1 + arrCount y
-  _ -> 0
-
-genExport m n = ("void f"++) . shows n . ("("++)
-  . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
-  . ("){rts_reduce("++)
-  . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
+genExport ourType n = ("void f"++) . shows n . ("("++)
+  . foldr (.) id (intersperse (',':) $ map declare txs)
+  . ("){check_init();rts_reduce("++)
+  . foldl (\s tx -> ("app("++) . s . (',':) . heapify tx . (')':)) rt txs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . shows) [0..m - 1]
+  txs = go 0 ourType
+  go n = \case
+    TAp (TAp (TC "->") t) rest -> (t, ('x':) . shows n) : go (n + 1) rest
+    _ -> []
   rt = ("root["++) . shows n . ("]"++)
+  declare (t, x) = case t of
+    TC "Word64" -> ("long long " ++) . x
+    _ -> ("u "++) . x
+  heapify (t, x) = case t of
+    TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
+    _ -> ("app(_NUM,"++) . x . (')':)
 
 genArg m a = case a of
   V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
@@ -275,6 +280,7 @@ void rts_init() {
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
+static inline void check_init() { static u ready; if (!ready) {ready = 1; rts_init();} }
 |]++)
   . rtsReduce opts
 
@@ -349,11 +355,10 @@ compileWith topSize libc opts mods = do
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
     (bigmap, mem) = codegen ffis mods
     ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
-      [ (expName, (addr, argcount))
+      [ (expName, (addr, mustType modName ourName))
       | (modName, neat) <- toAscList mods
       , (expName, ourName) <- toAscList $ ffiExports neat
       , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
-      , let argcount = arrCount $ mustType modName ourName
       ]
     mustType modName s = case mlookup s $ typedAsts $ mods ! modName of
       Just (Qual [] t, _) -> t
@@ -366,7 +371,7 @@ compileWith topSize libc opts mods = do
     Nothing -> pure ""
     Just (a, q) -> do
       getIOType q
-      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
+      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ shows a ");return 0;}\n"
 
   pure
     $ ("typedef unsigned u;\n"++)
@@ -388,7 +393,7 @@ compileWith topSize libc opts mods = do
     . ("\n  }\n}\n" ++)
     . runFun
     . rtsAPI opts
-    . foldr (.) id (zipWith (\(expName, (_, argcount)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport argcount n) (toAscList ffes) [0..])
+    . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 
 compile = compileWith "1<<24" libcHost []
@@ -420,7 +425,6 @@ rtsReduce opts =
   (if "pre-post-run" `elem` opts then ("void pre_run(void); void post_run(void);\n"++) else id)
   . ([r|
 void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
 |]++)
   . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
