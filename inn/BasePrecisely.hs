@@ -527,3 +527,6 @@ signum x | 0 == x = 0
 otherwise = True
 sum = foldr (+) 0
 product = foldr (*) 1
+
+max a b = if a <= b then b else a
+min a b = if a <= b then a else b

@@ -49,11 +49,8 @@ varuint32 = varuint
 
 varuint :: Charser Int
 varuint = unleb 1 0
--- varuint = fromIntegral <$> unleb 1 0
 
--- unleb :: Integer -> Integer -> Charser Integer
 unleb m acc = do
-  -- d <- fromIntegral <$> next
   d <- next
   if d > 127 then unleb (m * 128) $ (d - 128) * m + acc else pure $ d*m + acc
 
@@ -66,28 +63,7 @@ wasm = do
   s <- replicateM 8 (chr <$> next)
   if s /= headerAndVersion then bad "bad header or version" else sections
 
-hexDigit n | n < 10 = chr $ n + ord '0'
-           | True   = chr $ n - 10 + ord 'a'
-
-xxd = \case
-  "" -> ""
-  h:t -> let n = ord h in hexDigit (div n 16) : hexDigit (mod n 16) : xxd t
-
--- replicateM = (mapM id .) . replicate
 vec f = varuint >>= (`replicateM` f)
-
-search00type xs = do
-  fts <- maybe (Left "missing section 1") Right $ lookup 1 xs
-  ios <- fst <$> getCharser go fts
-  maybe (Left "missing (0, 0) functype") Right $ lookup (0, 0) $ zip ios [0..]
-  where
-  go = vec $ do
-    sat (== '\x60')
-    inCount <- varuint
-    replicateM inCount next
-    outCount <- varuint
-    replicateM outCount next
-    pure (inCount, outCount)
 
 exports xs = do
   exs <- maybe (Left "missing section 7") Right $ lookup 7 xs
@@ -99,26 +75,13 @@ exports xs = do
     n <- varuint
     pure (s, n)
 
-allFunCount xs = do
-  impCount <- maybe (Right 0) countImps $ lookup 2 xs
-  funCount <- maybe (Right 0) countFuns $ lookup 3 xs
-  pure $ impCount + funCount
-  where
-  countImps imps = length . fst <$> getCharser goImps imps
-  goImps = vec $ do
-    vec next
-    vec next
-    sat (== '\0')
-    varuint
-    pure ()
-  countFuns funs = fst <$> getCharser varuint funs
-
 leb n
   | n <= 127 = [chr n]
   | True = chr (128 + n `mod` 128) : leb (n `div` 128)
 
 unsection (n, s) = chr n : leb (length s) ++ s
 
+foreign export ccall "go" main
 main = do
   s <- getContents
   either (putStrLn . ("error: " ++)) putStr $ go s
@@ -133,8 +96,8 @@ main = do
     let
       es = sortOn fst $ map mkElem $ filter (\((w:_), _) -> w == "table") $ first words <$> exs
       elementSection = (9, map chr $ [1, 0, 0x41, 0, 0xb, length es] ++ map snd es)
-      tableSection = (4, chr <$> [1, 0x70, 0, length es])  -- Already present?!
-    pure $ (headerAndVersion ++) $ concatMap unsection $ sortOn fst $ ([tableSection, elementSection]++) $ filter (not . (`elem` [4, 9, 0]) . fst) xs
+      tableSection = (4, chr <$> [1, 0x70, 0, length es])
+    pure $ (headerAndVersion ++) $ concatMap unsection $ sortOn fst $ (tableSection:) $ filter (not . (`elem` [4, 0]) . fst) (elementSection : xs)
 
 readInt s = go 0 s where
   go acc [] = acc

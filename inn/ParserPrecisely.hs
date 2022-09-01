@@ -112,7 +112,7 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0) <$> some digit
 hexadecimal = foldl (\n d -> toInteger 16*n + toInteger (hexValue d)) (toInteger 0) <$> some hexit
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure '\0' <|> char 'x' *> (chr . fromInteger <$> hexadecimal))
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> decimal) <|> char 'x' *> (chr . fromInteger <$> hexadecimal))
 tokOne delim = escape <|> rawSat (delim /=)
 
 tokChar = between (char '\'') (char '\'') (tokOne '\'')

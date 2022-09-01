@@ -87,7 +87,6 @@ whitespace = do
   offside <- or <$> many (spaces <|> comment)
   Parser \pasta -> Right ((), if offside then angle (indentOf pasta) pasta else pasta)
 
-
 hexValue d
   | d <= '9' = ord d - ord '0'
   | d <= 'F' = 10 + ord d - ord 'A'
