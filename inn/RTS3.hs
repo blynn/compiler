@@ -217,7 +217,7 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
 
 genExport ourType n = ("void f"++) . shows n . ("("++)
   . foldr (.) id (intersperse (',':) $ map declare txs)
-  . ("){check_init();rts_reduce("++)
+  . ("){rts_reduce("++)
   . foldl (\s tx -> ("app("++) . s . (',':) . heapify tx . (')':)) rt txs
   . (");}\n"++)
   where
@@ -280,7 +280,6 @@ void rts_init() {
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
-static inline void check_init() { static u ready; if (!ready) {ready = 1; rts_init();} }
 |]++)
   . rtsReduce opts
 
@@ -371,7 +370,7 @@ compileWith topSize libc opts mods = do
     Nothing -> pure ""
     Just (a, q) -> do
       getIOType q
-      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ shows a ");return 0;}\n"
+      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
 
   pure
     $ ("typedef unsigned u;\n"++)
@@ -425,6 +424,7 @@ rtsReduce opts =
   (if "pre-post-run" `elem` opts then ("void pre_run(void); void post_run(void);\n"++) else id)
   . ([r|
 void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
   *(sp = spTop) = app(app(n, _UNDEFINED), _END);
 |]++)
   . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))

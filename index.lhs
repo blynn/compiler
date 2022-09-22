@@ -477,6 +477,10 @@ main = interact sha256
 ------------------------------------------------------------------------
 -- https://keccak.team/keccak_specs_summary.html
 -- https://en.wikipedia.org/wiki/SHA-3
+--
+-- This is the hash function used by Ethereum.
+-- To get the SHA-3 256 standard hash, in the `pad` function,
+-- change 0x81 to 0x86 and 0x01 to 0x06.
 import Base
 import System
 
