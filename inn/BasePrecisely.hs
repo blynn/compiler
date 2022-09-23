@@ -448,7 +448,10 @@ mpDivMod xs ys = first (reverse . dropWhile (== zeroWord)) $ go us where
     q0 = if oneWord <= qh then (zeroWord-oneWord) else ql
     (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- oneWord) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs zeroWord) zeroWord, bor == zeroWord]
 
-mpDivScale n = fst $ word64Div zeroWord oneWord (n + oneWord) zeroWord
+mpDivScale n
+  | n1 == zeroWord = oneWord
+  | otherwise = fst $ word64Div zeroWord oneWord n1 zeroWord
+  where n1 = n + oneWord
 
 mpBase _ [] = ('0':)
 mpBase b xs = go xs where
