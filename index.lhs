@@ -543,8 +543,7 @@ pad s = (s++) $ if n == 1 then ['\x81'] else '\x01':replicate (n - 2) '\x00' ++ 
 
 word64s :: String -> [Word64]
 word64s [] = []
-word64s xs = foldr go 0 as : word64s bs where
-  (as, bs) = splitAt 8 xs
+word64s xs = foldr go 0 <$> chunksOf 8 xs where
   go d acc = fromIntegral (fromEnum d) + 256*acc
 
 hex c = (hexit q:) . (hexit r:) where (q, r) = divMod (ord c) 16

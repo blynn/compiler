@@ -14,11 +14,13 @@ data Pred = Pred String Type deriving Eq
 data Qual = Qual [Pred] Type
 
 instance Show Type where
-  showsPrec _ = \case
+  showsPrec p = \case
     TC s -> (s++)
     TV s -> (s++)
-    TAp (TAp (TC "->") a) b -> showParen True $ shows a . (" -> "++) . shows b
-    TAp a b -> showParen True $ shows a . (' ':) . shows b
+    TAp (TAp (TC "->") a) b -> showParen (p >= 1) $ showsPrec 1 a . (" -> "++) . shows b
+    TAp (TAp (TC ",") a) b -> showParen True $ shows a . (", "++) . shows b
+    TAp (TC "[]") a -> ('[':) . shows a . (']':)
+    TAp a b -> showParen (p >= 2) $ shows a . (' ':) . showsPrec 2 b
 instance Show Pred where
   showsPrec _ (Pred s t) = (s++) . (' ':) . shows t . (" => "++)
 instance Show Qual where

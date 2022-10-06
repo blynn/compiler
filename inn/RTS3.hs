@@ -25,7 +25,7 @@ int eof_shim() {
   return nextCh == -1;
 }
 void exit(int);
-void putchar_shim(int c) { putchar(c); }
+void putchar_shim(int c) { putchar(c); fflush(stdout); }
 int getchar_shim() {
   if (!isAhead) nextCh = getchar();
   if (nextCh == -1) exit(1);
