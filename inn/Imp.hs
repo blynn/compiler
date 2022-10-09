@@ -53,7 +53,8 @@ toWasm mods = wasm where
       pure ("main", addr)
     _ -> []
   ffes = mainExport ++ toAscList ffes1
-  (bigmap, mem) = codegen ffis mods
+  ffiMap = singleton "{foreign}" $ fromList $ zip (keys ffis) $ Right <$> [0..]
+  (bigmap, mem) = codegen ffiMap mods
   go (n, x)
     -- Function section: for each export, declare a function of type () -> ()..
     | n == 3  = leb n <> extendSection x (replicate (length ffes) $ leb funType00Idx)

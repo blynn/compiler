@@ -404,6 +404,7 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("normalizeInt", (arr (TC "Int") (arr (TV "a") (TV "a")), A (A (ro "C") (ro "B")) (ro "K")))
     , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
     , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
     , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))

@@ -335,15 +335,12 @@ codegenLocal (name, neat) (bigmap, (hp, f)) =
     Local s -> resolveLocal $ symtab ! s
     Global m s -> Left (m, s)
 
-codegen ffis mods = (bigmap', mem) where
-  (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
+codegen ffiMap mods = (bigmap', mem) where
+  (bigmap, (_, memF)) = foldr codegenLocal (ffiMap, (128, id)) $ toAscList mods
   bigmap' = (resolveGlobal <$>) <$> bigmap
   mem = resolveGlobal <$> memF []
-  ffiIndex = fromList $ zip (keys ffis) [0..]
   resolveGlobal = \case
-    Left (m, s) -> if m == "{foreign}"
-      then ffiIndex ! s
-      else resolveGlobal $ (bigmap ! m) ! s
+    Left (m, s) -> resolveGlobal $ (bigmap ! m) ! s
     Right n -> n
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
@@ -352,7 +349,8 @@ getIOType q = Left $ "main : " ++ show q
 compileWith topSize libc opts mods = do
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
-    (bigmap, mem) = codegen ffis mods
+    ffiMap = singleton "{foreign}" $ fromList $ zip (keys ffis) $ Right <$> [0..]
+    (bigmap, mem) = codegen ffiMap mods
     ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
       [ (expName, (addr, mustType modName ourName))
       | (modName, neat) <- toAscList mods
