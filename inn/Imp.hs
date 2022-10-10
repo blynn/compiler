@@ -110,9 +110,9 @@ slebPos n
 
 foreign import ccall "get_module" getModule :: IO ()
 
-needed tab = filter (not . (`member` tab)) $ concatMap dependentModules $ elems tab
+needed tab = filter (\s -> not (s == "#" || s `member` tab)) $ concatMap dependentModules $ elems tab
 complete tab = case needed tab of
-  [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) Tip (keys tab)
+  [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) soloPrim (keys tab)
   f:_ -> do
     putStr f
     getModule

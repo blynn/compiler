@@ -47,20 +47,20 @@ $(call party,party1.c,multiparty,Base0 System Ast Map Parser Kiselyov Unify RTS 
 $(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify RTS1 Typer2 party)
 $(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov1 Unify RTS2 Typer3 party1)
 $(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov1 Unify RTS3 Typer4 party2)
-$(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+$(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely party2)
 $(call party,traced.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSTrace TyperPrecisely party2)
 
-$(call party,check.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+$(call party,check.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely party2)
 
-$(call party,webby.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
-$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Webby WartsBytes)
+$(call party,webby.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely Webby WartsBytes)
+$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely Webby WartsBytes)
 
-$(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely Imp WartsBytes)
+$(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely Imp WartsBytes)
 imp.o:imp.c;$(WCC) $^ -c -o $@
 imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
-$(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTS3 TyperPrecisely party2)
+$(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify RTSPrecisely TyperPrecisely party2)
 
 warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.o:warts.c;$(WCC) $^ -c -o $@

@@ -209,14 +209,10 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
--- Parser only supports nonnegative integer literals, hence sign is always `True`.
-integerify x = integerSignList x \True xs ->
-  A (A (E $ Link "Base" "Integer" undefined) (V "True")) $ listify $ E . ChrCon . chr . intFromWord <$> xs
-
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
-    Const x -> ((TC "Integer", integerify x), csn)
+    Const x -> ((TC "Integer", ast), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
@@ -321,7 +317,7 @@ defaultRing searcher (ps, subs) (s, (t, a)) = foldM go ([], subs) ps where
 
 inferDefs searcher defs decls typed = do
   let
-    insertUnique m (s, (_, t)) = if isBuiltIn s then Left $ "reserved: " ++ s else case mlookup s m of
+    insertUnique m (s, (_, t)) = case mlookup s m of
       Nothing -> Right $ insert s t m
       _ -> Left $ "duplicate: " ++ s
     addEdges (sym, (deps, _)) (ins, outs) = (foldr (\dep es -> insertWith union dep [sym] es) ins deps, insertWith union sym deps outs)
@@ -442,11 +438,8 @@ prims = let
       , ("wordShr", "U_SHR")
       ]
 
-neatNew = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
-isBuiltIn s = member s $ typedAsts neatNew
-
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> maybe Right processExports mexs (foldr ($) neatNew prog)
+  go (name, (mexs, prog)) = (name,) <$> maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog)
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -480,7 +473,7 @@ data Searcher = Searcher
   , findTypeclass :: String -> [(String, Instance)]
   }
 
-isLegalExport s neat = not (isBuiltIn s) && case moduleExports neat of
+isLegalExport s neat = case moduleExports neat of
   Nothing -> True
   Just es -> elem s es
 
@@ -524,7 +517,6 @@ searcherNew thisModule tab neat ienv = Searcher
     go bound ast = case ast of
       V s
         | elem s bound -> pure ast
-        | isBuiltIn s -> pure ast
         | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
         | True -> case findImportSym s of
@@ -589,8 +581,12 @@ inferModule tab acc name = case mlookup name acc of
     Right $ insert name neat { typedAsts = typed } acc'
   Just _ -> Right acc
 
+neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
+
+soloPrim = singleton "#" neatPrim
+
 untangle s = do
   tab <- singleFile s
-  foldM (inferModule tab) Tip $ keys tab
+  foldM (inferModule tab) soloPrim $ keys tab
 
 singleFile s = parseProgram s >>= tabulateModules
