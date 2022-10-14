@@ -281,7 +281,6 @@ fvPro bound expr = case expr of
   A x y -> fvPro bound x `union` fvPro bound y
   L s t -> fvPro (s:bound) t
   Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
   _ -> []
 
 overFree s f t = case t of
@@ -296,7 +295,6 @@ overFreePro s f t = case t of
   A x y -> A (overFreePro s f x) (overFreePro s f y)
   L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
   Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
-  Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
 
 beta s t x = overFree s (const t) x
 
@@ -652,8 +650,8 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = braceSep $ (,) <$> pat <*> guards "->"
-cas = Ca <$> between (res "case") (res "of") expr <*> alts
-lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts)
+cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
+lamCase = res "case" *> (L "\\case" . encodeCase (V "\\case") <$> alts)
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
@@ -737,7 +735,7 @@ opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
   where
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
@@ -989,10 +987,10 @@ patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
+    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
-    Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
 
 -- Unification and matching.
 apply sub t = case t of
@@ -1146,6 +1144,9 @@ spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
 scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
+
+encodeCase x alts = A (E $ Basic "case") $ A x $ Pa $ first (:[]) <$> alts
+decodeCaseArg (A x (Pa pas)) = (x, first (\(h:_) -> h) <$> pas)
 
 forFree cond f bound t = case t of
   E _ -> t

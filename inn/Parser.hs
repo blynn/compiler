@@ -342,8 +342,8 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = braceSep $ (,) <$> pat <*> guards "->"
-cas = Ca <$> between (res "case") (res "of") expr <*> alts
-lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts)
+cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
+lamCase = res "case" *> (L "\\case" . encodeCase (V "\\case") <$> alts)
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
@@ -427,7 +427,7 @@ opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
   where
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")

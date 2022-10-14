@@ -85,10 +85,10 @@ patternCompile dcs t = optiApp $ evalState (go t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
+    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
-    Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
 
 -- Type inference.
 instantiate' t n tab = case t of

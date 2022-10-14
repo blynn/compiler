@@ -8,7 +8,7 @@ data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
@@ -59,7 +59,6 @@ fvPro bound expr = case expr of
   A x y -> fvPro bound x `union` fvPro bound y
   L s t -> fvPro (s:bound) t
   Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
   _ -> []
 
 overFree s f t = case t of
@@ -103,7 +102,6 @@ showAst prec t = case t of
   A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
   L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
   Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
   Proof p -> ("{Proof "++) . showPred p . ("}"++)
 
 typedAsts (Neat _ _ tas _ _ _ _) = tas
@@ -126,3 +124,6 @@ spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
 scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
+
+encodeCase x alts = A (E $ Basic "case") $ A x $ Pa $ first (:[]) <$> alts
+decodeCaseArg (A x (Pa pas)) = (x, first (\(h:_) -> h) <$> pas)
