@@ -67,6 +67,7 @@ classifyAlt v x = case v of
 
 genCase searcher tab = if size tab == 0 then id else A . L "cjoin#" $ let
   firstC = case toAscList tab of ((con, _):_) -> con
+  -- TODO: Check rest of `tab` lies in cs.
   cs = either error id $ findCon searcher firstC
   in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of

@@ -169,7 +169,7 @@ lexemePrelude = whitespace *>
     Right _ -> Right ((), pasta)
 
 conOf (Constr s _) = s
-specialCase (h:_) = '{':conOf h
+specialCase (h:_) = '|':conOf h
 mkCase t cs = insert (specialCase cs)
   ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
   , E $ Basic "I")
