@@ -116,7 +116,6 @@ fixFixity searcher t = case t of
   A x y -> A <$> go x <*> go y
   L s b -> L s <$> go b
   Pa vsxs -> Pa <$> mapM (\(ps, a) -> (,) <$> mapM pgo ps <*> go a) vsxs
-  Ca x as -> Ca <$> go x <*> mapM (\(p, a) -> (,) <$> pgo p <*> go a) as
   where
   go = fixFixity searcher
   pgo = pure . patFixFixity searcher
@@ -181,10 +180,10 @@ patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searc
   go t = case t of
     E _ -> pure t
     V _ -> pure t
+    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
-    Ca x as -> liftA2 A (L "of" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
 
 -- Type inference.
 instantiate' t n tab = case t of

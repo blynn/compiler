@@ -202,10 +202,10 @@ addAdt t cs ders neat = foldr derive neat' ders where
     TC c -> c
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ Ca (V "lhs") $ map eqCase cs
+    [("==", L "lhs" $ L "rhs" $ encodeCase (V "lhs") $ map eqCase cs
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ Ca (V "x") $ map showCase cs
+    [("showsPrec", L "prec" $ L "x" $ encodeCase (V "x") $ map showCase cs
     )]
   derive der = error $ "bad deriving: " ++ der
   prec0 = A (V "ord") (E $ ChrCon '\0')
@@ -227,7 +227,7 @@ addAdt t cs ders neat = foldr derive neat' ders where
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), Ca (V "rhs")
+    in (PatCon con (mkPatVar "l" <$> as), encodeCase (V "rhs")
       [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
       , (PatVar "_" Nothing, V "False")])
@@ -362,8 +362,8 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = braceSep $ (,) <$> pat <*> guards "->"
-cas = Ca <$> between (res "case") (res "of") expr <*> alts
-lamCase = curlyCheck (res "case") *> (L "\\case" . Ca (V "\\case") <$> alts)
+cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
+lamCase = curlyCheck (res "case") *> (L "\\case" . encodeCase (V "\\case") <$> alts)
 
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
@@ -454,7 +454,7 @@ opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
   where
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")

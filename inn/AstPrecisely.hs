@@ -7,7 +7,7 @@ data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | Const Integer | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
 data ModExport = ExportVar String | ExportCon String [String]
 data Pred = Pred String Type deriving Eq
@@ -47,7 +47,6 @@ instance Show Ast where
     A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
     L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
     Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
-    Ca x as -> ("case "++) . shows x . (" of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> shows p . (" -> "++) . shows a) as)
     Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 showType = shows  -- for Unify.
@@ -95,7 +94,6 @@ fvPro bound expr = case expr of
   A x y -> fvPro bound x `union` fvPro bound y
   L s t -> fvPro (s:bound) t
   Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
   _ -> []
 
 overFree s f t = case t of
@@ -124,3 +122,6 @@ spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
 scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
+
+encodeCase x alts = A (E $ Basic "case") $ A x $ Pa $ first (:[]) <$> alts
+decodeCaseArg (A x (Pa pas)) = (x, first head <$> pas)
