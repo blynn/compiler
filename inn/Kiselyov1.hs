@@ -97,16 +97,3 @@ optim t = case t of
       _ -> Nd p q
     _ -> Nd p q
   go p q = Nd p q
-
-optiComb' (subs, combs) (s, lamb) = let
-  gosub t = case t of
-    LfVar v -> maybe t id $ lookup v subs
-    Nd a b -> Nd (gosub a) (gosub b)
-    _ -> t
-  c = optim $ gosub $ nolam lamb
-  combs' = combs . ((s, c):)
-  in case c of
-    Lf (Basic _) -> ((s, c):subs, combs')
-    LfVar v -> if v == s then (subs, combs . ((s, Nd (lf "Y") (lf "I")):)) else ((s, gosub c):subs, combs')
-    _ -> (subs, combs')
-optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs

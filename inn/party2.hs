@@ -29,12 +29,8 @@ dumpCombs neat = map go combs where
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-dumpOptiCombs neat = map go $ optiComb $ second snd <$> toAscList (typedAsts neat) where
-  go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
-
 main = getArgs >>= \case
   "comb":_ -> interact $ dumpWith dumpCombs
-  "opti":_ -> interact $ dumpWith dumpOptiCombs
   "rawcomb":_ -> interact $ dumpWith dumpRawCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "type":_ -> interact $ dumpWith dumpTypes

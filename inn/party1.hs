@@ -19,7 +19,9 @@ dumpLambs (typed, _) = map (\(s, (t, _)) -> (s++) . (" = "++) . shows t . ('\n':
 
 dumpTypes (typed, _) = map (\(s, (_, q)) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
 
-dumpCombs (typed, _) = go <$> optiComb (lambsList typed) where
+dumpCombs (typed, _) = map go combs where
+  rawCombs = optim . nolam . snd <$> typed
+  combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 main = getArgs >>= \case
