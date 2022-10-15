@@ -305,7 +305,7 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 
 -- Parser only supports nonnegative integer literals, hence sign is always `True`.
 integerify x = integerSignList x \True xs ->
-  Nd (Nd (Lf $ Link "Base" "Integer" undefined) (Lf $ Link "#" "True" undefined)) $
+  Nd (Nd (Lf $ Link "Base" "Integer") (Lf $ Link "#" "True")) $
     foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon $ chr $ intFromWord h)) t) (lf "K") xs
 
 enc t = case t of
@@ -314,7 +314,7 @@ enc t = case t of
     Const x -> enc $ integerify x
     ChrCon c -> Code <$> memget (Code $ comEnum "NUM", Code $ ord c)
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    Link m s _ -> pure $ Global m s
+    Link m s -> pure $ Global m s
     _ -> error $ "BUG! " ++ show t
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)

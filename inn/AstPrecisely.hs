@@ -5,7 +5,7 @@ import Map
 
 data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | Const Integer | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | Const Integer | ChrCon Char | StrCon String | Link String String | XQual Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
@@ -31,7 +31,8 @@ instance Show Extra where
     Const i -> shows i
     ChrCon c -> shows c
     StrCon s -> shows s
-    Link im s _ -> (im++) . ('.':) . (s++)
+    Link im s -> (im++) . ('.':) . (s++)
+    XQual q -> shows q
 instance Show Pat where
   showsPrec _ = \case
     PatLit e -> shows e

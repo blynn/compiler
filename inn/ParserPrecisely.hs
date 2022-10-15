@@ -256,7 +256,7 @@ addInstance classId ps ty ds neat = neat
 addTopDecl (s, t) neat = neat { topDecls = insert s t $ topDecls neat }
 
 addForeignImport foreignname ourname t neat = neat
-  { typedAsts = insertWith (error $ "import conflict: " ++ ourname) ourname (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t) $ typedAsts neat
+  { typedAsts = insertWith (error $ "import conflict: " ++ ourname) ourname (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname) $ typedAsts neat
   , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t $ ffiImports neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
@@ -313,7 +313,7 @@ modded parser = do
   s <- parser
   pure $ case mods of
     [] -> V s
-    _ -> E $ Link (intercalate "," mods) s undefined
+    _ -> E $ Link (intercalate "." mods) s
 
 gconsym = V <$> res ":" <|> modded conSym
 qcon = modded conId <|> paren gconsym

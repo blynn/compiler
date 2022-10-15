@@ -215,10 +215,11 @@ infer msg typed loc ast csn@(cs, n) = case ast of
     Const x -> ((TC "Integer", ast), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
-    Link im s q -> insta q
+    Link _ _ -> error "BUG: type should have been found in earlier phase"
   V s -> maybe (Left $ "undefined: " ++ s) Right
-    $ either (\t -> ((t, ast), csn)) insta <$> lookup s loc
-    <|> insta . fst <$> mlookup s typed
+    $ either (\t -> ((t, ast), csn)) (insta ast) <$> lookup s loc
+    <|> insta ast . fst <$> mlookup s typed
+  A (E (Basic "@")) (A t (E (XQual q))) -> pure $ insta t q
   A x y -> rec loc x (cs, n + 1) >>=
     \((tx, ax), csn1) -> rec loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
@@ -227,7 +228,7 @@ infer msg typed loc ast csn@(cs, n) = case ast of
   where
   rec = infer msg typed
   va = TV $ show n
-  insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
+  insta x ty = ((ty1, foldl A x (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
@@ -237,7 +238,7 @@ findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
   (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance searcher qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
-      <$> findProof searcher (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name undefined) ps
+      <$> findProof searcher (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name) ps
 
 findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
   Nothing -> findInstance searcher psn pred $ findTypeclass searcher classId
@@ -438,8 +439,20 @@ prims = let
       , ("wordShr", "U_SHR")
       ]
 
+expandTypeAliases neat = pure $ if size als == 0 then neat else neat
+  { typedAsts = subTA <$> typedAsts neat
+  , dataCons = map subDataCons <$> dataCons neat
+  } where
+  als = typeAliases neat
+  subTA (Qual ps ty, t) = (Qual ps $ go ty, t)
+  go ty = case ty of
+    TC s -> maybe ty id $ mlookup s als
+    TAp x y -> TAp (go x) (go y)
+    _ -> ty
+  subDataCons (Constr s sts) = Constr s $ second go <$> sts
+
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog)
+  go (name, (mexs, prog)) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -482,6 +495,8 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
   [unique] -> Right unique
   _ -> Left $ "ambiguous: " ++ s
 
+assertType x t = A (E $ Basic "@") $ A x (E $ XQual t)
+
 searcherNew thisModule tab neat ienv = Searcher
   { astLink = astLink'
   , findPrec = findPrec'
@@ -496,7 +511,7 @@ searcherNew thisModule tab neat ienv = Searcher
     V s
       | s == ":" -> (5, RAssoc)
       | otherwise -> either (const defPrec) id $ findAmong opFixity visible s
-    E (Link q s _)
+    E (Link q s)
       | q == thisModule -> findPrec' $ V s
       | otherwise -> either (const defPrec) id $ findAmong opFixity (map snd . qualNeats q) s
     _ -> error "unreachable"
@@ -521,37 +536,24 @@ searcherNew thisModule tab neat ienv = Searcher
         | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
         | True -> case findImportSym s of
           [] -> badDep $ "missing: " ++ s
-          [(im, t)] -> pure $ E $ Link im s t
+          [(im, t)] -> pure $ assertType (E $ Link im s) t
           _ -> badDep $ "ambiguous: " ++ s
       A x y -> A <$> go bound x <*> go bound y
       L s t -> L s <$> go (s:bound) t
-      E (Link q s _)
+      E (Link q s)
         | q == thisModule -> go bound $ V s
         | otherwise -> case findQualifiedSym q s of
           [] -> badDep $ "missing: " ++ q ++ "." ++ s
-          [(truename, t)] -> pure $ E $ Link truename s t
+          [(truename, t)] -> pure $ assertType (E $ Link truename s) t
           _ -> badDep $ "ambiguous: " ++ q ++ "." ++ s
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
       _ -> badDep $ "ambiguous: " ++ s
 
-expandTypeAliases neat = pure $ if size als == 0 then neat else neat
-  { typedAsts = subTA <$> typedAsts neat
-  , dataCons = map subDataCons <$> dataCons neat
-  } where
-  als = typeAliases neat
-  subTA (Qual ps ty, t) = (Qual ps $ go ty, t)
-  go ty = case ty of
-    TC s -> maybe ty id $ mlookup s als
-    TAp x y -> TAp (go x) (go y)
-    _ -> ty
-  subDataCons (Constr s sts) = Constr s $ second go <$> sts
-
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
-    neat <- expandTypeAliases neat
     let
       imps = dependentModules neat
       typed = typedAsts neat
