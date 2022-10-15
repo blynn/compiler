@@ -452,7 +452,7 @@ expandTypeAliases neat = pure $ if size als == 0 then neat else neat
   subDataCons (Constr s sts) = Constr s $ second go <$> sts
 
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog))
+  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< expandTypeAliases =<< maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -476,6 +476,19 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
           | null delta -> Right ns
           | True -> Left $ "bad exports: " ++ show delta
           where delta = [n | n <- ns, not $ elem n methodNames]
+  genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
+    Nothing -> Right $ insert defName (q, E $ Link "#" "fail#") qcs
+    Just (Qual ps t, _) -> case match t t0 of
+      Nothing -> Left $ "bad default method type: " ++ s
+      _ -> case ps of
+        [Pred cl _] | cl == classId -> Right qcs
+        _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
+    where
+    defName = "{default}" ++ s
+    (q@(Qual ps0 t0), _) = qcs ! s
+  genDefaultMethods neat = do
+    typed <- foldM genDefaultMethod (typedAsts neat) [(classId, sig) | (classId, Tycl sigs _) <- toAscList $ typeclasses neat, sig <- sigs]
+    pure neat { typedAsts = typed }
 
 data Searcher = Searcher
   { astLink :: Ast -> Either String ([String], Ast)
@@ -564,22 +577,11 @@ inferModule tab acc name = case mlookup name acc of
         find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
           typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
-      genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
-        Nothing -> Right $ insert defName (q, V "fail#") qcs
-        Just (Qual ps t, _) -> case match t t0 of
-          Nothing -> Left $ "bad default method type: " ++ s
-          _ -> case ps of
-            [Pred cl _] | cl == classId -> Right qcs
-            _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
-        where
-        defName = "{default}" ++ s
-        (q@(Qual ps0 t0), _) = qcs ! s
     acc' <- foldM (inferModule tab) acc imps
     let searcher = searcherNew name acc' neat ienv
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
     typed <- inferDefs searcher depdefs (topDecls neat) typed
     typed <- inferTypeclasses searcher ienv typed
-    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList $ typeclasses neat, sig <- sigs]
     Right $ insert name neat { typedAsts = typed } acc'
   Just _ -> Right acc
 

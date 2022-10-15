@@ -329,10 +329,24 @@ asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> encSym s t)
   Tip combs
 
+rewriteCombs tab = optim . go where
+  go = \case
+    LfVar v -> let t = follow v in case t of
+      Lf (Basic _) -> t
+      LfVar w -> if v == w then Nd (lf "Y") (lf "I") else t
+      _ -> LfVar v
+    Nd a b -> Nd (go a) (go b)
+    t -> t
+  follow v = case tab ! v of
+    LfVar w | v == w -> LfVar v
+            | True -> follow w
+    t -> t
+
 codegenLocal (name, neat) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem++)))
   where
-  combs = optiComb $ toAscList $ snd <$> typedAsts neat
+  rawCombs = optim . nolam . snd <$> typedAsts neat
+  combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
   localmap = resolveLocal <$> symtab
   mem = resolveLocal <$> memF []
