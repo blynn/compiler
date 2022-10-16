@@ -313,14 +313,8 @@ enc t = case t of
   LfVar s -> pure $ Local s
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
 
-encSym s t = case t of
-  Nd _ _ -> do
-    hy <- enc t
-    Code <$> memget (Code $ comEnum "I" , hy)
-  _ -> enc t
-
 asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> encSym s t)
+  (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
   Tip combs
 
 rewriteCombs tab = optim . go where
