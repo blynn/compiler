@@ -465,3 +465,130 @@ warts opts mods =
   $ ""
   where
   ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
+
+topoModules tab = reverse . snd <$> go (keys tab) ([], []) where
+  go xs (todo, done) = case xs of
+    [] -> Right (todo, done)
+    x:xt
+      | x `elem` done -> go xt (todo, done)
+      | x `elem` todo -> Left $ "cycle: " ++ x
+      | True -> do
+        neat <- maybe (Left $ "missing module: " ++ x) pure $ mlookup x tab
+        (todo, done) <- go (dependentModules neat) (x:todo, done)
+        go xt (todo, x:done)
+
+data Module = Module
+  { _neat :: Neat
+  , _combs :: Map String IntTree
+  , _syms :: Map String (Either (String, String) Int)
+  , _mem :: [Either (String, String) Int]
+  }
+
+ink s = do
+  tab <- insert "#" neatPrim <$> singleFile s
+  ms <- topoModules tab
+  foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+
+data Layout = Layout
+  { _offsets :: Map String Int
+  , _foreigns :: Map String (Int, Type)
+  , _memFun :: [Int] -> [Int]
+  , _hp :: Int
+  }
+layoutNew = Layout Tip Tip id 0
+
+agglomerate objs lout name = lout
+  { _offsets = insert name off $ _offsets lout
+  , _foreigns = foreigns
+  , _memFun = _memFun lout . resolve (_mem ob)
+  , _hp = off + length (_mem ob)
+  }
+  where
+  foreigns = foldr (\(n, (k, t)) ma -> insert k (n, t) ma) (_foreigns lout) $ zip [size (_foreigns lout)..] $ toAscList $ ffiImports neat
+  off = _hp lout
+  ob = objs ! name
+  neat = _neat ob
+  adj = \case
+    Right n -> if n < 128 then n else n + off
+    Left global -> follow global
+  follow (m, s)
+    | m == "{foreign}" = fst $ foreigns ! s
+    | True = case _syms (objs ! m) ! s of
+      Right n -> if n < 128 then n else n + (_offsets lout ! m)
+      Left global -> follow global
+  resolve (l:r:rest) = case l of
+    Right c | c == comEnum "NUM" -> (adj l:) . (rc:) . resolve rest where Right rc = r
+    _ -> (adj l:) . (adj r:) . resolve rest
+  resolve [] = id
+
+ink2 s = do
+  tab <- insert "#" neatPrim <$> singleFile s
+  ms <- topoModules tab
+  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  let
+    lout = foldl (agglomerate objs) layoutNew ms
+    topSize = "1<<24"
+    mem = _memFun lout []
+    libc = libcHost
+    opts = []
+    ffis = snd <$> _foreigns lout
+    ffes = Tip
+    mayMain = do
+      mainOff <- mlookup "Main" $ _offsets lout
+      Right n <- mlookup "main" (_syms $ objs ! "Main")
+      mainType <- fst <$> mlookup "main" (typedAsts $ _neat $ objs ! "Main")
+      pure (mainOff + n, mainType)
+  mainStr <- case mayMain of
+    Nothing -> pure ""
+    Just (a, q) -> do
+      getIOType q
+      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
+  pure
+    $ ("typedef unsigned u;\n"++)
+    . ("enum{TOP="++)
+    . (topSize++)
+    . (",_UNDEFINED=0,"++)
+    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+    . ("};\n"++)
+    . ("static const u prog[]={" ++)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
+    . ("};\nstatic u root[]={" ++)
+    -- . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
+    . ("0};\n" ++)
+    . (preamble++)
+    . (libc++)
+    . foldr (.) id (ffiDeclare <$> toAscList ffis)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
+    . ("\n  }\n}\n" ++)
+    . runFun
+    . rtsAPI opts
+    . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
+    $ mainStr
+
+compileModule objs (name, neat) = do
+  let
+    imps = dependentModules neat
+    searcher = searcherNew name (_neat <$> objs) neat ienv
+    typed = typedAsts neat
+    fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
+      [] -> Tycl (findSigs cl) is
+      _ -> Tycl sigs is
+    findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
+      find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
+        typeclasses (_neat $ objs ! im) | im <- imps]
+    ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
+  depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
+  typed <- inferDefs searcher depdefs (topDecls neat) typed
+  typed <- inferTypeclasses searcher ienv typed
+  let
+    rawCombs = optim . nolam . snd <$> typed
+    combs = rewriteCombs rawCombs <$> rawCombs
+    (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
+    localmap = resolveLocal <$> symtab
+    mem = resolveLocal <$> memF []
+    resolveLocal = \case
+      Code n -> Right n
+      Local s -> resolveLocal $ symtab ! s
+      Global m s -> Left (m, s)
+  Right $ insert name (Module (neat { typedAsts = typed }) combs localmap mem) objs
