@@ -286,20 +286,21 @@ void rts_init() {
   . rtsReduce opts
 
 -- Hash consing.
-data Obj = Local String | Global String String | Code Int deriving Eq
-
-instance Ord Obj where
+instance (Ord a, Ord b) => Ord (Either a b) where
   x <= y = case x of
-    Local a -> case y of
-      Local b -> a <= b
-      _ -> True
-    Global m a -> case y of
-      Local _ -> False
-      Global n b -> if m == n then a <= b else m <= n
-      _ -> True
-    Code a -> case y of
-      Code b -> a <= b
-      _ -> False
+    Left a -> case y of
+      Left b -> a <= b
+      Right _ -> True
+    Right a -> case y of
+      Left _ -> False
+      Right b -> a <= b
+  compare x y = case x of
+    Left a -> case y of
+      Left b -> compare a b
+      Right _ -> LT
+    Right a -> case y of
+      Left _ -> GT
+      Right b -> compare a b
 
 memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
   Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
@@ -312,14 +313,14 @@ integerify x = integerSignList x \True xs ->
 
 enc t = case t of
   Lf n -> case n of
-    Basic c -> pure $ Code $ comEnum c
+    Basic c -> pure $ Right $ comEnum c
     Const x -> enc $ integerify x
-    ChrCon c -> Code <$> memget (Code $ comEnum "NUM", Code $ ord c)
+    ChrCon c -> Right <$> memget (Right $ comEnum "NUM", Right $ ord c)
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    Link m s -> pure $ Global m s
+    Link m s -> pure $ Left (m, s)
     _ -> error $ "BUG! " ++ show t
-  LfVar s -> pure $ Local s
-  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
+  LfVar s -> pure $ Left ("", s)
+  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (hx, hy)
 
 asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
@@ -347,9 +348,8 @@ codegenLocal (name, neat) (bigmap, (hp, f)) =
   localmap = resolveLocal <$> symtab
   mem = resolveLocal <$> memF []
   resolveLocal = \case
-    Code n -> Right n
-    Local s -> resolveLocal $ symtab ! s
-    Global m s -> Left (m, s)
+    Left ("", s) -> resolveLocal $ symtab ! s
+    x -> x
 
 codegen ffiMap mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (ffiMap, (128, id)) $ toAscList mods
@@ -588,7 +588,6 @@ compileModule objs (name, neat) = do
     localmap = resolveLocal <$> symtab
     mem = resolveLocal <$> memF []
     resolveLocal = \case
-      Code n -> Right n
-      Local s -> resolveLocal $ symtab ! s
-      Global m s -> Left (m, s)
+      Left ("", s) -> resolveLocal $ symtab ! s
+      x -> x
   Right $ insert name (Module (neat { typedAsts = typed }) combs localmap mem) objs
