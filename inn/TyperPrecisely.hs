@@ -23,8 +23,8 @@ optiApp t = case t of
   _ -> t
 
 -- Pattern compiler.
-singleOut s cs = \scrutinee x ->
-  foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
+singleOut s q cs = \scrutinee x ->
+  foldl A (scottCase q scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
@@ -37,7 +37,7 @@ unpat searcher as t = case as of
       PatVar s m -> maybe (unpat searcher at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
       PatCon con args -> case findCon searcher con of
         Left e -> error e
-        Right cons -> unpat searcher args x >>= \y -> unpat searcher at $ singleOut con cons (V freshv) y
+        Right (q, cons) -> unpat searcher args x >>= \y -> unpat searcher at $ singleOut con q cons (V freshv) y
     in go a t
 
 unpatTop searcher als x = case als of
@@ -48,7 +48,7 @@ unpatTop searcher als x = case als of
       PatVar s m -> maybe (unpatTop searcher alt) go m $ beta s (V l) t
       PatCon con args -> case findCon searcher con of
         Left e -> error e
-        Right cons -> unpat searcher args t >>= \y -> unpatTop searcher alt $ singleOut con cons (V l) y
+        Right (q, cons) -> unpat searcher args t >>= \y -> unpatTop searcher alt $ singleOut con q cons (V l) y
     in go a x
 
 rewritePats' searcher asxs ls = case asxs of
@@ -65,11 +65,13 @@ classifyAlt v x = case v of
   PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
   PatCon con args -> Right (insertWith (flip (.)) con ((args, x):))
 
+scottCase q x = A (assertType (E $ Basic "I") q) x
+
 genCase searcher tab = if size tab == 0 then id else A . L "cjoin#" $ let
   firstC = case toAscList tab of ((con, _):_) -> con
   -- TODO: Check rest of `tab` lies in cs.
-  cs = either error id $ findCon searcher firstC
-  in foldl A (A (V $ specialCase cs) (V "of"))
+  (q, cs) = either error id $ findCon searcher firstC
+  in foldl A (scottCase q $ V "of")
     $ map (\(Constr s ts) -> case mlookup s tab of
       Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
       Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "cjoin#")]
@@ -94,7 +96,7 @@ resolveFieldBinds searcher t = go t where
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
       (con, fields) = findField searcher firstField
-      cs = either error id $ findCon searcher con
+      (q, cs) = either error id $ findCon searcher con
       newValue = foldl A (V con) [maybe (V $ "[old]"++f) id $ lookup f fbs | (f, _) <- fields]
       initValue = foldl A expr [maybe (V "undefined") id $ lookup f fbs | (f, _) <- fields]
       updater = foldr L newValue $ ("[old]"++) . fst <$> fields
@@ -104,7 +106,7 @@ resolveFieldBinds searcher t = go t where
         V (h:_) -> 'A' <= h && h <= 'Z'
         _ -> False
       in if allPresent
-        then if isCon then initValue else foldl A (A (V $ specialCase cs) expr) $ inj updater
+        then if isCon then initValue else foldl A (scottCase q expr) $ inj updater
         else error "bad fields in update"
     A x y -> A (go x) (go y)
     L s x -> L s $ go x
@@ -441,7 +443,7 @@ prims = let
 
 expandTypeAliases neat = pure $ if size als == 0 then neat else neat
   { typedAsts = subTA <$> typedAsts neat
-  , dataCons = map subDataCons <$> dataCons neat
+  , dataCons = second (map subDataCons) <$> dataCons neat
   } where
   als = typeAliases neat
   subTA (Qual ps ty, t) = (Qual ps $ go ty, t)
@@ -493,7 +495,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
 data Searcher = Searcher
   { astLink :: Ast -> Either String ([String], Ast)
   , findPrec :: Ast -> (Int, Assoc)
-  , findCon :: String -> Either String [Constr]
+  , findCon :: String -> Either String (Qual, [Constr])
   , findField :: String -> (String, [(String, Type)])
   , typeOfMethod :: String -> Either String Qual
   , findTypeclass :: String -> [(String, Instance)]
@@ -536,7 +538,7 @@ searcherNew thisModule tab neat ienv = Searcher
   importedNeats s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
   classes im = if im == "" then ienv else typeclasses $ tab ! im
-  findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
+  findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
     [] -> error $ "no such field: " ++ f
     h:_ -> h
   imps = moduleImports neat ! ""

@@ -169,10 +169,6 @@ lexemePrelude = whitespace *>
     Right _ -> Right ((), pasta)
 
 conOf (Constr s _) = s
-specialCase (h:_) = '|':conOf h
-mkCase t cs = insert (specialCase cs)
-  ( Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
-  , E $ Basic "I")
 mkStrs = snd . foldl (\(s, l) u -> ('@':s, s:l)) ("@", [])
 scottEncode _ ":" _ = E $ Basic "CONS"
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs)
@@ -183,18 +179,20 @@ scottConstr t cs (Constr s sts) = foldr (.) (insertWith (error $ "constructor co
   ts = snd <$> sts
   proj fd = foldr L (V fd) $ fst <$> sts
   inj x = map (\(Constr s' _) -> if s' == s then x else V "undefined") cs
-mkAdtDefs t cs = foldr (.) (mkCase t cs) $ scottConstr t cs <$> cs
+mkAdtDefs t cs = foldr (.) id $ scottConstr t cs <$> cs
 
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
   TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
-updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
+updateDcs t cs dcs = foldr (\(Constr s _) m -> insert s (q, cs) m) dcs cs where
+  q = Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
+
 addAdt t cs ders neat = foldr derive neat' ders where
   neat' = neat
     { typedAsts = mkAdtDefs t cs $ typedAsts neat
-    , dataCons = updateDcs cs $ dataCons neat
+    , dataCons = updateDcs t cs $ dataCons neat
     , type2Cons = insert (typeName t) (concatMap cnames cs) $ type2Cons neat
     }
   typeName = \case

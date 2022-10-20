@@ -73,7 +73,7 @@ data Neat = Neat
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   , typedAsts :: Map String (Qual, Ast)
-  , dataCons :: Map String [Constr]
+  , dataCons :: Map String (Qual, [Constr])
   , type2Cons :: Map String [String]
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
