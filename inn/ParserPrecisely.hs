@@ -363,7 +363,10 @@ alts = braceSep $ (,) <$> pat <*> guards "->"
 cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
 lamCase = curlyCheck (res "case") *> (L "\\case" . encodeCase (V "\\case") <$> alts)
 
-lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
+nalts = braceSep $ (,) <$> many apat <*> guards "->"
+lamCases = curlyCheck (res "cases") *> (Pa <$> nalts)
+
+lam = res "\\" *> (lamCase <|> lamCases <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
 moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr comma
