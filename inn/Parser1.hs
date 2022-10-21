@@ -289,7 +289,6 @@ addLets ls x = foldr triangle x components where
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
   triangle names expr = let
     tnames = nonemptyTails names
-    insLams vs t = foldr L t vs
     appem vs = foldl1 A $ V <$> vs
     suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
     redef tns expr = foldr L (suball expr) tns

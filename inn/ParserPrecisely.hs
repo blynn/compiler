@@ -294,7 +294,6 @@ addLets ls x = foldr triangle x components where
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
   triangle names expr = let
     tnames = nonemptyTails names
-    insLams vs t = foldr L t vs
     appem vs = foldl1 A $ V <$> vs
     suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
     redef tns expr = foldr L (suball expr) tns
@@ -420,7 +419,12 @@ chain a = \case
     [] -> A (A f a) b
     _ -> A (E $ Basic "{+") $ A (A (A f a) b) $ foldr A (E $ Basic "+}") rest
   _ -> error "unreachable"
-expr = chain <$> aexp <*> many (A <$> qop <*> aexp)
+expr = do
+  x <- chain <$> aexp <*> many (A <$> qop <*> aexp)
+  res "::" *> annotate x <|> pure x
+annotate x = do
+  q <- Qual <$> fatArrows <*> _type
+  pure $ A (E $ Basic "::") $ A x $ E $ XQual q
 
 gcon = conId <|> paren (conSym <|> res ":" <|> (:"") <$> comma) <|> lSquare *> rSquare *> pure "[]"
 qconop = conSym <|> res ":" <|> between backquote backquote conId

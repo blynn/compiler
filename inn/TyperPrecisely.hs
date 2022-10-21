@@ -221,7 +221,13 @@ infer msg typed loc ast csn@(cs, n) = case ast of
   V s -> maybe (Left $ "undefined: " ++ s) Right
     $ either (\t -> ((t, ast), csn)) (insta ast) <$> lookup s loc
     <|> insta ast . fst <$> mlookup s typed
-  A (E (Basic "@")) (A t (E (XQual q))) -> pure $ insta t q
+  A (E (Basic "@")) (A raw (E (XQual q))) -> pure $ insta raw q
+  A (E (Basic "::")) (A x (E (XQual q))) -> do
+    ((tx, ax), (cs, n1)) <- rec loc x csn
+    let ((tAnno, aAnno), (cs2, n2)) = instaCSN ax q (cs, n1)
+    case match (apply cs2 tx) tAnno of
+      Nothing -> Left $ msg ++ ": bad match"
+      Just ms -> Right ((tAnno, aAnno), (ms @@ cs2, n2))
   A x y -> rec loc x (cs, n + 1) >>=
     \((tx, ax), csn1) -> rec loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
@@ -230,7 +236,8 @@ infer msg typed loc ast csn@(cs, n) = case ast of
   where
   rec = infer msg typed
   va = TV $ show n
-  insta x ty = ((ty1, foldl A x (map Proof preds)), (cs, n1))
+  insta x ty = instaCSN x ty csn
+  instaCSN x ty (cs, n) = ((ty1, foldl A x (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
@@ -290,7 +297,7 @@ inferno searcher decls typed defmap syms = let
       Just qAnno -> do
         let (Qual pAnno tAnno, n1) = instantiate qAnno n
         soln <- maybe (Left $ s ++ ": match failed: " ++ show qAnno ++ " vs " ++ show (apply ms t)) Right $ match (apply ms t) tAnno
-        Right (((s, (t, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
+        Right (((s, (tAnno, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
   gatherPreds (acc, psn) (s, (t, a)) = do
     (psn, a) <- prove searcher psn a
     pure ((s, (t, a)):acc, psn)
