@@ -455,15 +455,17 @@ guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y
   ) <$> (res "|" *> expr) <*> (res s *> expr))
 
 onePat vs x = Pa [(vs, x)]
-opDef x f y rhs = [(f, onePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
     (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
   where
   pvars = filter (/= "_") $ patVars p
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+funlhs = (\x o y -> (o, [x, y])) <$> pat <*> varSym <*> pat
+  <|> liftA2 (,) var (many apat)
+  <|> (\(s, vs) vs' -> (s, vs ++ vs')) <$> paren funlhs <*> some apat
+funrhs = guards "="
+def = (\(s, vs) x -> (s, Pa [(vs, x)])) <$> funlhs <*> funrhs
 coalesce = \case
   [] -> []
   h@(s, x):t -> case t of
@@ -472,7 +474,7 @@ coalesce = \case
       f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
       f _ _ = error "bad multidef"
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-defSemi = coalesce . concat <$> sepBy1 def (some semicolon)
+defSemi = coalesce <$> sepBy1 def (some semicolon) <|> liftA2 leftyPat pat funrhs
 braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
