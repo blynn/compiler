@@ -294,15 +294,15 @@ asm combs = foldM
 
 rewriteCombs tab = optim . go where
   go = \case
-    LfVar v -> let t = follow v in case t of
+    LfVar v -> let t = follow [v] v in case t of
       Lf (Basic _) -> t
       LfVar w -> if v == w then Nd (lf "Y") (lf "I") else t
       _ -> LfVar v
     Nd a b -> Nd (go a) (go b)
     t -> t
-  follow v = case tab ! v of
-    LfVar w | v == w -> LfVar v
-            | True -> follow w
+  follow seen v = case tab ! v of
+    LfVar w | w `elem` seen -> LfVar $ last seen
+            | True -> follow (w:seen) w
     t -> t
 
 codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
