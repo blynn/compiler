@@ -211,34 +211,71 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer msg typed loc ast csn@(cs, n) = case ast of
-  E x -> Right $ case x of
+data Infer a = Infer { unInfer :: (([(String, Type)], Int) -> Either String (a, ([(String, Type)], Int))) }
+
+instance Functor Infer where
+  fmap f = \(Infer h) -> Infer $ fmap (first f) . h
+instance Applicative Infer where
+  pure x = Infer $ Right . (x,)
+  (Infer f) <*> (Infer x) = Infer \csn -> do
+    (g, csn') <- f csn
+    first g <$> x csn'
+instance Monad Infer where
+  return x = Infer $ Right . (x,)
+  (Infer x) >>= f = Infer \csn -> do
+    (x', csn') <- x csn
+    unInfer (f x') csn'
+
+inferInstantiate ty = Infer \(cs, n) -> let
+  (q, n1) = instantiate ty n
+  in Right (q, (cs, n1))
+
+inferUnify s a b = Infer \(cs, n) -> case unify a b cs of
+  Left e -> Left $ (s++) . (":"++) $ e
+  Right cs -> Right ((), (cs, n))
+
+getConstraints = Infer \csn@(cs, _) -> Right (cs, csn)
+putConstraints cs = Infer \(_, n) -> Right ((), (cs, n))
+getFreshVar = Infer \csn@(cs, n) -> Right (TV $ show n, (cs, n + 1))
+
+infer' msg typed loc ast = case ast of
+  E x -> case x of
     Basic bug -> error bug
-    Const x -> ((TC "Integer", ast), csn)
-    ChrCon _ -> ((TC "Char", ast), csn)
-    StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
+    Const x -> pure (TC "Integer", ast)
+    ChrCon _ -> pure (TC "Char", ast)
+    StrCon _ -> pure (TAp (TC "[]") (TC "Char"), ast)
     Link _ _ -> error "BUG: type should have been found in earlier phase"
-  V s -> maybe (Left $ "undefined: " ++ s) Right
-    $ either (\t -> ((t, ast), csn)) (insta ast) <$> lookup s loc
-    <|> insta ast . fst <$> mlookup s typed
-  A (E (Basic "@")) (A raw (E (XQual q))) -> pure $ insta raw q
+  V s -> case lookup s loc <|> Right . fst <$> mlookup s typed of
+    Nothing -> Infer $ const $ Left $ "undefined: " ++ s
+    Just t -> either (pure . (, ast)) (insta ast) t
+  A (E (Basic "@")) (A raw (E (XQual q))) -> insta raw q
   A (E (Basic "::")) (A x (E (XQual q))) -> do
-    ((tx, ax), (cs, n1)) <- rec loc x csn
-    let ((tAnno, aAnno), (cs2, n2)) = instaCSN ax q (cs, n1)
-    case match (apply cs2 tx) tAnno of
-      Nothing -> Left $ msg ++ ": bad match"
-      Just ms -> Right ((tAnno, aAnno), (ms @@ cs2, n2))
-  A x y -> rec loc x (cs, n + 1) >>=
-    \((tx, ax), csn1) -> rec loc y csn1 >>=
-    \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
-    \cs -> Right ((va, A ax ay), (cs, n2))
-  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, Left va):loc) x (cs, n + 1)
+    (tx, ax) <- rec loc x
+    (tAnno, aAnno) <- insta ax q
+    pure (tAnno, aAnno)
+    cs <- getConstraints
+    case match (apply cs tx) tAnno of
+      Nothing -> Infer $ const $ Left $ msg ++ ": bad match"
+      Just ms -> do
+        putConstraints $ ms @@ cs
+        pure (tAnno, aAnno)
+  A x y -> do
+    (tx, ax) <- rec loc x
+    (ty, ay) <- rec loc y
+    va <- getFreshVar
+    inferUnify msg tx (arr ty va)
+    pure (va, A ax ay)
+  L s x -> do
+    va <- getFreshVar
+    (tx, ax) <- rec ((s, Left va):loc) x
+    pure (arr va tx, L s ax)
   where
-  rec = infer msg typed
-  va = TV $ show n
-  insta x ty = instaCSN x ty csn
-  instaCSN x ty (cs, n) = ((ty1, foldl A x (map Proof preds)), (cs, n1))
-    where (Qual preds ty1, n1) = instantiate ty n
+  rec = infer' msg typed
+  insta x ty = do
+    Qual preds ty1 <- inferInstantiate ty
+    pure (ty1, foldl A x (map Proof preds))
+
+infer msg typed loc ast csn = unInfer (infer' msg typed loc ast) csn
 
 findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
   []  -> case ty of

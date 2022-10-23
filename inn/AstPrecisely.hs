@@ -37,7 +37,7 @@ instance Show Pat where
   showsPrec _ = \case
     PatLit e -> shows e
     PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
-    PatCon s ps -> (s++) . ("TODO"++)
+    PatCon s ps -> (s++) . foldr (.) id (((' ':) .) . shows <$> ps)
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
