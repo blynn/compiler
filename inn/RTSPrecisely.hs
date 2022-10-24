@@ -339,10 +339,26 @@ rewriteCombs tab = optim . go where
             | True -> follow (w:seen) w
     t -> t
 
+freeCount v expr = case expr of
+  E _ -> 0
+  V s -> if s == v then 1 else 0
+  A x y -> freeCount v x + freeCount v y
+  L w t -> if v == w then 0 else freeCount v t
+app01 s x = case freeCount s x of
+  0 -> const x
+  1 -> flip (beta s) x
+  _ -> A $ L s x
+optiApp t = case t of
+  A x y -> case optiApp x of
+    L s x -> app01 s x (optiApp y)
+    x -> A x (optiApp y)
+  L s x -> L s (optiApp x)
+  _ -> t
+
 codegenLocal (name, neat) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem++)))
   where
-  rawCombs = optim . nolam . snd <$> typedAsts neat
+  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
   localmap = resolveLocal <$> symtab
@@ -582,7 +598,7 @@ compileModule objs (name, neat) = do
   typed <- inferDefs searcher depdefs (topDecls neat) typed
   typed <- inferTypeclasses searcher ienv typed
   let
-    rawCombs = optim . nolam . snd <$> typed
+    rawCombs = optim . nolam . optiApp . snd <$> typed
     combs = rewriteCombs rawCombs <$> rawCombs
     (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
     localmap = resolveLocal <$> symtab

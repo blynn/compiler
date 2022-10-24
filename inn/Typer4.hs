@@ -20,8 +20,9 @@ app01 s x = case freeCount s x of
   1 -> flip (beta s) x
   _ -> A $ L s x
 optiApp t = case t of
-  A (L s x) y -> app01 s (optiApp x) (optiApp y)
-  A x y -> A (optiApp x) (optiApp y)
+  A x y -> case optiApp x of
+    L s x -> app01 s x (optiApp y)
+    x -> A x (optiApp y)
   L s x -> L s (optiApp x)
   _ -> t
 

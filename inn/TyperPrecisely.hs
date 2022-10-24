@@ -7,21 +7,6 @@ import Ast
 import Parser
 import Unify
 
-freeCount v expr = case expr of
-  E _ -> 0
-  V s -> if s == v then 1 else 0
-  A x y -> freeCount v x + freeCount v y
-  L w t -> if v == w then 0 else freeCount v t
-app01 s x = case freeCount s x of
-  0 -> const x
-  1 -> flip (beta s) x
-  _ -> A $ L s x
-optiApp t = case t of
-  A (L s x) y -> app01 s (optiApp x) (optiApp y)
-  A x y -> A (optiApp x) (optiApp y)
-  L s x -> L s (optiApp x)
-  _ -> t
-
 -- Pattern compiler.
 singleOut s q cs = \scrutinee x ->
   foldl A (scottCase q scrutinee) $ map (\(Constr s' ts) ->
@@ -178,7 +163,7 @@ extendChain searcher stay down op op' =
   (prec', assoc') = findPrec searcher op'
 
 secondM f (a, b) = (a,) <$> f b
-patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
+patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
