@@ -223,13 +223,41 @@ getConstraints = Infer \csn@(cs, _) -> Right (cs, csn)
 putConstraints cs = Infer \(_, n) -> Right ((), (cs, n))
 getFreshVar = Infer \csn@(cs, n) -> Right (TV $ show n, (cs, n + 1))
 
+maybeFix s x = if elem s $ fvPro [] x then A (E $ Basic "Y") (L s x) else x
+
+nonemptyTails [] = []
+nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
+
+triangulate tab x = foldr triangle x components where
+  vs = fst <$> tab
+  ios = foldr (\(s, dsts) (ins, outs) ->
+    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) tab
+  components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
+  triangle names expr = let
+    tnames = nonemptyTails names
+    appem vs = foldl1 A $ V <$> vs
+    suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
+    redef tns expr = foldr L (suball expr) tns
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
+
+decodeLets x = ((vs, bods), expr) where
+  (vs, rest) = stripVars id x
+  (bods, expr) = stripBods id vs rest
+  stripVars acc (L v t) = stripVars (acc . (v:)) t
+  stripVars acc (A (E (Basic "in")) t) = (acc [], t)
+  stripVars acc e = error $ show e
+  stripBods acc [] t = (acc [], t)
+  stripBods acc (v:vt) (A x y) = stripBods (acc . (x:)) vt y
+  stripBods acc _ e = error $ "bods: " ++ show e
+
 infer' msg typed loc ast = case ast of
   E x -> case x of
-    Basic bug -> error bug
     Const x -> pure (TC "Integer", ast)
     ChrCon _ -> pure (TC "Char", ast)
     StrCon _ -> pure (TAp (TC "[]") (TC "Char"), ast)
     Link _ _ -> error "BUG: type should have been found in earlier phase"
+    bug -> error $ show bug
   V s -> case lookup s loc <|> Right . fst <$> mlookup s typed of
     Nothing -> Infer $ const $ Left $ "undefined: " ++ s
     Just t -> either (pure . (, ast)) (insta ast) t
@@ -244,6 +272,15 @@ infer' msg typed loc ast = case ast of
       Just ms -> do
         putConstraints $ ms @@ cs
         pure (tAnno, aAnno)
+  A (E (Basic "let")) lets -> do
+    let ((vars, defs), x) = decodeLets lets
+    types <- replicateM (length vars) getFreshVar
+    let loc' = zip vars (Left <$> types) ++ loc
+    axs <- forM (zip types defs) \(t, a) -> do
+      (tx, ax) <- rec loc' a
+      inferUnify msg t tx
+      pure ax
+    second (triangulate $ zip vars axs) <$> rec loc' x
   A x y -> do
     (tx, ax) <- rec loc x
     (ty, ay) <- rec loc y
@@ -254,6 +291,7 @@ infer' msg typed loc ast = case ast of
     va <- getFreshVar
     (tx, ax) <- rec ((s, Left va):loc) x
     pure (arr va tx, L s ax)
+  bug -> error $ show bug
   where
   rec = infer' msg typed
   insta x ty = do
