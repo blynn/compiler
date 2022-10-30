@@ -211,9 +211,9 @@ instance Monad Infer where
     (x', csn') <- x csn
     unInfer (f x') csn'
 
-inferInstantiate ty = Infer \(cs, n) -> let
-  (q, n1) = instantiate ty n
-  in Right (q, (cs, n1))
+inferInstantiate q = Infer \(cs, n) -> let
+  (q', n1) = instantiate q n
+  in Right (q', (cs, n1))
 
 inferUnify s a b = Infer \(cs, n) -> case unify a b cs of
   Left e -> Left $ (s++) . (":"++) $ e
@@ -241,14 +241,15 @@ triangulate tab x = foldr triangle x components where
     redef tns expr = foldr L (suball expr) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
-decodeLets x = ((vs, bods), expr) where
-  (vs, rest) = stripVars id x
-  (bods, expr) = stripBods id vs rest
-  stripVars acc (L v t) = stripVars (acc . (v:)) t
+decodeLets x = ((vts, bods), expr) where
+  (vts, rest) = stripVars id x
+  (bods, expr) = stripBods id vts rest
+  stripVars acc (L v t) = stripVars (acc . ((v, Nothing):)) t
+  stripVars acc (A (L v t) (E (XQual q))) = stripVars (acc . ((v, Just q):)) t
   stripVars acc (A (E (Basic "in")) t) = (acc [], t)
   stripVars acc e = error $ show e
   stripBods acc [] t = (acc [], t)
-  stripBods acc (v:vt) (A x y) = stripBods (acc . (x:)) vt y
+  stripBods acc (vt:vtt) (A x y) = stripBods (acc . (x:)) vtt y
   stripBods acc _ e = error $ "bods: " ++ show e
 
 infer' msg typed loc ast = case ast of
@@ -265,7 +266,6 @@ infer' msg typed loc ast = case ast of
   A (E (Basic "::")) (A x (E (XQual q))) -> do
     (tx, ax) <- rec loc x
     (tAnno, aAnno) <- insta ax q
-    pure (tAnno, aAnno)
     cs <- getConstraints
     case match (apply cs tx) tAnno of
       Nothing -> Infer $ const $ Left $ msg ++ ": bad match"
@@ -273,14 +273,29 @@ infer' msg typed loc ast = case ast of
         putConstraints $ ms @@ cs
         pure (tAnno, aAnno)
   A (E (Basic "let")) lets -> do
-    let ((vars, defs), x) = decodeLets lets
-    types <- replicateM (length vars) getFreshVar
-    let loc' = zip vars (Left <$> types) ++ loc
-    axs <- forM (zip types defs) \(t, a) -> do
+    let ((vartypes, defs), x) = decodeLets lets
+    newloc <- forM vartypes $ secondM \case
+      Nothing -> Left <$> getFreshVar
+      Just q -> pure $ Right q
+    let loc' = newloc ++ loc
+    axs <- forM (zip newloc defs) \((_, m), a) -> do
       (tx, ax) <- rec loc' a
-      inferUnify msg t tx
-      pure ax
-    second (triangulate $ zip vars axs) <$> rec loc' x
+      case m of
+        Left t -> do
+          inferUnify msg t tx
+          pure ax
+        Right q -> do
+          Qual pAnno tAnno <- inferInstantiate q
+          subs <- maybe (Infer $ const $ Left $ "no match") pure $ match tx tAnno
+          cs <- getConstraints
+          putConstraints $ subs @@ cs
+          cs <- getConstraints
+          let
+            a1 = proofApply cs ax
+            tab = zip pAnno $ ('*':) . show <$> [1..]
+          pure $ foldr L (forProof (subProofVar tab) a1) $ snd <$> tab
+
+    second (triangulate $ zip (fst <$> vartypes) axs) <$> rec loc' x
   A x y -> do
     (tx, ax) <- rec loc x
     (ty, ay) <- rec loc y
@@ -294,9 +309,9 @@ infer' msg typed loc ast = case ast of
   bug -> error $ show bug
   where
   rec = infer' msg typed
-  insta x ty = do
-    Qual preds ty1 <- inferInstantiate ty
-    pure (ty1, foldl A x (map Proof preds))
+  insta x q = do
+    Qual preds q <- inferInstantiate q
+    pure (q, foldl A x (map Proof preds))
 
 infer msg typed loc ast csn = unInfer (infer' msg typed loc ast) csn
 
@@ -312,6 +327,17 @@ findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
 findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
   Nothing -> findInstance searcher psn pred $ findTypeclass searcher classId
   Just s -> Right (psn, V s)
+
+subProofVar tab pred = case lookup pred tab of
+  Just s -> V s
+  _ -> Proof pred
+
+forProof f = \case
+  Proof pred -> f pred
+  A x y -> A (rec x) (rec y)
+  L s t -> L s $ rec t
+  t -> t
+  where rec = forProof f
 
 prove searcher psn a = case a of
   Proof pred -> findProof searcher pred psn
@@ -363,7 +389,7 @@ inferno searcher decls typed defmap syms = let
     pure ((s, (t, a)):acc, psn)
   in do
     ((stas, preds), (soln, _)) <- foldM principal (([], []), ([], 0)) syms
-    let ps = zip preds $ ("anno*"++) . show  <$> [0..]
+    let ps = zip preds $ ("anno*"++) . show <$> [0..]
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
     let
@@ -372,8 +398,8 @@ inferno searcher decls typed defmap syms = let
           $ foldr (uncurry beta) a subs) dicts))
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
-defaultRing searcher (ps, subs) (s, (t, a)) = foldM go ([], subs) ps where
-  rings = concatMap isRing $ fst <$> ps
+defaultRing searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where
+  rings = concatMap isRing $ fst <$> preds
   isRing (Pred "Ring" (TV v)) = [v]
   isRing _ = []
   go (ps, subs) p@(pred, dictVar) = case pred of

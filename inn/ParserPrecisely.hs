@@ -281,8 +281,12 @@ res w
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
 
-addLets ls x = A (E $ Basic "let") $ foldr L bodies vs where
-  (vs, xs) = unzip ls
+addLets ls x = A (E $ Basic "let") $ foldr encodeVar bodies vts where
+  encodeVar (v, m) rest = case m of
+    Nothing -> L v rest
+    Just q -> A (L v rest) (E $ XQual q)
+  vts = second snd <$> ls
+  xs = fst . snd <$> ls
   bodies = A (E $ Basic "in") $ foldr A x xs
 
 op = conSym <|> varSym <|> between backquote backquote (conId <|> varId)
@@ -337,7 +341,7 @@ fatArrows = concat <$> many (scontext <* res "=>")
 
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$> fatArrows
-    <*> conId <*> _type <*> (res "where" *> braceDef))
+    <*> conId <*> _type <*> (res "where" *> fmap (map $ second fst) braceDef))
 
 letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
@@ -461,7 +465,18 @@ coalesce = \case
       f _ _ = error "bad multidef"
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 defSemi = coalesce <$> sepBy1 def (some semicolon) <|> liftA2 leftyPat pat funrhs
-braceDef = concat <$> braceSep defSemi
+braceDef = do
+  (defs, annos) <- foldr (\(f, g) (x, y) -> (f x, g y)) ([], []) <$> braceSep ((,id) . (++) <$> defSemi <|> (id,) . (:) <$> genDecl)
+  let
+    tab = fromList $ second (,Nothing) <$> defs
+    go tab (s, t) = case mlookup s tab of
+      Nothing -> Left $ "missing definition: " ++ s
+      Just (a, m) -> case m of
+        Nothing -> Right $ insert s (a, Just t) tab
+        _ -> Left $ "duplicate annotation: " ++ s
+  case foldM go tab annos of
+    Left e -> bad e
+    Right tab -> pure $ toAscList tab
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = conSym <|> between backquote backquote conId
