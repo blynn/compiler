@@ -348,11 +348,11 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> guards "->"
+alts = braceSep $ (,) <$> pat <*> gdSep "->"
 cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
 lamCase = curlyCheck (res "case") *> (L "\\case" . encodeCase (V "\\case") <$> alts)
 
-nalts = braceSep $ (,) <$> many apat <*> guards "->"
+nalts = braceSep $ (,) <$> many apat <*> gdSep "->"
 lamCases = curlyCheck (res "cases") *> (Pa <$> nalts)
 
 lam = res "\\" *> (lamCase <|> lamCases <|> liftA2 onePat (some apat) (res "->" *> expr))
@@ -439,10 +439,14 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
-  V "True" -> \_ -> y
-  _ -> A (A (A (V "if") x) y)
-  ) <$> (res "|" *> expr) <*> (res s *> expr))
+gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some (res "|" *> guard)
+  where
+  guard = guardExpr <$> expr <*> (res s *> expr)
+    <|> guardPat <$> pat <*> (res "<-" *> expr) <*> (res s *> expr)
+  guardExpr x y rest = case x of
+    V "True" -> y
+    _ -> A (A (A (V "if") x) y) rest
+  guardPat p x y rest = encodeCase x [(p, y), (PatVar "_" Nothing, rest)]
 
 onePat vs x = Pa [(vs, x)]
 leftyPat p expr = case pvars of
@@ -454,7 +458,7 @@ leftyPat p expr = case pvars of
 funlhs = (\x o y -> (o, [x, y])) <$> pat <*> varSym <*> pat
   <|> liftA2 (,) var (many apat)
   <|> (\(s, vs) vs' -> (s, vs ++ vs')) <$> paren funlhs <*> some apat
-funrhs = guards "="
+funrhs = gdSep "="
 def = (\(s, vs) x -> (s, Pa [(vs, x)])) <$> funlhs <*> funrhs
 coalesce = \case
   [] -> []
