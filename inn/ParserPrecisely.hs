@@ -439,14 +439,15 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some (res "|" *> guard)
-  where
-  guard = guardExpr <$> expr <*> (res s *> expr)
-    <|> guardPat <$> pat <*> (res "<-" *> expr) <*> (res s *> expr)
-  guardExpr x y rest = case x of
-    V "True" -> y
-    _ -> A (A (A (V "if") x) y) rest
-  guardPat p x y rest = encodeCase x [(p, y), (PatVar "_" Nothing, rest)]
+gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some (between (res "|") (res s) guards <*> expr)
+guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
+guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
+  <|> guardLets <$> (res "let" *> braceDef)
+guardExpr x yes no = case x of
+  V "True" -> yes
+  _ -> A (A (A (V "if") x) yes) no
+guardPat p x yes no = encodeCase x [(p, yes), (PatVar "_" Nothing, no)]
+guardLets defs yes no = addLets defs yes
 
 onePat vs x = Pa [(vs, x)]
 leftyPat p expr = case pvars of
