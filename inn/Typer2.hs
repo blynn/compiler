@@ -233,7 +233,7 @@ inferno tycl typed defmap syms = let
     (psn, a) <- prove tycl psn a
     pure ((s, (t, a)):acc, psn)
   in do
-    (stas, (soln, _)) <- foldM principal ([], ([], 0)) syms
+    (stas, (soln, _)) <- foldM principal ([], (Tip, 0)) syms
     stas <- pure $ second (typeAstSub soln) <$> stas
     (stas, (ps, _)) <- foldM gatherPreds ([], ([], 0)) $ second (typeAstSub soln) <$> stas
     let
@@ -272,7 +272,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed 
           let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
           expr <- snd <$> linker (patternCompile dcs rawExpr)
           (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-            $ infer typed [] expr ([], 0)
+            $ infer typed [] expr (Tip, 0)
           let
             (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool

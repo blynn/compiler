@@ -85,13 +85,11 @@ fvPro bound expr = case expr of
   Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
   _ -> []
 
-overFree s f t = case t of
+beta s a t = case t of
   E _ -> t
-  V s' -> if s == s' then f t else t
-  A x y -> A (overFree s f x) (overFree s f y)
-  L s' t' -> if s == s' then t else L s' $ overFree s f t'
-
-beta s t x = overFree s (const t) x
+  V v -> if s == v then a else t
+  A x y -> A (beta s a x) (beta s a y)
+  L v u -> if s == v then t else L v $ beta s a u
 
 typeVars = \case
   TC _ -> []

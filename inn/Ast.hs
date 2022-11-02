@@ -59,12 +59,6 @@ fvPro bound expr = case expr of
   Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
   _ -> []
 
-overFree s f t = case t of
-  E _ -> t
-  V s' -> if s == s' then f t else t
-  A x y -> A (overFree s f x) (overFree s f y)
-  L s' t' -> if s == s' then t else L s' $ overFree s f t'
-
 overFreePro s f t = case t of
   E _ -> t
   V s' -> if s == s' then f t else t
@@ -72,7 +66,11 @@ overFreePro s f t = case t of
   L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
   Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
 
-beta s t x = overFree s (const t) x
+beta s a t = case t of
+  E _ -> t
+  V v -> if s == v then a else t
+  A x y -> A (beta s a x) (beta s a y)
+  L v u -> if s == v then t else L v $ beta s a u
 
 showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
 showInt n = if 0 == n then ('0':) else showInt' n

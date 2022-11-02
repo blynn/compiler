@@ -19,12 +19,12 @@ dumpLambs neat = map (\(s, t) -> (s++) . (" = "++) . shows t . ('\n':)) $ second
 dumpTypes neat = map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ second fst <$> toAscList (typedAsts neat)
 
 dumpRawCombs neat = map go combs where
-  rawCombs = optim . nolam . snd <$> typedAsts neat
+  rawCombs = nolam . snd <$> typedAsts neat
   combs = toAscList $ rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 dumpCombs neat = map go combs where
-  rawCombs = optim . nolam . snd <$> typedAsts neat
+  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 

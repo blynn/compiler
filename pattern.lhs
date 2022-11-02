@@ -241,6 +241,10 @@ body, but this is imperfect because of the `Pa` value that may appear during
 thus our count is wrong if the variable is later eliminated when rewriting the
 `Pa` value.
 
+For a less outlandish algorithm, see Peyton Jones,
+https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
+Implementation of Functional Programming Languages'], Chapter 5.
+
 ++++++++++
 <p><a onclick='hideshow("patty");'>&#9654; Toggle `patty.hs`</a></p>
 <div id='patty' style='display:none'>
