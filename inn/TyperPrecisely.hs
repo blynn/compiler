@@ -196,7 +196,7 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-data Infer a = Infer { unInfer :: (([(String, Type)], Int) -> Either String (a, ([(String, Type)], Int))) }
+data Infer a = Infer { unInfer :: (Map String Type, Int) -> Either String (a, (Map String Type, Int)) }
 
 instance Functor Infer where
   fmap f = \(Infer h) -> Infer $ fmap (first f) . h
@@ -388,7 +388,7 @@ inferno searcher decls typed defmap syms = let
     (psn, a) <- prove searcher psn a
     pure ((s, (t, a)):acc, psn)
   in do
-    ((stas, preds), (soln, _)) <- foldM principal (([], []), ([], 0)) syms
+    ((stas, preds), (soln, _)) <- foldM principal (([], []), (Tip, 0)) syms
     let ps = zip preds $ ("anno*"++) . show <$> [0..]
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
@@ -436,7 +436,7 @@ inferTypeclasses searcher ienv typed = foldM perClass typed $ toAscList ienv whe
           let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
           expr <- snd <$> patternCompile searcher rawExpr
           (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-            $ infer s typed [] expr ([], 0)
+            $ infer s typed [] expr (Tip, 0)
           qc <- typeOfMethod searcher s
           let
             (tx, ax) = typeAstSub sub ta
