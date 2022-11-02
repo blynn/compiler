@@ -223,16 +223,35 @@ getConstraints = Infer \csn@(cs, _) -> Right (cs, csn)
 putConstraints cs = Infer \(_, n) -> Right ((), (cs, n))
 getFreshVar = Infer \csn@(cs, n) -> Right (TV $ show n, (cs, n + 1))
 
-maybeFix s x = if elem s $ fvPro [] x then A (E $ Basic "Y") (L s x) else x
+maybeFix s x = if go x then A (E $ Basic "Y") (L s x) else x where
+  go = \case
+    V v -> s == v
+    A x y -> go x || go y
+    L v x -> s /= v && go x
+    _ -> False
 
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
+del x = \case
+  [] -> []
+  h:t -> if h == x then t else h:del x t
+
+findFree vs t = case vs of
+  [] -> []
+  _ -> case t of
+    V v | v `elem` vs -> [v]
+    A x y -> case findFree vs x of
+      [] -> findFree vs y
+      xs -> findFree (vs \\ xs) y ++ xs
+    L s t -> findFree (del s vs) t
+    _ -> []
+
 triangulate tab x = foldr triangle x components where
   vs = fst <$> tab
-  ios = foldr (\(s, dsts) (ins, outs) ->
+  ios = foldr (\(s, t) (ins, outs) -> let dsts = findFree vs t in
     (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
-    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) tab
+    (Tip, Tip) tab
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
   triangle names expr = let
     tnames = nonemptyTails names
@@ -363,12 +382,12 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-forFree cond f t = go [] t where
-  go bound t = case t of
+forFree syms f t = go syms t where
+  go syms t = case t of
     E _ -> t
-    V s -> if (not $ s `elem` bound) && cond s then f t else t
-    A x y -> A (go bound x) (go bound y)
-    L s t' -> L s $ go (s:bound) t'
+    V s -> if s `elem` syms then f t else t
+    A x y -> A (go syms x) (go syms y)
+    L s t' -> L s $ go (del s syms) t'
 
 inferno searcher decls typed defmap syms = let
   anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
@@ -394,7 +413,7 @@ inferno searcher decls typed defmap syms = let
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
     let
       applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t,
-        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts)
+        foldr L (forFree syms (\t -> foldl A t $ V <$> dicts)
           $ foldr (uncurry beta) a subs) dicts))
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 

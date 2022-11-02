@@ -164,6 +164,7 @@ lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
+xs \\ ys = filter (not . (`elem` ys)) xs
 last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
 init (x:xt) = case xt of [] -> []; _ -> x : init xt
 intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
