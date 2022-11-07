@@ -231,8 +231,7 @@ Our pattern rewriting algorithm sets `pjoin#` to `fail#`, that is, if none of
 the given patterns match, then the program exits. Our case rewriting algorithm
 subverts this by inserting a catch-all case that calls `cjoin#` before calling
 the pattern rewriting algorithm, so that instead of exiting, we examine the
-next batch of case patterns. We can probably refactor so that only one type of
-join point is needed, but for now we press on.
+next batch of case patterns.
 
 We try to avoid dead code with the `optiApp` helper which beta-reduces
 applications of lambdas where the bound variable appears at most once in the
@@ -240,6 +239,28 @@ body, but this is imperfect because of the `Pa` value that may appear during
 `Ca` rewrites: we look for the bound variable before rewriting the `Pa` value,
 thus our count is wrong if the variable is later eliminated when rewriting the
 `Pa` value.
+
+It somehow all works, but it's a mess. I had forged ahead thinking it was easy
+to implement due to my familiarity with case expressions and patterns. Only
+afterwards did I realize how wrong I was:
+
+  * There should be only one kind of node that stores case expressions and
+  pattern matches, and it should always be rewritten as a case expression
+  so more efficient code has a chance to be generated.
+
+  * We use `cjoin#` and `pjoin#` (and later `gjoin#`) to protect various parts
+  of a lambda term from each other, otherwise unwanted shadowing arises in
+  certain cases. Can we simplify? Perhaps we should set the join point of last
+  resort at a higher level. A `Pa` at the top-level would set it to a failure
+  routine. Lower levels would use the existing value so on a failed match we
+  wind up with the previous level's recovery function.
+
+  * Our `beta` function should be renamed, as it really fills in a hole of a
+  context, that is, it substitutes but does nothing to prevent variable
+  capture. We get away with this because we unshadow variables during
+  type-checking except for join point variables, where we rely on carefully
+  chosen join point names and the way our pattern rewriting algorithm works.
+  Something to bear in mind if we experiment with different approaches.
 
 For a less outlandish algorithm, see Peyton Jones,
 https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The

@@ -260,3 +260,30 @@ include::inn/SystemWasm.hs[]
 ++++++++++
 </div>
 ++++++++++
+
+== Messy ==
+
+By now, we're painfully aware of the effects of rash decisions made while
+writing our earlier compilers. Compilation time has grown rapidly. Parts of the
+code are difficult to extend.
+
+I'm cleaning up the `precisely` compiler first, and intend to backport the
+changes later, so the journey will look smoother. Until then, the evolution
+of our compiler will appear jumpy.
+
+Examples:
+
+  * Built-in primitives were once in their own `#` module. This was replaced by
+  code that pre-defined them for every module. But now I think I was right the
+  first time, and I've changed `precisely` back to the original scheme.
+
+  * I now feel the `Ca` data constructor was a mistake. The `Pa` data
+  constructor can handle case expressions.
+
+  * Rewriting let expressions as lambda terms should happen after
+  type-checking, so that type annotations are easier to handle.
+
+  * Some library-like functions like `overFree` should be scrapped because
+  they're only used once.
+
+Also, introducing features in a different order may smooth the journey.

@@ -446,7 +446,7 @@ guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
 guardExpr x yes no = case x of
   V "True" -> yes
   _ -> A (A (A (V "if") x) yes) no
-guardPat p x yes no = encodeCase x [(p, yes), (PatVar "_" Nothing, no)]
+guardPat p x yes no = A (L "gjoin#" $ A (Pa [([p], yes), ([PatVar "_" Nothing], V "gjoin#")]) x) no
 guardLets defs yes no = addLets defs yes
 
 onePat vs x = Pa [(vs, x)]
@@ -460,7 +460,7 @@ funlhs = (\x o y -> (o, [x, y])) <$> pat <*> varSym <*> pat
   <|> liftA2 (,) var (many apat)
   <|> (\(s, vs) vs' -> (s, vs ++ vs')) <$> paren funlhs <*> some apat
 funrhs = gdSep "="
-def = (\(s, vs) x -> (s, Pa [(vs, x)])) <$> funlhs <*> funrhs
+def = (\(s, vs) x -> (s, onePat vs x)) <$> funlhs <*> funrhs
 coalesce = \case
   [] -> []
   h@(s, x):t -> case t of
