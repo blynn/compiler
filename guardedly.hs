@@ -676,29 +676,17 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
     if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs;
 
-unpat dcs n as t = case as of
-  { [] -> (t, n)
-  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ let
-    { go n p x = case p of
-      { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "pjoin#"
-      ; PatVar s m -> maybe (unpat dcs (n + 1) at) (\p1 x1 -> go (n + 1) p1 x1) m $ beta s (V freshv) x
-      ; PatCon con args -> case mlookup con dcs of
-        { Nothing -> error "bad data constructor"
-        ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
-        }
-      }
-    } in go n a t
-  };
-
-unpatTop dcs n als x = case als of
+unpat dcs n als x = case als of
   { [] -> (x, n)
   ; (a, l):alt -> let
     { go p t = case p of
-      { PatPred pre -> unpatTop dcs n alt $ A (A (A pre $ V l) t) $ V "pjoin#"
-      ; PatVar s m -> maybe (unpatTop dcs n alt) go m $ beta s (V l) t
+      { PatPred pre -> unpat dcs n alt $ A (A (A pre $ V l) t) $ V "pjoin#"
+      ; PatVar s m -> maybe (unpat dcs n alt) go m $ beta s (V l) t
       ; PatCon con args -> case mlookup con dcs of
         { Nothing -> error "bad data constructor"
-        ; Just cons -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ singleOut con cons (V l) y
+        ; Just cons -> let { als = zip args $ ($ "#") . showInt <$> upFrom n }
+          in fpair (unpat dcs (n + length args) als t)
+            \y n2 -> unpat dcs n2 alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
         }
       }
     } in go a x
@@ -711,7 +699,7 @@ rewriteGuard join gs = foldr (\(cond, x) acc -> case cond of
 
 rewritePats' dcs asxs ls n = case asxs of
   { [] -> (V "fail#", n)
-  ; (as, gs):asxt -> fpair (unpatTop dcs n (zip as ls) $ rewriteGuard "pjoin#" gs) \y n1 ->
+  ; (as, gs):asxt -> fpair (unpat dcs n (zip as ls) $ rewriteGuard "pjoin#" gs) \y n1 ->
     first (A $ L "pjoin#" y) $ rewritePats' dcs asxt ls n1
   };
 

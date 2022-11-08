@@ -31,31 +31,25 @@ singleOut s cs = \scrutinee x ->
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
-unpat dcs as t = case as of
-  [] -> pure t
-  a:at -> get >>= \n -> put (n + 1) >> let freshv = showInt n "#" in L freshv <$> let
-    go p x = case p of
-      PatLit lit -> unpat dcs at $ patEq lit (V freshv) x $ V "pjoin#"
-      PatVar s m -> maybe (unpat dcs at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
-      PatCon con args -> case findCon dcs con of
-        Nothing -> error "bad data constructor"
-        Just cons -> unpat dcs args x >>= \y -> unpat dcs at $ singleOut con cons (V freshv) y
-    in go a t
-
-unpatTop dcs als x = case als of
+unpat dcs als x = case als of
   [] -> pure x
   (a, l):alt -> let
     go p t = case p of
-      PatLit lit -> unpatTop dcs alt $ patEq lit (V l) t $ V "pjoin#"
-      PatVar s m -> maybe (unpatTop dcs alt) go m $ beta s (V l) t
+      PatLit lit -> unpat dcs alt $ patEq lit (V l) t $ V "pjoin#"
+      PatVar s m -> maybe (unpat dcs alt) go m $ beta s (V l) t
       PatCon con args -> case findCon dcs con of
         Nothing -> error "bad data constructor"
-        Just cons -> unpat dcs args t >>= \y -> unpatTop dcs alt $ singleOut con cons (V l) y
+        Just cons -> do
+          n <- get
+          let als = zip args $ ($ "#") . showInt <$> [n..]
+          put $ n + length args
+          y <- unpat dcs als t
+          unpat dcs alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
     in go a x
 
 rewritePats' dcs asxs ls = case asxs of
   [] -> pure $ V "fail#"
-  (as, t):asxt -> unpatTop dcs (zip as ls) t >>=
+  (as, t):asxt -> unpat dcs (zip as ls) t >>=
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
 
 rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let

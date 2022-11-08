@@ -14,31 +14,25 @@ singleOut s q cs = \scrutinee x ->
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
-unpat searcher as t = case as of
-  [] -> pure t
-  a:at -> get >>= \n -> put (n + 1) >> let freshv = shows n "#" in L freshv <$> let
-    go p x = case p of
-      PatLit lit -> unpat searcher at $ patEq lit (V freshv) x $ V "pjoin#"
-      PatVar s m -> maybe (unpat searcher at) (\p1 x1 -> go p1 x1) m $ beta s (V freshv) x
-      PatCon con args -> case findCon searcher con of
-        Left e -> error e
-        Right (q, cons) -> unpat searcher args x >>= \y -> unpat searcher at $ singleOut con q cons (V freshv) y
-    in go a t
-
-unpatTop searcher als x = case als of
+unpat searcher als x = case als of
   [] -> pure x
   (a, l):alt -> let
     go p t = case p of
-      PatLit lit -> unpatTop searcher alt $ patEq lit (V l) t $ V "pjoin#"
-      PatVar s m -> maybe (unpatTop searcher alt) go m $ beta s (V l) t
+      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "pjoin#"
+      PatVar s m -> maybe (unpat searcher alt) go m $ beta s (V l) t
       PatCon con args -> case findCon searcher con of
         Left e -> error e
-        Right (q, cons) -> unpat searcher args t >>= \y -> unpatTop searcher alt $ singleOut con q cons (V l) y
+        Right (q, cons) -> do
+          n <- get
+          let als = zip args $ ($ "#") . shows <$> [n..]
+          put $ n + length args
+          y <- unpat searcher als t
+          unpat searcher alt $ singleOut con q cons (V l) $ foldr L y $ snd <$> als
     in go a x
 
 rewritePats' searcher asxs ls = case asxs of
   [] -> pure $ V "fail#"
-  (as, t):asxt -> unpatTop searcher (zip as ls) t >>=
+  (as, t):asxt -> unpat searcher (zip as ls) t >>=
     \y -> A (L "pjoin#" y) <$> rewritePats' searcher asxt ls
 
 rewritePats searcher vsxs@((vs0, _):_) = get >>= \n -> let

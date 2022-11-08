@@ -732,27 +732,17 @@ singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\c' -> case c' of { Constr s' ts ->
     ife (s == s') x $ foldr L (V "patjoin#") $ map (const "_") ts }) cs;
 
-unpat dcs n as x = case as of
-  { [] -> (x, n)
-  ; a:at -> let { freshv = showInt n "#" } in first (L freshv) $ case a of
-    { PatPred pre -> unpat dcs (n + 1) at $ A (A (A pre $ V freshv) x) $ V "patjoin#"
-    ; PatVar s m -> maybe id (error "TODO") m $ unpat dcs (n + 1) at $ beta s (V freshv) x
-    ; PatCon con args -> case lookup con dcs of
-      { Nothing -> error "bad data constructor"
-      ; Just cons -> fpair (unpat dcs (n + 1) args x) \y n1 -> unpat dcs n1 at $ singleOut con cons (V freshv) y
-      }
-    }
-  };
-
-unpatTop dcs n als x = case als of
+unpat dcs n als x = case als of
   { [] -> (x, n)
   ; al:alt -> fpair al \a l -> let
     { go p t = case p of
-      { PatPred pre -> unpatTop dcs n alt $ A (A (A pre $ V l) t) $ V "patjoin#"
-      ; PatVar s m -> maybe (unpatTop dcs n alt) go m $ beta s (V l) t
+      { PatPred pre -> unpat dcs n alt $ A (A (A pre $ V l) t) $ V "patjoin#"
+      ; PatVar s m -> maybe (unpat dcs n alt) go m $ beta s (V l) t
       ; PatCon con args -> case lookup con dcs of
         { Nothing -> error "bad data constructor"
-        ; Just cons -> fpair (unpat dcs n args t) \y n1 -> unpatTop dcs n1 alt $ singleOut con cons (V l) y
+        ; Just cons -> let { als = zip args $ ($ "#") . showInt <$> upFrom n }
+          in fpair (unpat dcs (n + length args) als t)
+            \y n2 -> unpat dcs n2 alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
         }
       }
     } in go a x
@@ -760,7 +750,7 @@ unpatTop dcs n als x = case als of
 
 rewritePats' dcs asxs ls n = case asxs of
   { [] -> (A (V "unsafePerformIO") (V "exitSuccess"), n)
-  ; (:) asx asxt -> fpair asx \as x -> fpair (unpatTop dcs n (zip as ls) x) \y n1 ->
+  ; (:) asx asxt -> fpair asx \as x -> fpair (unpat dcs n (zip as ls) x) \y n1 ->
     first (optiApp "patjoin#" y) $ rewritePats' dcs asxt ls n1
   };
 

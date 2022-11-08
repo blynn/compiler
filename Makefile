@@ -22,8 +22,6 @@ define rtsup
 $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
-$(call rtsup,internally,uniquely)
-
 $(call rtsup,patty,lonely)
 $(call rtsup,guardedly,patty)
 $(call rtsup,assembly,guardedly)
