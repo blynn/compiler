@@ -25,43 +25,35 @@ instance Show IntTree where
 
 lf = Lf . Basic
 
-ldef y = case y of
-  Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
-  Closed d -> Need $ Closed (Nd (lf "T") d)
-  Need e -> Need $ (Closed (Nd (lf "S") (lf "I"))) ## e
-  Weak e -> Need $ (Closed (lf "T")) ## e
-
-lclo d y = case y of
-  Defer -> Need $ Closed d
-  Closed dd -> Closed $ Nd d dd
-  Need e -> Need $ (Closed (Nd (lf "B") d)) ## e
-  Weak e -> Weak $ (Closed d) ## e
-
-lnee e y = case y of
-  Defer -> Need $ Closed (lf "S") ## e ## Closed (lf "I")
-  Closed d -> Need $ Closed (Nd (lf "R") d) ## e
-  Need ee -> Need $ Closed (lf "S") ## e ## ee
-  Weak ee -> Need $ Closed (lf "C") ## e ## ee
-
-lwea e y = case y of
-  Defer -> Need e
-  Closed d -> Weak $ e ## Closed d
-  Need ee -> Need $ (Closed (lf "B")) ## e ## ee
-  Weak ee -> Weak $ e ## ee
-
 x ## y = case x of
-  Defer -> ldef y
-  Closed d -> lclo d y
-  Need e -> lnee e y
-  Weak e -> lwea e y
+  Defer -> case y of
+    Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
+    Closed d -> Need $ Closed (Nd (lf "T") d)
+    Need e -> Need $ Closed (Nd (lf "S") (lf "I")) ## e
+    Weak e -> Need $ Closed (lf "T") ## e
+  Closed d -> case y of
+    Defer -> Need $ Closed d
+    Closed dd -> Closed $ Nd d dd
+    Need e -> Need $ Closed (Nd (lf "B") d) ## e
+    Weak e -> Weak $ Closed d ## e
+  Need e -> case y of
+    Defer -> Need $ Closed (lf "S") ## e ## Closed (lf "I")
+    Closed d -> Need $ Closed (Nd (lf "R") d) ## e
+    Need ee -> Need $ Closed (lf "S") ## e ## ee
+    Weak ee -> Need $ Closed (lf "C") ## e ## ee
+  Weak e -> case y of
+    Defer -> Need e
+    Closed d -> Weak $ e ## Closed d
+    Need ee -> Need $ Closed (lf "B") ## e ## ee
+    Weak ee -> Weak $ e ## ee
 
 babs t = case t of
   Ze -> Defer
-  Su x -> Weak (babs x)
+  Su x -> Weak $ babs x
   Pass x -> Closed x
   La t -> case babs t of
-    Defer -> Closed (lf "I")
-    Closed d -> Closed (Nd (lf "K") d)
+    Defer -> Closed $ lf "I"
+    Closed d -> Closed $ Nd (lf "K") d
     Need e -> e
     Weak e -> Closed (lf "K") ## e
   App x y -> babs x ## babs y
