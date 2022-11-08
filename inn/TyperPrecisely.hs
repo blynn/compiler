@@ -31,9 +31,11 @@ unpat searcher als x = case als of
     in go a x
 
 rewritePats' searcher asxs ls = case asxs of
-  [] -> pure $ V "fail#"
+  [] -> error "empty Pa"
   (as, t):asxt -> unpat searcher (zip as ls) t >>=
-    \y -> A (L "pjoin#" y) <$> rewritePats' searcher asxt ls
+    \y -> case asxt of
+      [] -> pure y
+      _ -> A (L "pjoin#" y) <$> rewritePats' searcher asxt ls
 
 rewritePats searcher vsxs@((vs0, _):_) = get >>= \n -> let
   ls = map (`shows` "#") $ take (length vs0) [n..]
@@ -46,21 +48,21 @@ classifyAlt v x = case v of
 
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-genCase searcher tab = if size tab == 0 then id else A . L "cjoin#" $ let
+genCase searcher tab = if size tab == 0 then id else A . L "pjoin#" $ let
   firstC = case toAscList tab of ((con, _):_) -> con
   -- TODO: Check rest of `tab` lies in cs.
   (q, cs) = either error id $ findCon searcher firstC
   in foldl A (scottCase q $ V "of")
     $ map (\(Constr s ts) -> case mlookup s tab of
-      Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
-      Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "cjoin#")]
+      Nothing -> foldr L (V "pjoin#") $ const "_" <$> ts
+      Just f -> Pa $ f []
     ) cs
 
 updateCaseSt searcher (acc, tab) alt = case alt of
   Left f -> (acc . genCase searcher tab . f, Tip)
   Right upd -> (acc, upd tab)
 
-rewriteCase searcher as = acc . genCase searcher tab $ V "fail#" where
+rewriteCase searcher as = acc . genCase searcher tab $ V "pjoin#" where
   (acc, tab) = foldl (updateCaseSt searcher) (id, Tip) $ uncurry classifyAlt <$> as
 
 resolveFieldBinds searcher t = go t where
@@ -161,7 +163,7 @@ patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ eval
   go t = case t of
     E _ -> pure t
     V _ -> pure t
-    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
+    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . (`A` (V "fail#")) . L "pjoin#" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
@@ -509,6 +511,7 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("pjoin#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     , ("normalizeInt", (arr (TC "Int") (arr (TV "a") (TV "a")), A (A (ro "C") (ro "B")) (ro "K")))
     , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
     , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))

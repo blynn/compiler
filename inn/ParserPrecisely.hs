@@ -446,7 +446,7 @@ guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
 guardExpr x yes no = case x of
   V "True" -> yes
   _ -> A (A (A (V "if") x) yes) no
-guardPat p x yes no = A (L "gjoin#" $ A (Pa [([p], yes), ([PatVar "_" Nothing], V "gjoin#")]) x) no
+guardPat p x yes no = A (Pa [([p], yes), ([PatVar "_" Nothing], no)]) x
 guardLets defs yes no = addLets defs yes
 
 onePat vs x = Pa [(vs, x)]
