@@ -41,29 +41,32 @@ rewritePats searcher vsxs@((vs0, _):_) = get >>= \n -> let
   ls = map (`shows` "#") $ take (length vs0) [n..]
   in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' searcher vsxs ls
 
-classifyAlt v x = case v of
-  PatLit lit -> Left $ patEq lit (V "of") x
-  PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
-  PatCon con args -> Right (insertWith (flip (.)) con ((args, x):))
-
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-genCase searcher tab = if size tab == 0 then id else A . L "pjoin#" $ let
-  firstC = case toAscList tab of ((con, _):_) -> con
-  -- TODO: Check rest of `tab` lies in cs.
-  (q, cs) = either error id $ findCon searcher firstC
-  in foldl A (scottCase q $ V "of")
-    $ map (\(Constr s ts) -> case mlookup s tab of
-      Nothing -> foldr L (V "pjoin#") $ const "_" <$> ts
-      Just f -> Pa $ f []
-    ) cs
-
-updateCaseSt searcher (acc, tab) alt = case alt of
-  Left f -> (acc . genCase searcher tab . f, Tip)
-  Right upd -> (acc, upd tab)
-
-rewriteCase searcher as = acc . genCase searcher tab $ V "pjoin#" where
-  (acc, tab) = foldl (updateCaseSt searcher) (id, Tip) $ uncurry classifyAlt <$> as
+rewriteCase searcher tab = \case
+  [] -> flush $ V "pjoin#"
+  ((v, x):rest) -> go v x rest
+  where
+  go v x rest = case v of
+    PatLit lit -> do
+      y <- rewriteCase searcher Tip rest
+      flush $ patEq lit (V "of") x y
+    PatVar s m -> let x' = A (L s x) (V "of") in case m of
+      Nothing -> do
+        y <- rewriteCase searcher Tip rest
+        flush $ A (L "pjoin#" x') y
+      Just v' -> go v' x' rest
+    PatCon con args -> rewriteCase searcher (insertWith (flip (.)) con ((args, x):) tab) rest
+  flush onFail = case toAscList tab of
+    [] -> pure onFail
+    -- TODO: Check rest of `tab` lies in cs.
+    (firstC, _):_ -> do
+      let (q, cs) = either error id $ findCon searcher firstC
+      jumpTable <- mapM (\(Constr s ts) -> case mlookup s tab of
+          Nothing -> pure $ foldr L (V "pjoin#") $ const "_" <$> ts
+          Just f -> rewritePats searcher $ f []
+        ) cs
+      pure $ A (L "pjoin#" $ foldl A (scottCase q $ V "of") jumpTable) onFail
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
@@ -163,7 +166,9 @@ patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ eval
   go t = case t of
     E _ -> pure t
     V _ -> pure t
-    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . (`A` (V "fail#")) . L "pjoin#" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
+    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in do
+      caseExpr <- rewriteCase searcher Tip =<< mapM (secondM go) as
+      A (L "of" $ A (L "pjoin#" caseExpr) $ V "fail#") <$> go x
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
