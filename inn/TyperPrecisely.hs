@@ -14,49 +14,49 @@ singleOut s q cs = \scrutinee x ->
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
+freshVars k = do
+  n <- get
+  put $ n + k
+  pure $ (`shows` "#") <$> [n..n + k - 1]
+
 unpat searcher als x = case als of
   [] -> pure x
-  (a, l):alt -> let
+  (a, l):alt -> go a x where
     go p t = case p of
       PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "pjoin#"
       PatVar s m -> maybe (unpat searcher alt) go m $ beta s (V l) t
       PatCon con args -> case findCon searcher con of
         Left e -> error e
         Right (q, cons) -> do
-          n <- get
-          let als = zip args $ ($ "#") . shows <$> [n..]
-          put $ n + length args
-          y <- unpat searcher als t
-          unpat searcher alt $ singleOut con q cons (V l) $ foldr L y $ snd <$> als
-    in go a x
+          vs <- freshVars $ length args
+          y <- unpat searcher (zip args vs) t
+          unpat searcher alt $ singleOut con q cons (V l) $ foldr L y vs
 
-rewritePats' searcher asxs ls = case asxs of
-  [] -> error "empty Pa"
-  (as, t):asxt -> unpat searcher (zip as ls) t >>=
-    \y -> case asxt of
-      [] -> pure y
-      _ -> A (L "pjoin#" y) <$> rewritePats' searcher asxt ls
-
-rewritePats searcher vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (`shows` "#") $ take (length vs0) [n..]
-  in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' searcher vsxs ls
+rewritePats searcher = \case
+  [] -> pure $ V "pjoin#"
+  [(as, x)] -> do
+    vs <- freshVars $ length as
+    flip (foldr L) vs <$> unpat searcher (zip as vs) x
+  several@((as0, _):_) -> case as0 of
+    [] -> pure $ foldr1 (A . L "pjoin#") $ snd <$> several
+    _ -> do
+      vs <- freshVars $ length as0
+      cs <- forM several \(a:at, x) -> (a,) <$> unpat searcher (zip at $ tail vs) x
+      flip (foldr L) vs <$> rewriteCase (head vs) searcher Tip cs
 
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-rewriteCase searcher tab = \case
+rewriteCase caseVar searcher tab = \case
   [] -> flush $ V "pjoin#"
   ((v, x):rest) -> go v x rest
   where
+  rec = rewriteCase caseVar searcher
   go v x rest = case v of
-    PatLit lit -> do
-      y <- rewriteCase searcher Tip rest
-      flush $ patEq lit (V "of") x y
-    PatVar s m -> let x' = A (L s x) (V "of") in case m of
-      Nothing -> do
-        y <- rewriteCase searcher Tip rest
-        flush $ A (L "pjoin#" x') y
+    PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
+    PatVar s m -> let x' = beta s (V caseVar) x in case m of
+      Nothing -> flush =<< A (L "pjoin#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
-    PatCon con args -> rewriteCase searcher (insertWith (flip (.)) con ((args, x):) tab) rest
+    PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
   flush onFail = case toAscList tab of
     [] -> pure onFail
     -- TODO: Check rest of `tab` lies in cs.
@@ -66,7 +66,7 @@ rewriteCase searcher tab = \case
           Nothing -> pure $ foldr L (V "pjoin#") $ const "_" <$> ts
           Just f -> rewritePats searcher $ f []
         ) cs
-      pure $ A (L "pjoin#" $ foldl A (scottCase q $ V "of") jumpTable) onFail
+      pure $ A (L "pjoin#" $ foldl A (scottCase q $ V caseVar) jumpTable) onFail
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
@@ -166,9 +166,6 @@ patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ eval
   go t = case t of
     E _ -> pure t
     V _ -> pure t
-    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in do
-      caseExpr <- rewriteCase searcher Tip =<< mapM (secondM go) as
-      A (L "of" $ A (L "pjoin#" caseExpr) $ V "fail#") <$> go x
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
@@ -257,8 +254,8 @@ triangulate tab x = foldr triangle x components where
   triangle names expr = let
     tnames = nonemptyTails names
     appem vs = foldl1 A $ V <$> vs
-    suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
-    redef tns expr = foldr L (suball expr) tns
+    suball x = foldl A (foldr L x $ init names) $ appem <$> init tnames
+    redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
 decodeLets x = ((vts, bods), expr) where

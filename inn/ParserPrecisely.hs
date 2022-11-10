@@ -281,12 +281,15 @@ res w
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
 
+joinIsFail t = A (L "pjoin#" t) (V "fail#")
+encodeCase x alts = joinIsFail $ A (Pa $ first (:[]) <$> alts) x
+
 addLets ls x = A (E $ Basic "let") $ foldr encodeVar bodies vts where
   encodeVar (v, m) rest = case m of
     Nothing -> L v rest
     Just q -> A (L v rest) (E $ XQual q)
   vts = second snd <$> ls
-  xs = fst . snd <$> ls
+  xs = joinIsFail . fst . snd <$> ls
   bodies = A (E $ Basic "in") $ foldr A x xs
 
 op = conSym <|> varSym <|> between backquote backquote (conId <|> varId)
@@ -350,10 +353,10 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = braceSep $ (,) <$> pat <*> gdSep "->"
 cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
-lamCase = curlyCheck (res "case") *> (L "\\case" . encodeCase (V "\\case") <$> alts)
+lamCase = curlyCheck (res "case") *> (joinIsFail . Pa . map (first (:[])) <$> alts)
 
 nalts = braceSep $ (,) <$> many apat <*> gdSep "->"
-lamCases = curlyCheck (res "cases") *> (Pa <$> nalts)
+lamCases = curlyCheck (res "cases") *> (joinIsFail . Pa <$> nalts)
 
 lam = res "\\" *> (lamCase <|> lamCases <|> liftA2 onePat (some apat) (res "->" *> expr))
 
@@ -449,7 +452,7 @@ guardExpr x yes no = case x of
 guardPat p x yes no = A (Pa [([p], yes), ([PatVar "_" Nothing], no)]) x
 guardLets defs yes no = addLets defs yes
 
-onePat vs x = Pa [(vs, x)]
+onePat vs x = joinIsFail $ Pa [(vs, x)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
@@ -460,7 +463,7 @@ funlhs = (\x o y -> (o, [x, y])) <$> pat <*> varSym <*> pat
   <|> liftA2 (,) var (many apat)
   <|> (\(s, vs) vs' -> (s, vs ++ vs')) <$> paren funlhs <*> some apat
 funrhs = gdSep "="
-def = (\(s, vs) x -> (s, onePat vs x)) <$> funlhs <*> funrhs
+def = (\(s, vs) x -> (s, Pa [(vs, x)])) <$> funlhs <*> funrhs
 coalesce = \case
   [] -> []
   h@(s, x):t -> case t of

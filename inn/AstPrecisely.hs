@@ -47,7 +47,7 @@ instance Show Ast where
     V s -> showVar s
     A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
     L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
-    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Pa vsts -> ("[Pa]"++) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
     Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 showType = shows  -- for Unify.
@@ -114,6 +114,3 @@ spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
 scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
-
-encodeCase x alts = A (E $ Basic "case") $ A x $ Pa $ first (:[]) <$> alts
-decodeCaseArg (A x (Pa pas)) = (x, first head <$> pas)
