@@ -194,21 +194,21 @@ addAdt t cs ders neat = foldr derive neat' ders where
     TC c -> c
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ A (Pa $ map eqCase cs) $ V "lhs"
+    [("==", Pa $ map eqCase cs
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ A (Pa $ map showCase cs) $ V "x"
+    [("showsPrec", L "prec" $ Pa $ map showCase cs
     )]
   derive der = error $ "bad deriving: " ++ der
   prec0 = A (V "ord") (E $ ChrCon '\0')
   showCase (Constr con args) = let as = show <$> [1..length args]
     in ([PatCon con $ mkPatVar "" <$> as], case args of
-      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
+      [] -> A (V "++") (E $ StrCon con)
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
           [ A (A (V "showsPrec") prec0) (V "1")
-          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
+          , A (V "++") (E $ StrCon $ ' ':con++" ")
           , A (A (V "showsPrec") prec0) (V "2")
           ]
         _ -> A (A (V "showParen") $ A (A (V "<=") prec0) $ V "prec")
@@ -219,10 +219,10 @@ addAdt t cs ders neat = foldr derive neat' ders where
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = show <$> [1..length args]
-    in ([PatCon con $ mkPatVar "l" <$> as], A (Pa
+    in ([PatCon con $ mkPatVar "l" <$> as], Pa
       [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , ([PatVar "_" Nothing], V "False")]) $ V "rhs")
+      , ([PatVar "_" Nothing], V "False")])
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) neat = if null ms then neat
