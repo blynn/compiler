@@ -194,15 +194,15 @@ addAdt t cs ders neat = foldr derive neat' ders where
     TC c -> c
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ encodeCase (V "lhs") $ map eqCase cs
+    [("==", L "lhs" $ L "rhs" $ A (Pa $ map eqCase cs) $ V "lhs"
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ encodeCase (V "x") $ map showCase cs
+    [("showsPrec", L "prec" $ L "x" $ A (Pa $ map showCase cs) $ V "x"
     )]
   derive der = error $ "bad deriving: " ++ der
   prec0 = A (V "ord") (E $ ChrCon '\0')
   showCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "" <$> as), case args of
+    in ([PatCon con $ mkPatVar "" <$> as], case args of
       [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
@@ -219,10 +219,10 @@ addAdt t cs ders neat = foldr derive neat' ders where
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), encodeCase (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+    in ([PatCon con $ mkPatVar "l" <$> as], A (Pa
+      [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , (PatVar "_" Nothing, V "False")])
+      , ([PatVar "_" Nothing], V "False")]) $ V "rhs")
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) neat = if null ms then neat
@@ -278,6 +278,8 @@ maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
+joinIsFail t = A (L "join#" t) (V "fail#")
+
 addLets ls x = foldr triangle x components where
   vs = fst <$> ls
   ios = foldr (\(s, dsts) (ins, outs) ->
@@ -289,7 +291,7 @@ addLets ls x = foldr triangle x components where
     appem vs = foldl1 A $ V <$> vs
     suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
     redef tns expr = foldr L (suball expr) tns
-    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined id $ lookup x ls) (suball expr) tnames
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined joinIsFail $ lookup x ls) (suball expr) tnames
 
 qconop = conSym <|> res ":" <|> between backquote backquote conId
 
@@ -341,9 +343,9 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> guards "->"
-cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
-lamCase = curlyCheck (res "case") *> (L "\\case" . encodeCase (V "\\case") <$> alts)
+alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> gdSep "->")
+cas = flip A <$> between (res "case") (res "of") expr <*> alts
+lamCase = curlyCheck (res "case") *> alts
 
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
@@ -423,21 +425,22 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
   _ -> A (A (A (V "if") x) y)
   ) <$> (res "|" *> expr) <*> (res s *> expr))
 
-onePat vs x = Pa [(vs, x)]
-opDef x f y rhs = [(f, onePat [x, y] rhs)]
+onePat vs x = joinIsFail $ Pa [(vs, x)]
+defOnePat vs x = Pa [(vs, x)]
+opDef x f y rhs = [(f, defOnePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, A (Pa [([p], V v)]) $ V gen)) pvars
   where
   pvars = filter (/= "_") $ patVars p
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 defOnePat (many apat) $ gdSep "=")
+  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> gdSep "=" <|> leftyPat x <$> gdSep "=")
 coalesce = \case
   [] -> []
   h@(s, x):t -> case t of

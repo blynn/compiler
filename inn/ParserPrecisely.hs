@@ -200,15 +200,15 @@ addAdt t cs ders neat = foldr derive neat' ders where
     TC c -> c
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ encodeCase (V "lhs") $ map eqCase cs
+    [("==", L "lhs" $ L "rhs" $ A (Pa $ map eqCase cs) $ V "lhs"
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ encodeCase (V "x") $ map showCase cs
+    [("showsPrec", L "prec" $ L "x" $ A (Pa $ map showCase cs) $ V "x"
     )]
   derive der = error $ "bad deriving: " ++ der
   prec0 = A (V "ord") (E $ ChrCon '\0')
   showCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "" <$> as), case args of
+    in ([PatCon con $ mkPatVar "" <$> as], case args of
       [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
@@ -225,10 +225,10 @@ addAdt t cs ders neat = foldr derive neat' ders where
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), encodeCase (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+    in ([PatCon con $ mkPatVar "l" <$> as], A (Pa
+      [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , (PatVar "_" Nothing, V "False")])
+      , ([PatVar "_" Nothing], V "False")]) $ V "rhs")
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) neat = if null ms then neat
@@ -281,8 +281,7 @@ res w
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
 
-joinIsFail t = A (L "pjoin#" t) (V "fail#")
-encodeCase x alts = joinIsFail $ A (Pa $ first (:[]) <$> alts) x
+joinIsFail t = A (L "join#" t) (V "fail#")
 
 addLets ls x = A (E $ Basic "let") $ foldr encodeVar bodies vts where
   encodeVar (v, m) rest = case m of
@@ -351,12 +350,12 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> gdSep "->"
-cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
-lamCase = curlyCheck (res "case") *> (joinIsFail . Pa . map (first (:[])) <$> alts)
+alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> gdSep "->")
+cas = flip A <$> between (res "case") (res "of") expr <*> alts
+lamCase = curlyCheck (res "case") *> alts
 
-nalts = braceSep $ (,) <$> many apat <*> gdSep "->"
-lamCases = curlyCheck (res "cases") *> (joinIsFail . Pa <$> nalts)
+nalts = joinIsFail . Pa <$> braceSep ((,) <$> many apat <*> gdSep "->")
+lamCases = curlyCheck (res "cases") *> (joinIsFail <$> nalts)
 
 lam = res "\\" *> (lamCase <|> lamCases <|> liftA2 onePat (some apat) (res "->" *> expr))
 
@@ -442,7 +441,7 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some (between (res "|") (res s) guards <*> expr)
+gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
 guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
 guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
   <|> guardLets <$> (res "let" *> braceDef)
@@ -456,7 +455,7 @@ onePat vs x = joinIsFail $ Pa [(vs, x)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, A (Pa [([p], V v)]) $ V gen)) pvars
   where
   pvars = filter (/= "_") $ patVars p
 funlhs = (\x o y -> (o, [x, y])) <$> pat <*> varSym <*> pat

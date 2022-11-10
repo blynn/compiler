@@ -29,55 +29,61 @@ optiApp t = case t of
 -- Pattern compiler.
 singleOut s cs = \scrutinee x ->
   foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
-    if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
+    if s == s' then x else foldr L (V "join#") $ map (const "_") ts) cs
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
+freshVars k = do
+  n <- get
+  put $ n + k
+  pure $ (`shows` "#") <$> [n..n + k - 1]
+
 unpat searcher als x = case als of
   [] -> pure x
-  (a, l):alt -> let
+  (a, l):alt -> go a x where
     go p t = case p of
-      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "pjoin#"
+      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "join#"
       PatVar s m -> maybe (unpat searcher alt) go m $ beta s (V l) t
       PatCon con args -> case findCon searcher con of
         Left e -> error e
         Right cons -> do
-          n <- get
-          let als = zip args $ ($ "#") . shows <$> [n..]
-          put $ n + length args
-          y <- unpat searcher als t
-          unpat searcher alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
-    in go a x
+          vs <- freshVars $ length args
+          y <- unpat searcher (zip args vs) t
+          unpat searcher alt $ singleOut con cons (V l) $ foldr L y vs
 
-rewritePats' searcher asxs ls = case asxs of
-  [] -> pure $ V "fail#"
-  (as, t):asxt -> unpat searcher (zip as ls) t >>=
-    \y -> A (L "pjoin#" y) <$> rewritePats' searcher asxt ls
+rewritePats searcher = \case
+  [] -> pure $ V "join#"
+  [(as, x)] -> do
+    vs <- freshVars $ length as
+    flip (foldr L) vs <$> unpat searcher (zip as vs) x
+  several@((as0, _):_) -> case as0 of
+    [] -> pure $ foldr1 (A . L "join#") $ snd <$> several
+    _ -> do
+      vs <- freshVars $ length as0
+      cs <- flip mapM several \(a:at, x) -> (a,) <$> unpat searcher (zip at $ tail vs) x
+      flip (foldr L) vs <$> rewriteCase (head vs) searcher Tip cs
 
-rewritePats searcher vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (`shows` "#") $ take (length vs0) [n..]
-  in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' searcher vsxs ls
-
-classifyAlt v x = case v of
-  PatLit lit -> Left $ patEq lit (V "of") x
-  PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
-  PatCon con args -> Right (insertWith (flip (.)) con ((args, x):))
-
-genCase searcher tab = if size tab == 0 then id else A . L "cjoin#" $ let
-  firstC = case toAscList tab of ((con, _):_) -> con
-  cs = either error id $ findCon searcher firstC
-  in foldl A (A (V $ specialCase cs) (V "of"))
-    $ map (\(Constr s ts) -> case mlookup s tab of
-      Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
-      Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "cjoin#")]
-    ) cs
-
-updateCaseSt searcher (acc, tab) alt = case alt of
-  Left f -> (acc . genCase searcher tab . f, Tip)
-  Right upd -> (acc, upd tab)
-
-rewriteCase searcher as = acc . genCase searcher tab $ V "fail#" where
-  (acc, tab) = foldl (updateCaseSt searcher) (id, Tip) $ uncurry classifyAlt <$> as
+rewriteCase caseVar searcher tab = \case
+  [] -> flush $ V "join#"
+  ((v, x):rest) -> go v x rest
+  where
+  rec = rewriteCase caseVar searcher
+  go v x rest = case v of
+    PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
+    PatVar s m -> let x' = beta s (V caseVar) x in case m of
+      Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
+      Just v' -> go v' x' rest
+    PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
+  flush onFail = case toAscList tab of
+    [] -> pure onFail
+    -- TODO: Check rest of `tab` lies in cs.
+    (firstC, _):_ -> do
+      let cs = either error id $ findCon searcher firstC
+      jumpTable <- mapM (\(Constr s ts) -> case mlookup s tab of
+          Nothing -> pure $ foldr L (V "join#") $ const "_" <$> ts
+          Just f -> rewritePats searcher $ f []
+        ) cs
+      pure $ A (L "join#" $ foldl A (A (V $ specialCase cs) $ V caseVar) jumpTable) onFail
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
@@ -176,7 +182,6 @@ patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searc
   go t = case t of
     E _ -> pure t
     V _ -> pure t
-    A (E (Basic "case")) ca -> let (x, as) = decodeCaseArg ca in liftA2 A (L "of" . rewriteCase searcher <$> mapM (secondM go) as >>= go) (go x)
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
     Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
@@ -383,6 +388,7 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("join#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
     , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
     , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))

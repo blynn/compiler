@@ -10,7 +10,7 @@ import Unify
 -- Pattern compiler.
 singleOut s q cs = \scrutinee x ->
   foldl A (scottCase q scrutinee) $ map (\(Constr s' ts) ->
-    if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs
+    if s == s' then x else foldr L (V "join#") $ map (const "_") ts) cs
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
@@ -23,7 +23,7 @@ unpat searcher als x = case als of
   [] -> pure x
   (a, l):alt -> go a x where
     go p t = case p of
-      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "pjoin#"
+      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "join#"
       PatVar s m -> maybe (unpat searcher alt) go m $ beta s (V l) t
       PatCon con args -> case findCon searcher con of
         Left e -> error e
@@ -33,12 +33,12 @@ unpat searcher als x = case als of
           unpat searcher alt $ singleOut con q cons (V l) $ foldr L y vs
 
 rewritePats searcher = \case
-  [] -> pure $ V "pjoin#"
+  [] -> pure $ V "join#"
   [(as, x)] -> do
     vs <- freshVars $ length as
     flip (foldr L) vs <$> unpat searcher (zip as vs) x
   several@((as0, _):_) -> case as0 of
-    [] -> pure $ foldr1 (A . L "pjoin#") $ snd <$> several
+    [] -> pure $ foldr1 (A . L "join#") $ snd <$> several
     _ -> do
       vs <- freshVars $ length as0
       cs <- forM several \(a:at, x) -> (a,) <$> unpat searcher (zip at $ tail vs) x
@@ -47,14 +47,14 @@ rewritePats searcher = \case
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
 rewriteCase caseVar searcher tab = \case
-  [] -> flush $ V "pjoin#"
+  [] -> flush $ V "join#"
   ((v, x):rest) -> go v x rest
   where
   rec = rewriteCase caseVar searcher
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
     PatVar s m -> let x' = beta s (V caseVar) x in case m of
-      Nothing -> flush =<< A (L "pjoin#" x') <$> rec Tip rest
+      Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
     PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
   flush onFail = case toAscList tab of
@@ -63,10 +63,10 @@ rewriteCase caseVar searcher tab = \case
     (firstC, _):_ -> do
       let (q, cs) = either error id $ findCon searcher firstC
       jumpTable <- mapM (\(Constr s ts) -> case mlookup s tab of
-          Nothing -> pure $ foldr L (V "pjoin#") $ const "_" <$> ts
+          Nothing -> pure $ foldr L (V "join#") $ const "_" <$> ts
           Just f -> rewritePats searcher $ f []
         ) cs
-      pure $ A (L "pjoin#" $ foldl A (scottCase q $ V caseVar) jumpTable) onFail
+      pure $ A (L "join#" $ foldl A (scottCase q $ V caseVar) jumpTable) onFail
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
@@ -513,7 +513,7 @@ prims = let
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
-    , ("pjoin#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("join#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     , ("normalizeInt", (arr (TC "Int") (arr (TV "a") (TV "a")), A (A (ro "C") (ro "B")) (ro "K")))
     , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
     , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
