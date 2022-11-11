@@ -27,47 +27,25 @@ optiApp t = case t of
   _ -> t
 
 -- Pattern compiler.
-singleOut s cs = \scrutinee x ->
-  foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
-    if s == s' then x else foldr L (V "join#") $ map (const "_") ts) cs
+rewritePats searcher = \case
+  [] -> pure $ V "join#"
+  vsxs@((as0, _):_) -> case as0 of
+    [] -> pure $ foldr1 (A . L "join#") $ snd <$> vsxs
+    _ -> do
+      let k = length as0
+      n <- get
+      put $ n + k
+      let vs = take k $ (`shows` "#") <$> [n..]
+      cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase searcher v Tip [(p, b)]) x (zip at $ tail vs)
+      flip (foldr L) vs <$> rewriteCase searcher (head vs) Tip cs
 
 patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
 
-freshVars k = do
-  n <- get
-  put $ n + k
-  pure $ (`shows` "#") <$> [n..n + k - 1]
-
-unpat searcher als x = case als of
-  [] -> pure x
-  (a, l):alt -> go a x where
-    go p t = case p of
-      PatLit lit -> unpat searcher alt $ patEq lit (V l) t $ V "join#"
-      PatVar s m -> maybe (unpat searcher alt) go m $ beta s (V l) t
-      PatCon con args -> case findCon searcher con of
-        Left e -> error e
-        Right cons -> do
-          vs <- freshVars $ length args
-          y <- unpat searcher (zip args vs) t
-          unpat searcher alt $ singleOut con cons (V l) $ foldr L y vs
-
-rewritePats searcher = \case
-  [] -> pure $ V "join#"
-  [(as, x)] -> do
-    vs <- freshVars $ length as
-    flip (foldr L) vs <$> unpat searcher (zip as vs) x
-  several@((as0, _):_) -> case as0 of
-    [] -> pure $ foldr1 (A . L "join#") $ snd <$> several
-    _ -> do
-      vs <- freshVars $ length as0
-      cs <- flip mapM several \(a:at, x) -> (a,) <$> unpat searcher (zip at $ tail vs) x
-      flip (foldr L) vs <$> rewriteCase (head vs) searcher Tip cs
-
-rewriteCase caseVar searcher tab = \case
+rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
   ((v, x):rest) -> go v x rest
   where
-  rec = rewriteCase caseVar searcher
+  rec = rewriteCase searcher caseVar
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
     PatVar s m -> let x' = beta s (V caseVar) x in case m of
