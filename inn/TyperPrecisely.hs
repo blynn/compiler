@@ -22,7 +22,7 @@ rewritePats searcher = \case
 
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
@@ -31,7 +31,7 @@ rewriteCase searcher caseVar tab = \case
   rec = rewriteCase searcher caseVar
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
-    PatVar s m -> let x' = beta s (V caseVar) x in case m of
+    PatVar s m -> let x' = fill s (V caseVar) x in case m of
       Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
     PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
@@ -390,7 +390,7 @@ inferno searcher decls typed defmap syms = let
     let
       applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t,
         foldr L (forFree syms (\t -> foldl A t $ V <$> dicts)
-          $ foldr (uncurry beta) a subs) dicts))
+          $ foldr (uncurry fill) a subs) dicts))
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
 defaultRing searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where

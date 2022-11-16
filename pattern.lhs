@@ -242,29 +242,14 @@ thus our count is wrong if the variable is later eliminated when rewriting the
 
 It somehow all works, but it's a mess. I had forged ahead thinking it was easy
 to implement due to my familiarity with case expressions and patterns. Only
-afterwards did I realize how wrong I was:
-
-  * There should be only one kind of node that stores case expressions and
-  pattern matches, and it should always be rewritten as a case expression
-  so more efficient code has a chance to be generated.
-
-  * We use `cjoin#` and `pjoin#` (and later `gjoin#`) to protect various parts
-  of a lambda term from each other, otherwise unwanted shadowing arises in
-  certain cases. Can we simplify? Perhaps we should set the join point of last
-  resort at a higher level. A `Pa` at the top-level would set it to a failure
-  routine. Lower levels would use the existing value so on a failed match we
-  wind up with the previous level's recovery function.
-
-  * Our `beta` function should be renamed, as it really fills in a hole of a
-  context, that is, it substitutes but does nothing to prevent variable
-  capture. We get away with this because we unshadow variables during
-  type-checking except for join point variables, where we rely on carefully
-  chosen join point names and the way our pattern rewriting algorithm works.
-  Something to bear in mind if we experiment with different approaches.
+afterwards did I realize how wrong I was.
 
 For a less outlandish algorithm, see Peyton Jones,
 https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
 Implementation of Functional Programming Languages'], Chapter 5.
+
+link:web.html[In a later compiler, we clean up pattern matching]. Eventually,
+we ought to backport the changes.
 
 ++++++++++
 <p><a onclick='hideshow("patty");'>&#9654; Toggle `patty.hs`</a></p>

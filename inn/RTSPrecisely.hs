@@ -346,7 +346,7 @@ freeCount v expr = case expr of
   L w t -> if v == w then 0 else freeCount v t
 app01 s x = case freeCount s x of
   0 -> const x
-  1 -> flip (beta s) x
+  1 -> flip (fill s) x
   _ -> A $ L s x
 optiApp t = case t of
   A x y -> case optiApp x of

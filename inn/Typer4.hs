@@ -17,7 +17,7 @@ freeCount v expr = case expr of
   L w t -> if v == w then 0 else freeCount v t
 app01 s x = case freeCount s x of
   0 -> const x
-  1 -> flip (beta s) x
+  1 -> flip (fill s) x
   _ -> A $ L s x
 optiApp t = case t of
   A x y -> case optiApp x of
@@ -39,7 +39,7 @@ rewritePats searcher = \case
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase searcher v Tip [(p, b)]) x (zip at $ tail vs)
       flip (foldr L) vs <$> rewriteCase searcher (head vs) Tip cs
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
@@ -48,7 +48,7 @@ rewriteCase searcher caseVar tab = \case
   rec = rewriteCase searcher caseVar
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
-    PatVar s m -> let x' = beta s (V caseVar) x in case m of
+    PatVar s m -> let x' = fill s (V caseVar) x in case m of
       Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
     PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest

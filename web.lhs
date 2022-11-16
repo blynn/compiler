@@ -277,13 +277,25 @@ Examples:
   code that pre-defined them for every module. But now I think I was right the
   first time, and I've changed `precisely` back to the original scheme.
 
-  * I now feel the `Ca` data constructor was a mistake. The `Pa` data
-  constructor can handle case expressions.
-
   * Rewriting let expressions as lambda terms should happen after
   type-checking, so that type annotations are easier to handle.
 
   * Some library-like functions like `overFree` should be scrapped because
   they're only used once.
+
+  * The `Ca` data constructor was superfluous. The `Pa` data constructor can
+  handle case expressions. In a similar vein, it turns out we only need two
+  functions to match patterns and build a jump table for more efficient
+  case expressions. Losing specialized functions does lead to slightly slower
+  compile times, but the simplicity is worth it.
+
+  * Instead of `cjoin#` and `pjoin#` to protect parts of a lambda term from
+  each other, we make it the responsibility of the caller rather than the
+  callee to set the join point. Then we can use simply `join#` everywhere.
+
+  * I renamed `beta` to `fill` as it really fills holes in a context, that is,
+  it substitutes without caring about variable capture. We get away with this
+  because we unshadow variables during type-checking except for join point
+  variables.
 
 Also, introducing features in a different order may smooth the journey.
