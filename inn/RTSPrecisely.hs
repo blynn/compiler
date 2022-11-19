@@ -48,7 +48,7 @@ void errchar(int c) {}
 void errexit() {}
 |]
 
-preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
+preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((export_name(sym)));
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 static u *mem, *altmem, *sp, *spTop, hp;
@@ -190,10 +190,10 @@ argList t = case t of
   TAp (TAp (TC "->") x) y -> x : argList y
   _ -> [t]
 
-cTypeName (TC "()") = "void"
-cTypeName (TC "Int") = "int"
-cTypeName (TC "Char") = "int"
-cTypeName _ = "int"
+cTypeName = \case
+  TC "()" -> "void"
+  TC "Word64" -> "uu"
+  _ -> "int"
 
 ffiDeclare (name, t) = let tys = argList t in (concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]++)
@@ -203,14 +203,9 @@ ffiArgs n t = case t of
   TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
   _ -> ("", ((True, t), n))
 
-needsNum t = case t of
-  TC "Int" -> True
-  TC "Char" -> True
-  _ -> False
-
-ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
-  then longDistanceCall . cont ("_K"++) . ("); break;"++)
-  else ("{u r = "++) . longDistanceCall . cont ((if needsNum ret then "app(_NUM, r)" else "r") ++) . ("); break;}\n"++)
+ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . case ret of
+  TC "()" -> longDistanceCall . cont ("_K"++) . ("); break;"++)
+  _ -> ("{u r = "++) . longDistanceCall . cont (heapify ret ('r':)) . ("); break;}\n"++)
   where
   (args, ((isPure, ret), count)) = ffiArgs 2 t
   lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
@@ -220,7 +215,7 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
 genExport ourType n = ("void f"++) . shows n . ("("++)
   . foldr (.) id (intersperse (',':) $ map declare txs)
   . ("){rts_reduce("++)
-  . foldl (\s tx -> ("app("++) . s . (',':) . heapify tx . (')':)) rt txs
+  . foldl (\s tx -> ("app("++) . s . (',':) . uncurry heapify tx . (')':)) rt txs
   . (");}\n"++)
   where
   txs = go 0 ourType
@@ -228,12 +223,16 @@ genExport ourType n = ("void f"++) . shows n . ("("++)
     TAp (TAp (TC "->") t) rest -> (t, ('x':) . shows n) : go (n + 1) rest
     _ -> []
   rt = ("root["++) . shows n . ("]"++)
-  declare (t, x) = case t of
-    TC "Word64" -> ("long long " ++) . x
-    _ -> ("u "++) . x
-  heapify (t, x) = case t of
-    TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
-    _ -> ("app(_NUM,"++) . x . (')':)
+  declare (t, x) = (cTypeName t ++) . (' ':) . x
+
+heapify t x = case t of
+  TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
+  TC "Char" -> num
+  TC "Int" -> num
+  TC "Word" -> num
+  _ -> x
+  where
+  num = ("app(_NUM,"++) . x . (')':)
 
 genArg m a = case a of
   V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
@@ -447,7 +446,7 @@ static inline void rts_init() {
 }
 
 // Export so we can later find it in the wasm binary.
-void rts_reduce(u) asm("reduce") __attribute__((visibility("default")));
+void rts_reduce(u) __attribute__((export_name("reduce")));
 |]++) . rtsReduce opts
 
 rtsReduce opts =
@@ -472,7 +471,7 @@ warts opts mods =
   . (preamble++)
   . (if "no-import" `elem` opts then ("#undef IMPORT\n#define IMPORT(m,n)\n"++) else id)
   . foldr (.) id (ffiDeclareWarts <$> toAscList ffis)
-  . ([r|void foreign(u n) asm("foreign") __attribute__((visibility("default")));|]++)
+  . ([r|void foreign(u n) asm("foreign");|]++)
   . ("void foreign(u n) {\n  switch(n) {\n" ++)
   . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
   . ("\n  }\n}\n" ++)

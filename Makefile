@@ -55,7 +55,7 @@ $(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPr
 
 $(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov1 Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
 imp.o:imp.c;$(WCC) $^ -c -o $@
-imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
+imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
 $(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify1 RTSPrecisely TyperPrecisely precisely)
@@ -75,7 +75,7 @@ WCC=clang -O3 -c --target=wasm32 -Wall
 ifeq ($(WASMLINK),)
 WASMLINK=wasm-ld
 endif
-WLD=$(WASMLINK) --export-dynamic --allow-undefined --no-entry
+WLD=$(WASMLINK) --import-undefined --no-entry
 wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
 wasm/douady.o:wasm/douady.c;$(WCC) $^ -o $@
 wasm/std.o:wasm/std.c;$(WCC) $^ -o $@

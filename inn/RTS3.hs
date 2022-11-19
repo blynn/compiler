@@ -46,7 +46,7 @@ void errchar(int c) {}
 void errexit() {}
 |]
 
-preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((visibility("default")));
+preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((export_name(sym)));
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 static u *mem, *altmem, *sp, *spTop, hp;
@@ -423,7 +423,7 @@ static inline void rts_init() {
 }
 
 // Export so we can later find it in the wasm binary.
-void rts_reduce(u) asm("reduce") __attribute__((visibility("default")));
+void rts_reduce(u) __attribute__((export_name("reduce")));
 |]++) . rtsReduce opts
 
 rtsReduce opts =
@@ -448,7 +448,7 @@ warts opts mods =
   . (preamble++)
   . (if "no-import" `elem` opts then ("#undef IMPORT\n#define IMPORT(m,n)\n"++) else id)
   . foldr (.) id (ffiDeclareWarts <$> toAscList ffis)
-  . ([r|void foreign(u n) asm("foreign") __attribute__((visibility("default")));|]++)
+  . ([r|void foreign(u n) asm("foreign");|]++)
   . ("void foreign(u n) {\n  switch(n) {\n" ++)
   . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
   . ("\n  }\n}\n" ++)
