@@ -606,3 +606,49 @@ compileModule objs (name, neat) = do
       Left ("", s) -> resolveLocal $ symtab ! s
       x -> x
   Right $ insert name (Module (neat { typedAsts = typed }) combs localmap mem) objs
+
+data MatExpr = Mat [[Bool]] | MatFree IntTree | MatExpr :@ MatExpr
+instance Show MatExpr where
+  showsPrec p = \case
+    Mat xs -> case xs of
+      [] -> ('I':)
+      _ -> ('[':) . foldr (.) (']':) (intersperse (',':) $ foldr (.) id . map (shows . fromEnum) <$> xs)
+    MatFree s -> (if p > 0 then (' ':) else id) . shows s
+    t :@ u -> showParen (p > 0) $ showsPrec 0 t . showsPrec 1 u
+
+matrixComb = snd . matrixOpt . debruijn []
+
+matrixOpt = \case
+  Ze -> ([True], Mat [])
+  Su e -> first (False:) $ matrixOpt e
+  La e -> sledL 1 e
+  App e1 e2 -> matrixOpt e1 ## matrixOpt e2
+  Pass s -> ([], MatFree s)
+  where
+  sledL n = \case
+    La e -> sledL (n + 1) e
+    e -> let
+      (g, d) = matrixOpt e
+      present = reverse $ take n (g ++ repeat False)
+      in (if and present then id else (([], Mat [present]) ##)) (drop n g, d)
+
+  ([], d1) ## ([], d2) = ([], d1 :@ d2)
+  (g1, d1) ## (g2, d2)
+    | Mat [] <- d1, Mat [] <- d2 = \cases
+      | not $ or $ last p1 : init p2 -> go $ Mat []
+      | True:False:t1 <- p1, False:True:t2 <- p2 -> go $ Mat [t1, t2]
+      | otherwise -> common
+    | Mat [] <- d1, not $ or p1 = go d2
+    | otherwise = common
+    where
+    x = Mat [p1, p2]
+    common = go $ x :@ d1 :@ d2
+    zs = zipWithDefault False (,) g1 g2
+    go = (uncurry (||) <$> zs,) . etaRight
+    (p1, p2) = unzip $ reverse $ filter (uncurry (||)) zs
+    etaRight (Mat [False:t1, True:t2] :@ d :@ Mat []) = etaRight $ Mat [t1, t2] :@ d
+    etaRight d = d
+
+zipWithDefault d f     []     ys = f d <$> ys
+zipWithDefault d f     xs     [] = flip f d <$> xs
+zipWithDefault d f (x:xt) (y:yt) = f x y : zipWithDefault d f xt yt

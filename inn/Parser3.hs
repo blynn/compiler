@@ -347,7 +347,10 @@ alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> gdSep "->")
 cas = flip A <$> between (res "case") (res "of") expr <*> alts
 lamCase = curlyCheck (res "case") *> alts
 
-lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
+nalts = joinIsFail . Pa <$> braceSep ((,) <$> many apat <*> gdSep "->")
+lamCases = curlyCheck (res "cases") *> nalts
+
+lam = res "\\" *> (lamCase <|> lamCases <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
 moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr comma
@@ -425,10 +428,15 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some ((\x y -> case x of
-  V "True" -> \_ -> y
-  _ -> A (A (A (V "if") x) y)
-  ) <$> (res "|" *> expr) <*> (res s *> expr))
+gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
+guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
+guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
+  <|> guardLets <$> (res "let" *> braceDef)
+guardExpr x yes no = case x of
+  V "True" -> yes
+  _ -> A (A (A (V "if") x) yes) no
+guardPat p x yes no = A (Pa [([p], yes), ([PatVar "_" Nothing], no)]) x
+guardLets defs yes no = addLets defs yes
 
 onePat vs x = joinIsFail $ Pa [(vs, x)]
 defOnePat vs x = Pa [(vs, x)]

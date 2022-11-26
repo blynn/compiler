@@ -28,9 +28,14 @@ dumpCombs neat = map go combs where
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
+dumpMatrix neat = map go combs where
+  combs = toAscList $ matrixComb . optiApp . snd <$> typedAsts neat
+  go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
+
 main = getArgs >>= \case
   "ink":_ -> interact \s -> either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) $ ink s
   "ink2":_ -> interact $ either id id . ink2
+  "matrix":_ -> interact $ dumpWith dumpMatrix
   "topo":_ -> interact \s -> either id show $ do
     tab <- singleFile s
     topoModules (insert "#" neatPrim tab)
