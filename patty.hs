@@ -550,7 +550,7 @@ prims = let
     , ("ord", (ii, ro 'I'))
     , ("succ", (ii, A (ro 'T') (A (E $ Const $ 1) (ro '+'))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
-    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), ro 'V'))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro '.'))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro 'C') (A (ro 'T') (ro '?'))) (ro 'K')))
     ] ++ map (\s -> (wrap s, (iii, bin s))) "+-*/%";

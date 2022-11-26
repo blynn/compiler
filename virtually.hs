@@ -578,7 +578,7 @@ prims = let
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("succ", (ii, A (ro "T") (A (E $ Const $ 1) (ro "ADD"))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
-    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), ro "V"))
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
       A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),

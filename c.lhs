@@ -18,8 +18,42 @@ where `y` is some value of type `a`. In normal operation, `w` is the real-world
 token `?`, and the continuation `c` should expect two arguments but never
 reduce the second one.
 
+Thus in the IO monad:
+
+------------------------------------------------------------------------
+pure y = \w c -> c y w
+x >>= f = \w c -> x w f c
+------------------------------------------------------------------------
+
+Hence we can use the V and C combinators for `pure` and `(>>=)`.
+
 We add a crude syntax for FFI, with crude code for generating the requisite C
 wrappers. An `F` combinator invokes these foreign functions.
+
+Threading the unused token `?` protects us from lazily updating the result of
+a call to an impure function. Can we get rid of it? If we simply drop the
+token, we wind up with the continuation monad:
+
+------------------------------------------------------------------------
+pure :: a -> (a -> r) -> r
+pure y = \c -> c y
+(>>=) :: ((a -> r) -> r) -> (a -> (b -> r) -> r) -> (b -> r) -> r
+x >>= f = \c -> x f c
+------------------------------------------------------------------------
+
+This time `pure` and `(>>=)` are the T and I combinators. With this scheme, we
+must skip lazy updates for every IO function. Generated wrappers for FFI
+imports in the IO monad should create an ephemeral node to push on top of the
+stack, rather than reduce in place.
+
+This ought to work, except that it breaks an invariant that our runtime depends
+on, namely, the stack always holds part of the spine starting from the root. In
+particular, the garbage collector only evacuates the bottom of the stack and
+relies on the invariant to re-expand the spine. Ephemeral cells would require
+our GC to carefully evacuate the whole stack.
+
+It's unclear if these changes are worth the effort, especially since Haskell
+code tends to avoid the IO monad as much as possible.
 
 ++++++++++
 <script>

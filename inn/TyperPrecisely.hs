@@ -480,7 +480,7 @@ prims = let
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
-    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro "B") (ro "C")) (ro "T")))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), ro "V"))
     , ("primitiveError", (arr (TAp (TC "[]") (TC "Char")) (TV "a"), ro "ERR"))
     , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
       A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))

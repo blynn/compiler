@@ -332,7 +332,7 @@ prims = let
     , ("succ", (ii, A (ro 'T') (A (E $ Const $ 1) (ro '+'))))
     , ("putChar", (arr (TC "Int") (TAp (TC "IO") (TV "a")), A (ro 'T') (A (ro 'F') (ro $ chr 1))))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro 'C'))
-    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), A (A (ro 'B') (ro 'C')) (ro 'T')))
+    , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), ro 'V'))
     ] ++ map (\s -> (wrap s, (iii, bin s))) "+-*/%";
 
 ifz n = ife (0 == n);
