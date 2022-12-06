@@ -104,7 +104,7 @@ static void gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
@@ -131,7 +131,7 @@ static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 
 -- Main VM loop.
 comdefsrc = [r|
-F x = "foreign(arg(1));"
+F x = "foreign(num(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
 QQ f a b c d = d(c(b(a(f))))
