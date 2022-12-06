@@ -93,7 +93,7 @@ static void gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
@@ -117,7 +117,7 @@ static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=ap
 
 -- Main VM loop.
 comdefsrc = [r|
-F x = "foreign(arg(1));"
+F x = "foreign(num(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
@@ -271,7 +271,9 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    ForeignFun n -> Code <$> memget (Code $ comEnum "F", Code n)
+    ForeignFun n -> do
+      x <- enc $ Lf $ Const n
+      Code <$> memget (Code $ comEnum "F", x)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s

@@ -243,7 +243,7 @@ addInstance classId ps ty ds neat = neat
   name = '{':classId ++ (' ':shows ty "}")
 
 addForeignImport foreignname ourname t neat = let ffis = ffiImports neat in neat
-  { typedAsts = (ourname, (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ E $ Link "{foreign}" foreignname $ Qual [] t)) : typedAsts neat
+  { typedAsts = (ourname, (Qual [] t, mkFFIHelper 0 t $ A (E $ Basic "F") $ A (E $ Basic "NUM") $ E $ Link "{foreign}" foreignname $ Qual [] t)) : typedAsts neat
   , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t ffis
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }

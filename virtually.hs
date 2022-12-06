@@ -1175,7 +1175,7 @@ memget k@(NdKey a b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   { Lf n -> case n of
     { Basic c -> pure $ Right $ comEnum c
-    ; ForeignFun n -> Right <$> memget (NdKey (Right $ comEnum "F") (Right n))
+    ; ForeignFun n -> enc (Lf $ Const n) >>= \x -> Right <$> memget (NdKey (Right $ comEnum "F") x)
     ; Const c -> Right <$> memget (NdKey (Right $ comEnum "NUM") (Right c))
     ; ChrCon c -> enc $ Lf $ Const $ ord c
     ; StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -1203,7 +1203,7 @@ main = getArgs >>= \case
   };
 
 comdefsrc = [r|
-F x = "foreign(arg(1));"
+F x = "foreign(num(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
@@ -1302,7 +1302,7 @@ static void gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = mem;

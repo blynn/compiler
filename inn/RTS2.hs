@@ -94,7 +94,7 @@ static void gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _F && x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
@@ -118,7 +118,7 @@ static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=ap
 
 -- Main VM loop.
 comdefsrc = [r|
-F x = "foreign(arg(1));"
+F x = "foreign(num(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
