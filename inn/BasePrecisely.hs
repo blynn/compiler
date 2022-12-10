@@ -345,13 +345,17 @@ instance Ring Integer where
     | xsgn == ysgn = Integer xsgn $ mpAdd xs ys
     | True = case mpCompare xs ys of
       LT -> mpCanon ysgn $ mpSub ys xs
+      EQ -> Integer True []
       _ -> mpCanon xsgn $ mpSub xs ys
   Integer xsgn xs - Integer ysgn ys
     | xsgn /= ysgn = Integer xsgn $ mpAdd xs ys
     | True = case mpCompare xs ys of
       LT -> mpCanon (not ysgn) $ mpSub ys xs
+      EQ -> Integer True []
       _ -> mpCanon xsgn $ mpSub xs ys
-  Integer xsgn xs * Integer ysgn ys = Integer (xsgn == ysgn) $ mpMul xs ys
+  Integer xsgn xs * Integer ysgn ys
+    | null xs || null ys = Integer True []
+    | True = Integer (xsgn == ysgn) $ mpMul xs ys
   fromInteger = id
 instance Integral Integer where
   div (Integer xsgn xs) (Integer ysgn ys) = if xsgn == ysgn
