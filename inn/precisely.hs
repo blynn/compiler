@@ -34,7 +34,7 @@ dumpMatrix neat = map go combs where
 
 main = getArgs >>= \case
   "ink":_ -> interact \s -> either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) $ ink s
-  "ink2":_ -> interact $ either id id . ink2
+  "ink2":_ -> interact $ either id id . ink2 "1<<24" libcHost []
   "matrix":_ -> interact $ dumpWith dumpMatrix
   "topo":_ -> interact \s -> either id show $ do
     tab <- singleFile s
@@ -46,6 +46,6 @@ main = getArgs >>= \case
     tab <- singleFile s
     pure $ second topDefs <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
-  "wasm":opts -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm ("no-main":opts)
   "warts":opts -> interact $ either id (warts opts) . untangle
-  _ -> interact \s -> either id id $ untangle s >>= compile
+  "wasm":opts -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm ("no-main":opts)
+  _ -> interact \s -> either id id $ untangle s >>= compileWith "1<<24" libcHost []

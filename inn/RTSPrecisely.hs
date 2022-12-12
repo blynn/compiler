@@ -95,7 +95,7 @@ static u evac(u n) {
   return z;
 }
 
-static void gc() {
+static u gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
@@ -111,6 +111,10 @@ static void gc() {
   u *tmp = mem;
   mem = altmem;
   altmem = tmp;
+  for(u usage = 0;; usage++) {
+    u x = *sp;
+    if (isAddr(x)) *--sp = mem[x]; else return usage + hp + 8 >= TOP;
+  }
 }
 
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
@@ -263,7 +267,7 @@ static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*
 
 static void run() {
   for(;;) {
-    if (mem + hp > sp - 8) gc();
+    if (mem + hp > sp - 8 && gc()) return;
     u x = *sp;
     if (isAddr(x)) *--sp = mem[x]; else switch(x) {
 |]++)
@@ -424,8 +428,6 @@ compileWith topSize libc opts mods = do
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 
-compile = compileWith "1<<24" libcHost []
-
 declWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 enum {
   ROOT_BASE = 1<<9,  // 0-terminated array of exported functions
@@ -506,20 +508,30 @@ ink s = do
 
 data Layout = Layout
   { _offsets :: Map String Int
-  , _foreigns :: Map String (Int, Type)
+  , _ffis :: Map String (Int, Type)
+  , _ffes :: Map String (Int, Type)
   , _memFun :: [Int] -> [Int]
   , _hp :: Int
   }
-layoutNew = Layout Tip Tip id 0
+layoutNew = Layout Tip Tip Tip id 0
 
 agglomerate objs lout name = lout
   { _offsets = insert name off $ _offsets lout
-  , _foreigns = foreigns
+  , _ffis = ffis
+  , _ffes = ffes
   , _memFun = _memFun lout . resolve (_mem ob)
   , _hp = off + length (_mem ob)
   }
   where
-  foreigns = foldr (\(n, (k, t)) ma -> insert k (n, t) ma) (_foreigns lout) $ zip [size (_foreigns lout)..] $ toAscList $ ffiImports neat
+  ffis = foldr (\(n, (k, t)) ma -> insertWith (error $ "duplicate import: " ++ k) k (n, t) ma) (_ffis lout) $ zip [size (_ffis lout)..] $ toAscList $ ffiImports neat
+  ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) (_ffes lout)
+    [ (expName, (addr, mustType ourName))
+    | (expName, ourName) <- toAscList $ ffiExports neat
+    , let addr = adj $ _syms ob ! ourName
+    ]
+  mustType s = case mlookup s $ typedAsts neat of
+    Just (Qual [] t, _) -> t
+    _ -> error $ "TODO: bad export: " ++ s
   off = _hp lout
   ob = objs ! name
   neat = _neat ob
@@ -527,30 +539,26 @@ agglomerate objs lout name = lout
     Right n -> if n < 128 then n else n + off
     Left global -> follow global
   follow (m, s)
-    | m == "{foreign}" = fst $ foreigns ! s
     | True = case _syms (objs ! m) ! s of
       Right n -> if n < 128 then n else n + (_offsets lout ! m)
       Left global -> follow global
   resolve (l:r:rest) = case l of
-    Right c | c == comEnum "NUM" -> (adj l:) . (rc:) . resolve rest where Right rc = r
+    Right c | c == comEnum "NUM" -> (c:) . (either (fst . (ffis !) . snd) id r:) . resolve rest
     _ -> (adj l:) . (adj r:) . resolve rest
   resolve [] = id
 
-ink2 s = do
+ink2 topSize libc opts s = do
   tab <- insert "#" neatPrim <$> singleFile s
   ms <- topoModules tab
   objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
   let
     lout = foldl (agglomerate objs) layoutNew ms
-    topSize = "1<<24"
     mem = _memFun lout []
-    libc = libcHost
-    opts = []
-    ffis = snd <$> _foreigns lout
-    ffes = Tip
+    ffis = snd <$> _ffis lout
+    ffes = _ffes lout
     mayMain = do
       mainOff <- mlookup "Main" $ _offsets lout
-      Right n <- mlookup "main" (_syms $ objs ! "Main")
+      Right n <- mlookup "main" $ _syms $ objs ! "Main"
       mainType <- fst <$> mlookup "main" (typedAsts $ _neat $ objs ! "Main")
       pure (mainOff + n, mainType)
   mainStr <- case mayMain of
@@ -568,7 +576,7 @@ ink2 s = do
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
-    -- . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
+    . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
