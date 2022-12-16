@@ -60,7 +60,8 @@ imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 $(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
 $(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov1 Unify1 RTSPrecisely TyperPrecisely precisely)
 
-warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
+#warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
+warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
 warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 $(call party,warts2hs.c,crossly,Base1 System1 warts2hs)

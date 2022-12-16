@@ -48,7 +48,144 @@ void errchar(int c) {}
 void errexit() {}
 |]
 
-preamble = [r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((export_name(sym)));
+-- Main VM loop.
+comdefsrc = [r|
+F x = "foreign(num(1));"
+Y x = x "sp[1]"
+Q x y z = z(y x)
+QQ f a b c d = d(c(b(a(f))))
+S x y z = x z(y z)
+B x y z = x (y z)
+BK x y z = x y
+C x y z = x z y
+R x y z = y z x
+V x y z = z x y
+T x y = y x
+K x y = "_I" x
+KI x y = "_I" y
+I x = "sp[1] = arg(1); sp++;"
+LEFT x y z = y x
+CONS x y z w = w x y
+NUM x y = y "sp[1]"
+DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
+DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
+DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
+DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
+DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
+DSHL x y = "lazyDub(dub(1,2) << dub(3,4));"
+DSHR x y = "lazyDub(dub(1,2) >> dub(3,4));"
+ADD x y = "_NUM" "num(1) + num(2)"
+SUB x y = "_NUM" "num(1) - num(2)"
+MUL x y = "_NUM" "num(1) * num(2)"
+QUOT x y = "_NUM" "num(1) / num(2)"
+REM x y = "_NUM" "num(1) % num(2)"
+DIV x y = "_NUM" "div(num(1), num(2))"
+MOD x y = "_NUM" "mod(num(1), num(2))"
+XOR x y = "_NUM" "num(1) ^ num(2)"
+AND x y = "_NUM" "num(1) & num(2)"
+OR x y = "_NUM" "num(1) | num(2)"
+SHL x y = "_NUM" "num(1) << num(2)"
+SHR x y = "_NUM" "num(1) < 0 ? ~(~num(1) >> num(2)) : num(1) >> num(2)"
+U_SHR x y = "_NUM" "(u) num(1) >> (u) num(2)"
+EQ x y = "lazy2(2, _I, num(1) == num(2) ? _K : _KI);"
+LE x y = "lazy2(2, _I, num(1) <= num(2) ? _K : _KI);"
+U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
+U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
+U_LE x y = "lazy2(2, _I, (u) num(1) <= (u) num(2) ? _K : _KI);"
+REF x y = y "sp[1]"
+READREF x y z = z "num(1)" y
+WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
+END = "return;"
+ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
+ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
+ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
+ERREND = "errexit(); return;"
+|]
+
+argList t = case t of
+  TC s -> [TC s]
+  TV s -> [TV s]
+  TAp (TC "IO") (TC u) -> [TC u]
+  TAp (TAp (TC "->") x) y -> x : argList y
+  _ -> [t]
+
+cTypeName = \case
+  TC "()" -> "void"
+  TC "Word64" -> "uu"
+  _ -> "int"
+
+ffiDeclare opts (name, t) = (concat
+  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ")"]++) . attr name . (";\n"++)
+  where
+  tys = argList t
+  attr
+    | "warts" `elem` opts && not ("no-import" `elem` opts) =
+      \name -> (" IMPORT(\"env\", \""++) . (name++) . ("\");\n"++)
+    | otherwise = const id
+
+ffiArgs n t = case t of
+  TAp (TC "IO") u -> ("", ((False, u), n))
+  TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  _ -> ("", ((True, t), n))
+
+ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . case ret of
+  TC "()" -> longDistanceCall . cont ("_K"++) . ("); break;"++)
+  _ -> ("{u r = "++) . longDistanceCall . cont (heapify ret ('r':)) . ("); break;}\n"++)
+  where
+  (args, ((isPure, ret), count)) = ffiArgs 2 t
+  lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
+  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
+  longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+
+genExport ourType n = ("void f"++) . shows n . ("("++)
+  . foldr (.) id (intersperse (',':) $ map declare txs)
+  . ("){rts_reduce("++)
+  . foldl (\s tx -> ("app("++) . s . (',':) . uncurry heapify tx . (')':)) rt txs
+  . (");}\n"++)
+  where
+  txs = go 0 ourType
+  go n = \case
+    TAp (TAp (TC "->") t) rest -> (t, ('x':) . shows n) : go (n + 1) rest
+    _ -> []
+  rt = ("root["++) . shows n . ("]"++)
+  declare (t, x) = (cTypeName t ++) . (' ':) . x
+
+heapify t x = case t of
+  TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
+  TC "Char" -> num
+  TC "Int" -> num
+  TC "Word" -> num
+  _ -> x
+  where
+  num = ("app(_NUM,"++) . x . (')':)
+
+genArg m a = case a of
+  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
+  E (StrCon s) -> (s++)
+  A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
+genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
+genComb (s, (args, body)) = let
+  argc = ('(':) . shows (length args)
+  m = zip args [1..]
+  in ("case _"++) . (s++) . (':':) . (case body of
+    A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
+    A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
+    E (StrCon s) -> (s++)
+  ) . ("break;\n"++)
+
+comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
+combExpr = foldl1 A <$> some
+  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
+comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
+  Left e -> error e
+  Right (cs, _) -> cs
+comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
+comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
+
+runFun opts ffis = ("enum{_UNDEFINED=0,"++)
+  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
+  . ("};\n"++)
+  . ([r|#define EXPORT(f, sym) void f() asm(sym) __attribute__((export_name(sym)));
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 static u *mem, *altmem, *sp, *spTop, hp;
@@ -131,141 +268,14 @@ static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=ap
 typedef unsigned long long uu;
 static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
-|]
-
--- Main VM loop.
-comdefsrc = [r|
-F x = "foreign(num(1));"
-Y x = x "sp[1]"
-Q x y z = z(y x)
-QQ f a b c d = d(c(b(a(f))))
-S x y z = x z(y z)
-B x y z = x (y z)
-BK x y z = x y
-C x y z = x z y
-R x y z = y z x
-V x y z = z x y
-T x y = y x
-K x y = "_I" x
-KI x y = "_I" y
-I x = "sp[1] = arg(1); sp++;"
-LEFT x y z = y x
-CONS x y z w = w x y
-NUM x y = y "sp[1]"
-DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
-DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
-DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
-DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
-DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
-DSHL x y = "lazyDub(dub(1,2) << dub(3,4));"
-DSHR x y = "lazyDub(dub(1,2) >> dub(3,4));"
-ADD x y = "_NUM" "num(1) + num(2)"
-SUB x y = "_NUM" "num(1) - num(2)"
-MUL x y = "_NUM" "num(1) * num(2)"
-QUOT x y = "_NUM" "num(1) / num(2)"
-REM x y = "_NUM" "num(1) % num(2)"
-DIV x y = "_NUM" "div(num(1), num(2))"
-MOD x y = "_NUM" "mod(num(1), num(2))"
-XOR x y = "_NUM" "num(1) ^ num(2)"
-AND x y = "_NUM" "num(1) & num(2)"
-OR x y = "_NUM" "num(1) | num(2)"
-SHL x y = "_NUM" "num(1) << num(2)"
-SHR x y = "_NUM" "num(1) < 0 ? ~(~num(1) >> num(2)) : num(1) >> num(2)"
-U_SHR x y = "_NUM" "(u) num(1) >> (u) num(2)"
-EQ x y = "lazy2(2, _I, num(1) == num(2) ? _K : _KI);"
-LE x y = "lazy2(2, _I, num(1) <= num(2) ? _K : _KI);"
-U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
-U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
-U_LE x y = "lazy2(2, _I, (u) num(1) <= (u) num(2) ? _K : _KI);"
-REF x y = y "sp[1]"
-READREF x y z = z "num(1)" y
-WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
-END = "return;"
-ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
-ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
-ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
-ERREND = "errexit(); return;"
-|]
-
-argList t = case t of
-  TC s -> [TC s]
-  TV s -> [TV s]
-  TAp (TC "IO") (TC u) -> [TC u]
-  TAp (TAp (TC "->") x) y -> x : argList y
-  _ -> [t]
-
-cTypeName = \case
-  TC "()" -> "void"
-  TC "Word64" -> "uu"
-  _ -> "int"
-
-ffiDeclare (name, t) = let tys = argList t in (concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ");\n"]++)
-
-ffiArgs n t = case t of
-  TAp (TC "IO") u -> ("", ((False, u), n))
-  TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
-  _ -> ("", ((True, t), n))
-
-ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . case ret of
-  TC "()" -> longDistanceCall . cont ("_K"++) . ("); break;"++)
-  _ -> ("{u r = "++) . longDistanceCall . cont (heapify ret ('r':)) . ("); break;}\n"++)
-  where
-  (args, ((isPure, ret), count)) = ffiArgs 2 t
-  lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
-  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
-  longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
-
-genExport ourType n = ("void f"++) . shows n . ("("++)
-  . foldr (.) id (intersperse (',':) $ map declare txs)
-  . ("){rts_reduce("++)
-  . foldl (\s tx -> ("app("++) . s . (',':) . uncurry heapify tx . (')':)) rt txs
-  . (");}\n"++)
-  where
-  txs = go 0 ourType
-  go n = \case
-    TAp (TAp (TC "->") t) rest -> (t, ('x':) . shows n) : go (n + 1) rest
-    _ -> []
-  rt = ("root["++) . shows n . ("]"++)
-  declare (t, x) = (cTypeName t ++) . (' ':) . x
-
-heapify t x = case t of
-  TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
-  TC "Char" -> num
-  TC "Int" -> num
-  TC "Word" -> num
-  _ -> x
-  where
-  num = ("app(_NUM,"++) . x . (')':)
-
-genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
-  E (StrCon s) -> (s++)
-  A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
-genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
-genComb (s, (args, body)) = let
-  argc = ('(':) . shows (length args)
-  m = zip args [1..]
-  in ("case _"++) . (s++) . (':':) . (case body of
-    A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
-    A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-    E (StrCon s) -> (s++)
-  ) . ("break;\n"++)
-
-comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
-combExpr = foldl1 A <$> some
-  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
-comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
-  Left e -> error e
-  Right (cs, _) -> cs
-comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) [1..]
-comName i = maybe undefined id $ lookup i $ zip [1..] (fst <$> comdefs)
-
-runFun = ([r|
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
-
-static void run() {
+|]++)
+    . foldr (.) id (ffiDeclare opts <$> toAscList ffis)
+    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
+    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
+    . ("\n  }\n}\n" ++)
+    . ([r|static void run() {
   for(;;) {
     if (mem + hp > sp - 8 && gc()) return;
     u x = *sp;
@@ -277,16 +287,35 @@ static void run() {
   }
 }
 |]++)
+  . rtsInit opts
+  . rtsReduce opts
 
-rtsAPI opts = ([r|
-void rts_init() {
+rtsInit opts
+  | "warts" `elem` opts = ([r|void rts_init() {
+  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
+  hp = 128 + mem[127];
+  spTop = mem + TOP - 1;
+}
+|]++)
+  | otherwise = ([r|void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
 }
 |]++)
-  . rtsReduce opts
+
+rtsReduce opts =
+  (if "pre-post-run" `elem` opts then ("void pre_run(void); void post_run(void);\n"++) else id)
+  . (if "warts" `elem` opts then ([r|void rts_reduce(u) __attribute__((export_name("reduce")));
+|]++) else id)
+  . ([r|
+void rts_reduce(u n) {
+  static u ready;if (!ready){ready=1;rts_init();}
+  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+|]++)
+  . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
+  . ("\n}\n"++)
 
 -- Hash consing.
 instance (Ord a, Ord b) => Ord (Either a b) where
@@ -406,29 +435,19 @@ compileWith topSize libc opts mods = do
       pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
 
   pure
-    $ ("typedef unsigned u;\n"++)
-    . ("enum{TOP="++)
-    . (topSize++)
-    . (",_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
+    $ ("enum{TOP="++) . (topSize++) . ("};\n"++)
+    . ("typedef unsigned u;\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
-    . (preamble++)
     . (libc++)
-    . foldr (.) id (ffiDeclare <$> toAscList ffis)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
-    . ("\n  }\n}\n" ++)
-    . runFun
-    . rtsAPI opts
+    . runFun opts ffis
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 
-declWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
+libcWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 enum {
   ROOT_BASE = 1<<9,  // 0-terminated array of exported functions
   // HEAP_BASE - 4: program size
@@ -440,45 +459,10 @@ void errchar(int c) {}
 void errexit() {}
 |]++)
 
-rtsAPIWarts opts = ([r|
-static inline void rts_init() {
-  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
-  hp = 128 + mem[127];
-  spTop = mem + TOP - 1;
-}
-
-// Export so we can later find it in the wasm binary.
-void rts_reduce(u) __attribute__((export_name("reduce")));
-|]++) . rtsReduce opts
-
-rtsReduce opts =
-  (if "pre-post-run" `elem` opts then ("void pre_run(void); void post_run(void);\n"++) else id)
-  . ([r|
-void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
-|]++)
-  . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
-  . ("\n}\n"++)
-
-ffiDeclareWarts (name, t) = let tys = argList t in (concat
-  [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ") IMPORT(\"env\", \"", name, "\");\n"]++)
-
 warts opts mods =
   ("typedef unsigned u;\n"++)
-  . ("enum{_UNDEFINED=0,"++)
-  . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-  . ("};\n"++)
-  . declWarts
-  . (preamble++)
-  . (if "no-import" `elem` opts then ("#undef IMPORT\n#define IMPORT(m,n)\n"++) else id)
-  . foldr (.) id (ffiDeclareWarts <$> toAscList ffis)
-  . ([r|void foreign(u n) asm("foreign");|]++)
-  . ("void foreign(u n) {\n  switch(n) {\n" ++)
-  . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
-  . ("\n  }\n}\n" ++)
-  . runFun
-  . rtsAPIWarts opts
+  . libcWarts
+  . runFun opts ffis
   $ ""
   where
   ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
@@ -568,24 +552,14 @@ ink2 topSize libc opts s = do
       pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
   pure
     $ ("typedef unsigned u;\n"++)
-    . ("enum{TOP="++)
-    . (topSize++)
-    . (",_UNDEFINED=0,"++)
-    . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
-    . ("};\n"++)
+    . ("enum{TOP="++) . (topSize++) . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
-    . (preamble++)
     . (libc++)
-    . foldr (.) id (ffiDeclare <$> toAscList ffis)
-    . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
-    . ("\n  }\n}\n" ++)
-    . runFun
-    . rtsAPI opts
+    . runFun opts ffis
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 

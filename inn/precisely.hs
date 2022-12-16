@@ -46,6 +46,6 @@ main = getArgs >>= \case
     tab <- singleFile s
     pure $ second topDefs <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
-  "warts":opts -> interact $ either id (warts opts) . untangle
+  "warts":opts -> interact $ either id (warts $ "warts":opts) . untangle
   "wasm":opts -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm ("no-main":opts)
   _ -> interact \s -> either id id $ untangle s >>= compileWith "1<<24" libcHost []
