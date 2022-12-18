@@ -2,6 +2,8 @@ module Map where
 
 import Base
 
+infixl 9 !
+
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
 instance Functor (Map k) where
   fmap f m = case m of

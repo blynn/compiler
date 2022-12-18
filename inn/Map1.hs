@@ -2,9 +2,11 @@ module Map where
 
 import Base
 
+infixl 9 !
+
 data Map k a = Tip | Bin Int k a (Map k a) (Map k a)
 instance (Show k, Show a) => Show (Map k a) where
-  showsPrec n m = ("fromList ["++) . showsPrec n (toAscList m) . (']':)
+  showsPrec n m = ("fromList "++) . showsPrec n (toAscList m)
 instance Functor (Map k) where
   fmap f m = case m of
     Tip -> Tip

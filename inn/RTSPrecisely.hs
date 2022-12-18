@@ -271,9 +271,9 @@ static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
 |]++)
-    . foldr (.) id (ffiDeclare opts <$> toAscList ffis)
+    . foldr (.) id (ffiDeclare opts <$> ffis)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
-    . foldr (.) id (zipWith ffiDefine [0..] $ toAscList ffis)
+    . foldr (.) id (zipWith ffiDefine [0..] ffis)
     . ("\n  }\n}\n" ++)
     . ([r|static void run() {
   for(;;) {
@@ -443,7 +443,7 @@ compileWith topSize libc opts mods = do
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
     . (libc++)
-    . runFun opts ffis
+    . runFun opts (toAscList ffis)
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 
@@ -462,7 +462,7 @@ void errexit() {}
 warts opts mods =
   ("typedef unsigned u;\n"++)
   . libcWarts
-  . runFun opts ffis
+  . runFun opts (toAscList ffis)
   $ ""
   where
   ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
@@ -492,22 +492,19 @@ ink s = do
 
 data Layout = Layout
   { _offsets :: Map String Int
-  , _ffis :: Map String (Int, Type)
-  , _ffes :: Map String (Int, Type)
   , _memFun :: [Int] -> [Int]
   , _hp :: Int
+  , _ffes :: Map String (Int, Type)
   }
-layoutNew = Layout Tip Tip Tip id 0
+layoutNew = Layout Tip id 0 Tip
 
-agglomerate objs lout name = lout
+agglomerate ffiMap objs lout name = lout
   { _offsets = insert name off $ _offsets lout
-  , _ffis = ffis
   , _ffes = ffes
   , _memFun = _memFun lout . resolve (_mem ob)
   , _hp = off + length (_mem ob)
   }
   where
-  ffis = foldr (\(n, (k, t)) ma -> insertWith (error $ "duplicate import: " ++ k) k (n, t) ma) (_ffis lout) $ zip [size (_ffis lout)..] $ toAscList $ ffiImports neat
   ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) (_ffes lout)
     [ (expName, (addr, mustType ourName))
     | (expName, ourName) <- toAscList $ ffiExports neat
@@ -522,12 +519,11 @@ agglomerate objs lout name = lout
   adj = \case
     Right n -> if n < 128 then n else n + off
     Left global -> follow global
-  follow (m, s)
-    | True = case _syms (objs ! m) ! s of
-      Right n -> if n < 128 then n else n + (_offsets lout ! m)
-      Left global -> follow global
+  follow (m, s) = case _syms (objs ! m) ! s of
+    Right n -> if n < 128 then n else n + (_offsets lout ! m)
+    Left global -> follow global
   resolve (l:r:rest) = case l of
-    Right c | c == comEnum "NUM" -> (c:) . (either (fst . (ffis !) . snd) id r:) . resolve rest
+    Right c | c == comEnum "NUM" -> (c:) . (either ((ffiMap !) . snd) id r:) . resolve rest
     _ -> (adj l:) . (adj r:) . resolve rest
   resolve [] = id
 
@@ -536,9 +532,10 @@ ink2 topSize libc opts s = do
   ms <- topoModules tab
   objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
   let
-    lout = foldl (agglomerate objs) layoutNew ms
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
+    ffiMap = fromList $ zip (keys ffis) [0..]
+    lout = foldl (agglomerate ffiMap objs) layoutNew ms
     mem = _memFun lout []
-    ffis = snd <$> _ffis lout
     ffes = _ffes lout
     mayMain = do
       mainOff <- mlookup "Main" $ _offsets lout
@@ -559,7 +556,7 @@ ink2 topSize libc opts s = do
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
     . ("0};\n" ++)
     . (libc++)
-    . runFun opts ffis
+    . runFun opts (toAscList ffis)
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 

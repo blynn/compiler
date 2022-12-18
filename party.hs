@@ -1,4 +1,5 @@
 -- Modules.
+infixr 9 !
 infixr 9 .
 infixl 7 * , `div` , `mod`
 infixl 6 + , -
