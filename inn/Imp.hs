@@ -38,38 +38,37 @@ singleModule = interact $ \s -> case singleFile s of
     _ -> ""
   _ -> ""
 
-toWasm mods = wasm where
-  ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
-  ffes1 = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
-    [ (expName, addr)
-    | (modName, neat) <- toAscList mods
-    , (expName, ourName) <- toAscList $ ffiExports neat
-    , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
-    ]  -- Assume they have type IO ().
-  mainExport = case mlookup "main" ffes1 of
-    Nothing -> maybe [] (:[]) $ do
-      mod  <- mlookup "Main" bigmap
-      addr <- mlookup "main" mod
-      pure ("main", addr)
-    _ -> []
-  ffes = mainExport ++ toAscList ffes1
-  ffiMap = singleton "{foreign}" $ fromList $ zip (keys ffis) $ Right <$> [0..]
-  (bigmap, mem) = codegen ffiMap mods
-  go (n, x)
-    -- Function section: for each export, declare a function of type () -> ()..
-    | n == 3  = leb n <> extendSection x (replicate (length ffes) $ leb funType00Idx)
-    -- Export section: add each export.
-    | n == 7  = leb n <> extendSection x (zipWith encodeExport (fst <$> ffes) [allFunCount..])
-    -- Code section: for nth export, define a function calling rts_reduce([512 + 4*n])
-    | n == 10 = leb n <> extendSection x (callRoot <$> [0..length ffes - 1])
-    | True    = leb n <> leb (_len s) <> s where s = unxxd x
-  roots = encodeData rootBase $ littleEndian $ (snd <$> ffes) ++ [0]
-  prog = encodeData heapBase $ littleEndian $ length mem : mem
-  wasm = _str (unxxd "0061736d01000000" <> mconcat (map go wartsBytes)
--- Data section:
---   512 : null-terminated roots array
---   1048576 - 4: hp
---   1048576: initial heap contents
+toWasm tab = do
+  ms <- topoModules tab
+  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  let
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
+    ffiMap = fromList $ zip (keys ffis) [0..]
+    lout = foldl (agglomerate ffiMap objs) layoutNew ms
+    mem = _memFun lout []
+  (mainOff, mainType) <- maybe (Left "bad main") Right $ do
+    m <- mlookup "Main" $ _offsets lout
+    Right n <- mlookup "main" $ _syms $ objs ! "Main"
+    q <- fst <$> mlookup "main" (typedAsts $ _neat $ objs ! "Main")
+    pure (m + n, q)
+  getIOType mainType
+  let
+    ffes = ("main", mainOff) : toAscList (fst <$> _ffes lout)
+    go (n, x)
+      -- Function section: for each export, declare a function of type () -> ()..
+      | n == 3  = leb n <> extendSection x (replicate (length ffes) $ leb funType00Idx)
+      -- Export section: add each export.
+      | n == 7  = leb n <> extendSection x (zipWith encodeExport (fst <$> ffes) [allFunCount..])
+      -- Code section: for nth export, define a function calling rts_reduce([512 + 4*n])
+      | n == 10 = leb n <> extendSection x (callRoot <$> [0..length ffes - 1])
+      | True    = leb n <> leb (_len s) <> s where s = unxxd x
+    roots = encodeData rootBase $ littleEndian $ (snd <$> ffes) ++ [0]
+    prog = encodeData heapBase $ littleEndian $ length mem : mem
+  pure $ _str (unxxd "0061736d01000000" <> mconcat (map go wartsBytes)
+  -- Data section:
+  --   512 : null-terminated roots array
+  --   1048576 - 4: hp
+  --   1048576: initial heap contents
     <> leb 11 <> extendSection "00" [roots, prog]) ""
 
 extendSection x xs = encodeSection (k + length xs) $ unxxd s <> mconcat xs
@@ -112,7 +111,8 @@ foreign import ccall "get_module" getModule :: IO ()
 
 needed tab = filter (\s -> not (s == "#" || s `member` tab)) $ concatMap dependentModules $ elems tab
 complete tab = case needed tab of
-  [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) soloPrim (keys tab)
+  -- [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) soloPrim (keys tab)
+  [] -> putStr $ either id id $ toWasm tab
   f:_ -> do
     putStr f
     getModule
@@ -132,4 +132,4 @@ main = do
   s <- getContents
   case singleFile s of
     Left e -> putStr e
-    Right tab -> complete tab
+    Right tab -> complete $ insert "#" neatPrim tab

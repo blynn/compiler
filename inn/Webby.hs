@@ -24,27 +24,18 @@ unxxd s = StrLen (go s) (length s `div` 2) where
     [] -> id
     (d1:d0:rest) -> ((chr $ hexValue d1 * 16 + hexValue d0):) . go rest
 
-main = interact toWasm
+main = interact $ either id id . toWasm
 
-toWasm s = case untangle s of
-  Left err -> err
-  Right mods -> let
-    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
-    ffes1 = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
-      [ (expName, addr)
-      | (modName, neat) <- toAscList mods
-      , (expName, ourName) <- toAscList $ ffiExports neat
-      , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
-      ]  -- Assume they have type IO ().
-    mainExport = case mlookup "main" ffes1 of
-      Nothing -> maybe [] (:[]) $ do
-        mod  <- mlookup "Main" bigmap
-        addr <- mlookup "main" mod
-        pure ("main", addr)
-      _ -> []
-    ffes = mainExport ++ toAscList ffes1
-    ffiMap = singleton "{foreign}" $ fromList $ zip (keys ffis) $ Right <$> [0..]
-    (bigmap, mem) = codegen ffiMap mods
+toWasm s = do
+  tab <- insert "#" neatPrim <$> singleFile s
+  ms <- topoModules tab
+  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  let
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
+    ffiMap = fromList $ zip (keys ffis) [0..]
+    lout = foldl (agglomerate ffiMap objs) layoutNew ms
+    mem = _memFun lout []
+    ffes = toAscList $ fst <$> _ffes lout
     go (n, x)
       -- Function section: for each export, declare a function of type () -> ()..
       | n == 3  = leb n <> extendSection x (replicate (length ffes) $ unxxd "01")
@@ -55,13 +46,12 @@ toWasm s = case untangle s of
       | True    = leb n <> leb (_len s) <> s where s = unxxd x
     roots = encodeData rootBase $ littleEndian $ (snd <$> ffes) ++ [0]
     prog = encodeData heapBase $ littleEndian $ length mem : mem
-    wasm = _str (unxxd "0061736d01000000" <> mconcat (map go wartsBytes)
+  pure $  _str (unxxd "0061736d01000000" <> mconcat (map go wartsBytes)
 -- Data section:
 --   512 : null-terminated roots array
 --   1048576 - 4: hp
 --   1048576: initial heap contents
-      <> leb 11 <> extendSection "00" [roots, prog]) ""
-    in wasm
+    <> leb 11 <> extendSection "00" [roots, prog]) ""
 
 extendSection x xs = encodeSection (k + length xs) $ unxxd s <> mconcat xs
   where (k, s) = splitLeb x

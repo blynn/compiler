@@ -387,65 +387,8 @@ optiApp t = case t of
   L s x -> L s (optiApp x)
   _ -> t
 
-codegenLocal (name, neat) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . (mem++)))
-  where
-  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
-  combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
-  (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
-  localmap = resolveLocal <$> symtab
-  mem = resolveLocal <$> memF []
-  resolveLocal = \case
-    Left ("", s) -> resolveLocal $ symtab ! s
-    x -> x
-
-codegen ffiMap mods = (bigmap', mem) where
-  (bigmap, (_, memF)) = foldr codegenLocal (ffiMap, (128, id)) $ toAscList mods
-  bigmap' = (resolveGlobal <$>) <$> bigmap
-  mem = resolveGlobal <$> memF []
-  resolveGlobal = \case
-    Left (m, s) -> resolveGlobal $ (bigmap ! m) ! s
-    Right n -> n
-
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
-
-compileWith topSize libc opts mods = do
-  let
-    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
-    ffiMap = singleton "{foreign}" $ fromList $ zip (keys ffis) $ Right <$> [0..]
-    (bigmap, mem) = codegen ffiMap mods
-    ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) Tip
-      [ (expName, (addr, mustType modName ourName))
-      | (modName, neat) <- toAscList mods
-      , (expName, ourName) <- toAscList $ ffiExports neat
-      , let addr = maybe (error $ "missing: " ++ ourName) id $ mlookup ourName $ bigmap ! modName
-      ]
-    mustType modName s = case mlookup s $ typedAsts $ mods ! modName of
-      Just (Qual [] t, _) -> t
-      _ -> error $ "TODO: bad export: " ++ s
-    mayMain = do
-      mainAddr <- mlookup "main" =<< mlookup "Main" bigmap
-      mainType <- fst <$> mlookup "main" (typedAsts $ mods ! "Main")
-      pure (mainAddr, mainType)
-  mainStr <- case mayMain of
-    Nothing -> pure ""
-    Just (a, q) -> do
-      getIOType q
-      pure $ if "no-main" `elem` opts then "" else "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows a ");return 0;}\n"
-
-  pure
-    $ ("enum{TOP="++) . (topSize++) . ("};\n"++)
-    . ("typedef unsigned u;\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> shows n . (',':)) mem)
-    . ("};\nstatic u root[]={" ++)
-    . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
-    . ("0};\n" ++)
-    . (libc++)
-    . runFun opts (toAscList ffis)
-    . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
-    $ mainStr
 
 libcWarts = ([r|#define IMPORT(m,n) __attribute__((import_module(m))) __attribute__((import_name(n)));
 enum {
@@ -527,7 +470,7 @@ agglomerate ffiMap objs lout name = lout
     _ -> (adj l:) . (adj r:) . resolve rest
   resolve [] = id
 
-ink2 topSize libc opts s = do
+compile topSize libc opts s = do
   tab <- insert "#" neatPrim <$> singleFile s
   ms <- topoModules tab
   objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms

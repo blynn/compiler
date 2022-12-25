@@ -32,9 +32,13 @@ dumpMatrix neat = map go combs where
   combs = toAscList $ matrixComb . optiApp . snd <$> typedAsts neat
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
+objDump s = do
+  tab <- insert "#" neatPrim <$> singleFile s
+  ms <- topoModules tab
+  foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+
 main = getArgs >>= \case
-  "ink":_ -> interact \s -> either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) $ ink s
-  "ink2":_ -> interact $ either id id . ink2 "1<<24" libcHost []
+  "obj":_ -> interact $ either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) . objDump
   "matrix":_ -> interact $ dumpWith dumpMatrix
   "topo":_ -> interact \s -> either id show $ do
     tab <- singleFile s
@@ -47,5 +51,5 @@ main = getArgs >>= \case
     pure $ second topDefs <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
   "warts":opts -> interact $ either id (warts $ "warts":opts) . untangle
-  "wasm":opts -> interact \s -> either id id $ untangle s >>= compileWith "1<<22" libcWasm ("no-main":opts)
-  _ -> interact \s -> either id id $ untangle s >>= compileWith "1<<24" libcHost []
+  "wasm":opts -> interact $ either id id . compile "1<<22" libcWasm ("no-main":opts)
+  _ -> interact $ either id id . compile "1<<24" libcHost []
