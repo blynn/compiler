@@ -23,10 +23,7 @@ dumpRawCombs neat = map go combs where
   combs = toAscList $ rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-dumpCombs neat = map go combs where
-  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
-  combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
-  go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
+dumpCombs = foldr ($) "" . map \(moduleName, xs) -> ("module "++) . (moduleName++) . ('\n':) . foldr (.) id (map (\(s, t) -> (s++) . (" = "++) . shows t . (";\n"++)) xs)
 
 dumpMatrix neat = map go combs where
   combs = toAscList $ matrixComb . optiApp . snd <$> typedAsts neat
@@ -43,7 +40,7 @@ main = getArgs >>= \case
   "topo":_ -> interact \s -> either id show $ do
     tab <- singleFile s
     topoModules (insert "#" neatPrim tab)
-  "comb":_ -> interact $ dumpWith dumpCombs
+  "comb":_ -> interact $ either id (dumpCombs . toAscList . fmap (toAscList . _combs)). objDump
   "rawcomb":_ -> interact $ dumpWith dumpRawCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "parse":_ -> interact \s -> either id show $ do

@@ -387,6 +387,13 @@ optiApp t = case t of
   L s x -> L s (optiApp x)
   _ -> t
 
+inlineLone objs expr = go expr where
+  go = \case
+    E (Link m s) | m /= "{foreign}", Lf (Basic c) <- _combs (objs ! m) ! s -> E (Basic c)
+    A x y -> A (go x) (go y)
+    L w t -> L w (go t)
+    t -> t
+
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ show q
 
@@ -427,11 +434,6 @@ data Module = Module
   , _syms :: Map String (Either (String, String) Int)
   , _mem :: [Either (String, String) Int]
   }
-
-ink s = do
-  tab <- insert "#" neatPrim <$> singleFile s
-  ms <- topoModules tab
-  foldM compileModule Tip $ zip ms $ (tab !) <$> ms
 
 data Layout = Layout
   { _offsets :: Map String Int
@@ -519,7 +521,7 @@ compileModule objs (name, neat) = do
   typed <- inferDefs searcher depdefs (topDecls neat) typed
   typed <- inferTypeclasses searcher ienv typed
   let
-    rawCombs = optim . nolam . optiApp . snd <$> typed
+    rawCombs = optim . nolam . inlineLone objs . optiApp . snd <$> typed
     combs = rewriteCombs rawCombs <$> rawCombs
     (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
     localmap = resolveLocal <$> symtab
