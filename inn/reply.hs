@@ -13,8 +13,6 @@ getLine = go id where
     c <- getChar
     if c == '\n' then pure $ Just $ acc "" else go $ acc . (c:)
 
-foreign import ccall "scratchpad_put" putScratchpad :: Int -> IO ()
-
 kF = comEnum "F"
 kNUM = comEnum "NUM"
 kLINK = 0
@@ -44,8 +42,8 @@ main = do
   let Right (topo, objs) = initObjs
   let (libStart, lib) = foldl (genIndex objs) (0, Tip) $ fst <$> topo
   forM ((objs !) . fst <$> topo) \ob -> do
-    mapM putScratchpad $ concatMap (link lib) $ elems (_syms ob)
-    mapM putScratchpad $ concatMap (link lib) $ _mem ob
+    mapM vmPutScratchpad $ concatMap (link lib) $ elems (_syms ob)
+    mapM vmPutScratchpad $ concatMap (link lib) $ _mem ob
     vmGCRootScratchpad $ size $ _syms ob
   repl (insert ">" (Module neatBase Tip Tip []) objs) (libStart, lib)
 
@@ -94,8 +92,8 @@ repl mos (libStart, lib) = putStr "> " *> getLine >>= maybe (putChar '\n') \s ->
       libStart' = libStart + size localmap
       lib' = insert ">" roots' lib
 
-    mapM putScratchpad $ concatMap (link lib) $ elems localmap
-    mapM putScratchpad $ concatMap (link lib) mem
+    mapM vmPutScratchpad $ concatMap (link lib) $ elems localmap
+    mapM vmPutScratchpad $ concatMap (link lib) mem
     vmGCRootScratchpad $ size localmap
 
     pure (localmap, concatMap (link lib) mem, roots')
@@ -109,7 +107,7 @@ repl mos (libStart, lib) = putStr "> " *> getLine >>= maybe (putChar '\n') \s ->
     pure (addr, (hp', memF []))
 
   exec (addr, (hp, mem)) = do
-    mapM putScratchpad $ concatMap (link lib) mem
+    mapM vmPutScratchpad $ concatMap (link lib) mem
     vmRunScratchpad $ either undefined id addr
     repl mos (libStart, lib)
 

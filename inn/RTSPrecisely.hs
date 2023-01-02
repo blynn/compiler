@@ -100,6 +100,7 @@ ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
+VMSCRATCH = "*scratchpadptr++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
 VMRUN = "vmrun();"
 VMGCROOT = "vmgcroot();"
 |]
@@ -277,7 +278,6 @@ static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
 u scratchpad[1048576], *scratchpadptr = scratchpad;
-void scratchpad_put(int n) { *scratchpadptr++ = n; }
 static inline u tagcheck(u x) { return isAddr(x) ? x - 128 + hp : x; }
 void replheap(u *start) {
   // TODO: What if there is insufficient heap?
