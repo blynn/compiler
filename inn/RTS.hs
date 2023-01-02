@@ -17,7 +17,7 @@ void errchar(int c) { fputc(c, stderr); }
 void errexit() { fputc('\n', stderr); }
 |]
 
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((export_name(sym))); void f(){rts_reduce(root[n]);}
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 enum { TOP = 1<<24 };

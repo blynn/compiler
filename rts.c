@@ -129,13 +129,14 @@ static void run() {
   }
 }
 
-void rts_reduce(u) __attribute__((visibility("default")));
 void rts_reduce(u n) {
   *(sp = spTop) = app(app(n, '?'), '.');
   run();
 }
 
-void rts_init() __attribute__((visibility("default")));
+#if __has_attribute(export_name)
+void rts_init() __attribute__((export_name("rts_init")));
+#endif
 void rts_init() {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
@@ -148,4 +149,4 @@ int getargcount() { return env_argc; }
 static char **env_argv;
 int getargchar(int n, int k) { return env_argv[n][k]; }
 
-#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((export_name(sym))); void f(){rts_reduce(root[n]);}

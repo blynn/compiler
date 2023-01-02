@@ -1245,7 +1245,7 @@ comdefs = maybe undefined fst (parse (sp *> some comb) $ ParseState comdefsrc Ti
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1);
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs);
 
-preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((visibility("default"))); void f(){rts_reduce(root[n]);}
+preamble = [r|#define EXPORT(f, sym, n) void f() asm(sym) __attribute__((export_name(sym))); void f(){rts_reduce(root[n]);}
 void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 enum { TOP = 1<<24 };
