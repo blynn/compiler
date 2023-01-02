@@ -100,7 +100,7 @@ ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
-VMSCRATCH = "*scratchpadptr++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
+VMSCRATCH = "*scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
 VMRUN = "vmrun();"
 VMGCROOT = "vmgcroot();"
 |]
@@ -235,15 +235,11 @@ static u evac(u n) {
   return z;
 }
 
-u moreroot[65536];
-u *morerootptr = moreroot;
-
 static u gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
-  for(u *r = root; *r; r++) *r = evac(*r);
-  for(u *r = moreroot; r != morerootptr; r++) *r = evac(*r);
+  for(u *r = root; r != rootend; r++) *r = evac(*r);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
@@ -277,28 +273,27 @@ static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
-u scratchpad[1048576], *scratchpadptr = scratchpad;
 static inline u tagcheck(u x) { return isAddr(x) ? x - 128 + hp : x; }
-void replheap(u *start) {
+void vmheap(u *start) {
   // TODO: What if there is insufficient heap?
   u *heapptr = mem + hp;
   u *p = start;
-  while (p != scratchpadptr) {
+  while (p != scratchpadend) {
     u x = *p++;
-    *heapptr++ = x == _UNDEFINED ? moreroot[*p++] : tagcheck(x);
+    *heapptr++ = x == _UNDEFINED ? vmroot[*p++] : tagcheck(x);
     u y = *p++;
     if (x == _NUM) {
       *heapptr++ = y;
     } else {
-      *heapptr++ = y == _UNDEFINED ? moreroot[*p++] : tagcheck(y);
+      *heapptr++ = y == _UNDEFINED ? vmroot[*p++] : tagcheck(y);
     }
   }
   hp = heapptr - mem;
 }
 void vmrun() {
   u x = tagcheck(num(1));
-  replheap(scratchpad);
-  scratchpadptr = scratchpad;
+  vmheap(scratchpad);
+  scratchpadend = scratchpad;
   lazy2(2, x, arg(2));
 }
 void vmgcroot() {
@@ -306,10 +301,10 @@ void vmgcroot() {
   u *p = scratchpad;
   while (lim--) {
     u x = *p++;
-    *morerootptr++ = x == _UNDEFINED ? moreroot[*p++] : tagcheck(x);
+    *rootend++ = x == _UNDEFINED ? vmroot[*p++] : tagcheck(x);
   }
-  replheap(p);
-  scratchpadptr = scratchpad;
+  vmheap(p);
+  scratchpadend = scratchpad;
   lazy2(3, app(arg(3), _K), arg(2));
 }
 |]++)
@@ -334,9 +329,13 @@ void vmgcroot() {
 
 rtsInit opts
   | "warts" `elem` opts = ([r|void rts_init() {
-  mem = (u*) HEAP_BASE; altmem = (u*) (HEAP_BASE + (TOP - 128) * sizeof(u));
+  mem = (u*) HEAP_BASE;
+  altmem = mem + TOP - 128;
   hp = 128 + mem[127];
   spTop = mem + TOP - 1;
+  for (rootend = root; *rootend; rootend++);
+  vmroot = rootend;
+  scratchpadend = scratchpad = altmem + TOP;
 }
 |]++)
   | otherwise = ([r|void rts_init() {
@@ -344,6 +343,7 @@ rtsInit opts
   hp = 128;
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
   spTop = mem + TOP - 1;
+  vmroot = rootend;
 }
 |]++)
 
@@ -446,7 +446,7 @@ enum {
   HEAP_BASE = (1<<20) - 128 * sizeof(u),  // program
   TOP = 1<<22
 };
-static u *root = (u*) ROOT_BASE;
+static u *root = (u*) ROOT_BASE, *vmroot, *rootend, *scratchpad, *scratchpadend;
 void errchar(int c) {}
 void errexit() {}
 |]++)
@@ -539,9 +539,10 @@ compile topSize libc opts s = do
     . ("enum{TOP="++) . (topSize++) . ("};\n"++)
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> shows n . (',':)) mem)
-    . ("};\nstatic u root[]={" ++)
+    . ("};\nstatic u root[1<<16]={" ++)
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
-    . ("0};\n" ++)
+    . ("}, *rootend = root + " ++) . shows (size ffes) . (", *vmroot;\n" ++)
+    . ("u scratchpad[1<<20], *scratchpadend = scratchpad;\n" ++)
     . (libc++)
     . runFun opts (toAscList ffis)
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])

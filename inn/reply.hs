@@ -95,8 +95,6 @@ repl mos (libStart, lib) = putStr "> " *> getLine >>= maybe (putChar '\n') \s ->
     mapM vmPutScratchpad $ concatMap (link lib) $ elems localmap
     mapM vmPutScratchpad $ concatMap (link lib) mem
     vmGCRootScratchpad $ size localmap
-
-    pure (localmap, concatMap (link lib) mem, roots')
     repl mos' (libStart', lib')
 
   tryExpr sugary = do
