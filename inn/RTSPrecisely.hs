@@ -100,6 +100,8 @@ ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
+VMRUN = "vmrun();"
+VMGCROOT = "vmgcroot();"
 |]
 
 argList t = case t of
@@ -232,11 +234,15 @@ static u evac(u n) {
   return z;
 }
 
+u moreroot[65536];
+u *morerootptr = moreroot;
+
 static u gc() {
   hp = 128;
   u di = hp;
   sp = altmem + TOP - 1;
   for(u *r = root; *r; r++) *r = evac(*r);
+  for(u *r = moreroot; r != morerootptr; r++) *r = evac(*r);
   *sp = evac(*spTop);
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
@@ -270,6 +276,42 @@ static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
+u scratchpad[1048576], *scratchpadptr = scratchpad;
+void scratchpad_put(int n) { *scratchpadptr++ = n; }
+static inline u tagcheck(u x) { return isAddr(x) ? x - 128 + hp : x; }
+void replheap(u *start) {
+  // TODO: What if there is insufficient heap?
+  u *heapptr = mem + hp;
+  u *p = start;
+  while (p != scratchpadptr) {
+    u x = *p++;
+    *heapptr++ = x == _UNDEFINED ? moreroot[*p++] : tagcheck(x);
+    u y = *p++;
+    if (x == _NUM) {
+      *heapptr++ = y;
+    } else {
+      *heapptr++ = y == _UNDEFINED ? moreroot[*p++] : tagcheck(y);
+    }
+  }
+  hp = heapptr - mem;
+}
+void vmrun() {
+  u x = tagcheck(num(1));
+  replheap(scratchpad);
+  scratchpadptr = scratchpad;
+  lazy2(2, x, arg(2));
+}
+void vmgcroot() {
+  u lim = num(1);
+  u *p = scratchpad;
+  while (lim--) {
+    u x = *p++;
+    *morerootptr++ = x == _UNDEFINED ? moreroot[*p++] : tagcheck(x);
+  }
+  replheap(p);
+  scratchpadptr = scratchpad;
+  lazy2(3, app(arg(3), _K), arg(2));
+}
 |]++)
     . foldr (.) id (ffiDeclare opts <$> ffis)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
@@ -417,16 +459,16 @@ warts opts mods =
   where
   ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
 
-topoModules tab = reverse . snd <$> go (keys tab) ([], []) where
-  go xs (todo, done) = case xs of
-    [] -> Right (todo, done)
+topoModules tab = reverse <$> go [] [] (keys tab) where
+  go todo done = \case
+    [] -> Right done
     x:xt
-      | x `elem` done -> go xt (todo, done)
+      | x `elem` map fst done -> go todo done xt
       | x `elem` todo -> Left $ "cycle: " ++ x
       | True -> do
         neat <- maybe (Left $ "missing module: " ++ x) pure $ mlookup x tab
-        (todo, done) <- go (dependentModules neat) (x:todo, done)
-        go xt (todo, x:done)
+        done <- go (x:todo) done $ dependentModules neat
+        go todo ((x, neat):done) xt
 
 data Module = Module
   { _neat :: Neat
@@ -475,11 +517,11 @@ agglomerate ffiMap objs lout name = lout
 compile topSize libc opts s = do
   tab <- insert "#" neatPrim <$> singleFile s
   ms <- topoModules tab
-  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  objs <- foldM compileModule Tip ms
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew ms
+    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
     mem = _memFun lout []
     ffes = _ffes lout
     mayMain = do

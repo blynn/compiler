@@ -40,11 +40,11 @@ singleModule = interact $ \s -> case singleFile s of
 
 toWasm tab = do
   ms <- topoModules tab
-  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  objs <- foldM compileModule Tip ms
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew ms
+    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
     mem = _memFun lout []
   (mainOff, mainType) <- maybe (Left "bad main") Right $ do
     m <- mlookup "Main" $ _offsets lout

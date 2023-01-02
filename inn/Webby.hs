@@ -29,11 +29,11 @@ main = interact $ either id id . toWasm
 toWasm s = do
   tab <- insert "#" neatPrim <$> singleFile s
   ms <- topoModules tab
-  objs <- foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  objs <- foldM compileModule Tip ms
   let
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew ms
+    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
     mem = _memFun lout []
     ffes = toAscList $ fst <$> _ffes lout
     go (n, x)

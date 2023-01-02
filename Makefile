@@ -22,6 +22,9 @@ define rtsup
 $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
+REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/Kiselyov1.hs inn/Map1.hs inn/System1.hs inn/ParserPrecisely.hs inn/RTSPrecisely.hs inn/TyperPrecisely.hs inn/Unify1.hs inn/reply.hs
+reply.c: precisely $(REPLYHS); (cat $(REPLYHS) inn/BasePrecisely.hs ; echo '|]') | ./precisely > reply.c
+
 $(call rtsup,patty,lonely)
 $(call rtsup,guardedly,patty)
 $(call rtsup,assembly,guardedly)

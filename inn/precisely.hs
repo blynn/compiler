@@ -31,15 +31,14 @@ dumpMatrix neat = map go combs where
 
 objDump s = do
   tab <- insert "#" neatPrim <$> singleFile s
-  ms <- topoModules tab
-  foldM compileModule Tip $ zip ms $ (tab !) <$> ms
+  foldM compileModule Tip =<< topoModules tab
 
 main = getArgs >>= \case
   "obj":_ -> interact $ either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) . objDump
   "matrix":_ -> interact $ dumpWith dumpMatrix
   "topo":_ -> interact \s -> either id show $ do
     tab <- singleFile s
-    topoModules (insert "#" neatPrim tab)
+    map fst <$> topoModules (insert "#" neatPrim tab)
   "comb":_ -> interact $ either id (dumpCombs . toAscList . fmap (toAscList . _combs)). objDump
   "rawcomb":_ -> interact $ dumpWith dumpRawCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
