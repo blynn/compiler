@@ -1,0 +1,84 @@
+= Do Haskell =
+
+Try typing:
+
++++<pre id='line1'></pre>+++
+
+Then:
+
++++<pre id='line2'></pre>+++
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<style type="text/css">
+.term {
+  font-family: 'Inconsolata', monospace;
+  font-size: 90%;
+  color: #e6e6fa;
+  background: #301934;
+  border: 0;
+  margin: 0;
+}
+.term .termReverse {
+  background: #cbc3e3;
+  color: #301934;
+}
+table{border:0;}
+</style>
+
+<div id="termDiv"></div>
+<script src="termlib.js"></script>
+<script defer>
+"use strict";
+const repl = {};
+
+function doLine(s) {
+  repl.out = [];
+  repl.inp = teen(s);
+  repl.cursor = 0;
+  repl.instance.exports.go();
+  return tede(Uint8Array.from(repl.out));
+}
+
+function teen(s) { return (new TextEncoder()).encode(s); }
+function tede(s) { return (new TextDecoder()).decode(s); }
+
+var term = new Terminal( {handler: termHandler,
+  initHandler: loadingMessage,
+  // greeting: 'Greetings.',
+  cols: 80, rows: 25} );
+function loadingMessage() {
+  term.write('Loading...');
+}
+function termHandler() {
+  this.newLine();
+  var line = doLine(this.lineBuffer);
+  if (line != "") this.write(line);
+  this.prompt();
+}
+term.open();
+
+const line1 = document.getElementById("line1");
+line1.textContent = "primes = f [2..] where f (p:xs) = p : f [x | x <- xs, x `mod` p /= 0]";
+const line2 = document.getElementById("line2");
+line2.textContent = "take 100 primes"
+
+async function loadWasm() {
+  try {
+    repl.instance = (await WebAssembly.instantiateStreaming(fetch('doh.wasm'), {env:
+      { putchar: c  => repl.out.push(c)
+      , eof    : () => repl.cursor == repl.inp.length
+      , getchar: () => repl.inp[repl.cursor++]
+      }})).instance;
+    doLine("");
+    term.clear();
+    term.prompt();
+    line1.onclick = (event) => { term.globals.insertText(line1.textContent); };
+    line2.onclick = (event) => { term.globals.insertText(line2.textContent); };
+  } catch(err) {
+    console.log(err);
+  }
+}
+loadWasm();
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
