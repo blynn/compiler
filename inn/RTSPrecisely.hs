@@ -428,6 +428,36 @@ optiApp t = case t of
     x -> A x (optiApp y)
   L s x -> L s (optiApp x)
   _ -> t
+slideY name orig = stripArgs id orig where
+  stripArgs f = \case
+    L s x | s /= name -> stripArgs (f . (s:)) x
+    t -> measure (f []) t
+  measure args t = case args of
+    [] -> orig
+    _ -> case seek [] t of
+      Just n | n > 0 -> let
+        (eaten, rest) = splitAt n args
+        in foldr L (A (E $ Basic "Y") $ L name $ foldr L (either (error "BUG!") id $ snip n t) rest) eaten
+      _ -> orig
+    where
+    seek spine t = case t of
+      V v | v == name -> Just $ length $ takeWhile match $ zip args spine
+      A x y -> seek (t:spine) x `fight` seek [] y
+      L s x | s /= name -> seek [] x
+      _ -> Nothing
+    snip n t = case t of
+      V v | v == name -> Left 1
+      A x y -> case snip n x of
+        Left k | k == n -> Right $ V name
+               | True -> Left (k + 1)
+        Right x' -> A x' <$> snip n y
+      L s x | s /= name -> L s <$> snip n x
+      _ -> Right t
+
+  match = \case
+    (s, A _ (V v)) -> s == v
+    _ -> False
+  fight x y = maybe x (\n -> Just $ maybe n (min n) x) y
 
 inlineLone objs expr = go expr where
   go = \case
@@ -564,7 +594,8 @@ compileModule objs (name, neat) = do
   typed <- inferDefs searcher depdefs (topDecls neat) typed
   typed <- inferTypeclasses searcher ienv typed
   let
-    rawCombs = optim . nolam . inlineLone objs . optiApp . snd <$> typed
+    slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
+    rawCombs = optim . nolam . inlineLone objs <$> slid
     combs = rewriteCombs rawCombs <$> rawCombs
     (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
     localmap = resolveLocal <$> symtab

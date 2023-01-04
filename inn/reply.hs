@@ -73,7 +73,8 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
   addTyped typed = do
     let
       neat = _neat $ mos!">"
-      rawCombs = optim . nolam . inlineLone mos . optiApp . snd <$> typed
+      slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
+      rawCombs = optim . nolam . inlineLone mos <$> slid
       combs = rewriteCombs rawCombs <$> rawCombs
       (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
       localmap = resolveLocal <$> symtab

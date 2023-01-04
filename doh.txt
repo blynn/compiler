@@ -1,12 +1,12 @@
 = Do Haskell =
 
-Try typing:
+Type:
 
-+++<pre id='line1'></pre>+++
++++<pre id='line0'>primes = f [2..] where f (p:xs) = p : f [x | x <- xs, x `mod` p /= 0]</pre>+++
 
 Then:
 
-+++<pre id='line2'></pre>+++
++++<pre id='line1'>take 100 primes</pre>+++
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -25,9 +25,20 @@ Then:
 }
 table{border:0;}
 </style>
-
 <div id="termDiv"></div>
-<script src="termlib.js"></script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Another example:
+
++++<pre id='line2'>fibs = 0 : 1 : zipWith (+) fibs (tail fibs)</pre>+++
+
+Then:
+
++++<pre id='line3'>fibs !! (fibs !! 11)</pre>+++
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script src="/~blynn/termlib.js"></script>
 <script defer>
 "use strict";
 const repl = {};
@@ -45,7 +56,6 @@ function tede(s) { return (new TextDecoder()).decode(s); }
 
 var term = new Terminal( {handler: termHandler,
   initHandler: loadingMessage,
-  // greeting: 'Greetings.',
   cols: 80, rows: 25} );
 function loadingMessage() {
   term.write('Loading...');
@@ -58,12 +68,9 @@ function termHandler() {
 }
 term.open();
 
-const line1 = document.getElementById("line1");
-line1.textContent = "primes = f [2..] where f (p:xs) = p : f [x | x <- xs, x `mod` p /= 0]";
-const line2 = document.getElementById("line2");
-line2.textContent = "take 100 primes"
+const lines = [0,1,2,3].map(k => document.getElementById("line" + k));
 
-async function loadWasm() {
+async function loadRepl() {
   try {
     repl.instance = (await WebAssembly.instantiateStreaming(fetch('doh.wasm'), {env:
       { putchar: c  => repl.out.push(c)
@@ -73,12 +80,11 @@ async function loadWasm() {
     doLine("");
     term.clear();
     term.prompt();
-    line1.onclick = (event) => { term.globals.insertText(line1.textContent); };
-    line2.onclick = (event) => { term.globals.insertText(line2.textContent); };
+    lines.map(x => x.onclick = ev => { term.globals.insertText(x.textContent); });
   } catch(err) {
     console.log(err);
   }
 }
-loadWasm();
+loadRepl();
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
