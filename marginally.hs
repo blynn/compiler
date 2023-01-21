@@ -792,8 +792,7 @@ prims = let
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
     , ("ioPure", (arr (TV "a") (TAp (TC "IO") (TV "a")), ro "V"))
-    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))),
-      A (A (ro "B") (ro "C")) (A (A (ro "B") (ro "T")) (ro "REF"))))
+    , ("newIORef", (arr (TV "a") (TAp (TC "IO") (TAp (TC "IORef") (TV "a"))), ro "NEWREF"))
     , ("readIORef", (arr (TAp (TC "IORef") (TV "a")) (TAp (TC "IO") (TV "a")),
       A (ro "T") (ro "READREF")))
     , ("writeIORef", (arr (TAp (TC "IORef") (TV "a")) (arr (TV "a") (TAp (TC "IO") (TC "()"))),
@@ -1440,6 +1439,7 @@ MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
+NEWREF x y z = z ("_REF" x) y
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"

@@ -119,6 +119,7 @@ MOD x y = "_NUM" "num(1) % num(2)"
 EQ x y = "num(1) == num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 LE x y = "num(1) <= num(2) ? lazy2(2, _I, _K) : lazy2(2, _K, _I);"
 REF x y = y "sp[1]"
+NEWREF x y z = z ("_REF" x) y
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"

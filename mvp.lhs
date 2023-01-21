@@ -211,12 +211,18 @@ The address of this app-cell may be freely copied, and `writeIORef` can update
 all these copies at once, by changing a single entry. We hardwire the following:
 
 ------------------------------------------------------------------------
-newIORef value world cont = cont (REF value) world
+newIORef = NEWREF
 readIORef ref world cont = ref READREF world cont
 writeIORef ref value world cont = ref (WRITEREF value) world cont
+NEWREF value world cont = cont (REF value) world
 READREF (REF x) world cont = cont x world
 WRITEREF value (REF _) world cont = cont () world
 ------------------------------------------------------------------------
+
+NEWREF has a subtle side effect: it ensures the `REF value` cell it creates is
+new. Originally, we defined `newIORef value world cont = cont (REF value)
+world` but this is unsafe because the `REF value` might be shared, causing
+writes to stomp over each other.
 
 WRITEREF also has a side effect: it overwrites the given app-cell with `REF
 value` before returning `cont`. It is the only combinator that can modify the

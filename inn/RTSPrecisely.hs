@@ -93,6 +93,7 @@ U_DIV x y = "_NUM" "(u) num(1) / (u) num(2)"
 U_MOD x y = "_NUM" "(u) num(1) % (u) num(2)"
 U_LE x y = "lazy2(2, _I, (u) num(1) <= (u) num(2) ? _K : _KI);"
 REF x y = y "sp[1]"
+NEWREF x y z = z ("_REF" x) y
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"
