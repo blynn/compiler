@@ -11,7 +11,7 @@ kF = comEnum "F"
 kNUM = comEnum "NUM"
 kLINK = 0
 
-neatBase = neatEmpty {moduleImports = singleton "" [(">", const True), ("#", const True), ("Base", const True)]}
+neatBase = neatEmpty {moduleImports = singleton "" [("#", const True), ("Base", const True)]}
 
 initObjs = do
   tab <- insert "#" neato <$> singleFile (source ++ sourceExtras)
@@ -44,33 +44,41 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
   go = either (either complain addTyped . tryAddDefs) (either complain exec . tryExpr)
   complain err = putStrLn err >> pure st
   fmt = Left <$> fragment <|> Right <$> single
-  fragment = map (second fst) <$> (lexemePrelude *> braceDef <* eof)
+  fragment = ($ neatEmpty) <$> (lexemePrelude *> topdecls <* eof)
   single = many (char ' ') *> expr <* eof
 
-  tryAddDefs defs = do
-    let
-      -- Avoid ambiguity when redefining symbols by temporarily deleting any
-      -- existing definitions.
-      obj = mos!">"
-      neat = _neat obj
-      mosTmp = insert ">" obj { _neat = neatTmp } mos
-      neatTmp = neat { typedAsts = foldr delete (typedAsts neat) $ fst <$> defs }
-      imps = dependentModules neatBase
-      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-        [] -> Tycl (findSigs cl) is
-        _ -> Tycl sigs is
-      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
-        find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
-          typeclasses (_neat $ mosTmp ! im) | im <- imps]
-      ienv = fromList $ fillSigs <$> toAscList (typeclasses neatBase)
-      searcher = searcherNew ">" (_neat <$> mosTmp) neatBase { topDefs = defs } ienv
-    let typed = Tip
-    depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) defs
-    typed <- inferDefs searcher depdefs Tip typed
-    typed <- inferTypeclasses searcher ienv typed
-    pure typed
+  mergeFragment frag mos = insert ">" obj { _neat = neat' } mos where
+    obj = mos!">"
+    neat = _neat obj
+    neat' = neat
+      { typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
+      , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
+      , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
+      , typeclasses = foldr (uncurry insert) (typeclasses neat) $ toAscList $ typeclasses frag
+      , topDefs = topDefs frag
+      }
 
-  addTyped typed = do
+  tryAddDefs frag = let
+    mos1 = mergeFragment frag mos
+    neat = _neat $ mos1!">"
+
+    imps = dependentModules neat
+    fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
+      [] -> Tycl (findSigs cl) is
+      _ -> Tycl sigs is
+    findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
+      find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
+        typeclasses (_neat $ mos1 ! im) | im <- imps]
+    ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
+    searcher = searcherNew ">" (_neat <$> mos1) neat
+    typed = typedAsts frag
+    in do
+      depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) (topDefs frag)
+      typed <- inferDefs searcher depdefs Tip typed
+      typed <- inferTypeclasses searcher ienv typed
+      pure (typed, mos1)
+
+  addTyped (typed, mos) = do
     let
       neat = _neat $ mos!">"
       slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
@@ -97,8 +105,8 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
     pure (mos', (libStart', lib'))
 
   tryExpr sugary = do
-    ast <- snd <$> patternCompile searcherBase sugary
-    (typ, typedAst) <- (! "") <$> inferDefs searcherBase [("", ([], ast))] Tip Tip
+    ast <- snd <$> patternCompile searcherPrompt sugary
+    (typ, typedAst) <- (! "") <$> inferDefs searcherPrompt [("", ([], ast))] Tip Tip
     case typ of
       Qual [] (TAp (TC "IO") _) -> do
         let combs = nolam . optiApp $ typedAst
@@ -111,7 +119,8 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
     vmRunScratchpad $ either undefined id addr
     pure (mos, (libStart, lib))
 
-  searcherBase = searcherNew ">" (_neat <$> mos) neatBase Tip
+  neatPrompt = neatEmpty {moduleImports = singleton "" [(">", const True), ("#", const True), ("Base", const True)]}
+  searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
 
 link lib = \case
   Left (moduleName, sym) -> [kLINK, lib ! moduleName ! sym]

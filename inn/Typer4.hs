@@ -454,7 +454,7 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
   [unique] -> Right unique
   _ -> Left $ "ambiguous: " ++ s
 
-searcherNew tab neat ienv = Searcher
+searcherNew tab neat = Searcher
   { astLink = astLink'
   , findPrec = \s -> if s == ":" then Right (5, RAssoc) else findAmong opFixity visible s
   , findCon = findAmong dataCons visible
@@ -466,7 +466,7 @@ searcherNew tab neat ienv = Searcher
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
   importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
   visible s = neat : (snd <$> importedNeats s)
-  classes im = if im == "" then ienv else typeclasses $ tab ! im
+  classes im = typeclasses $ if im == "" then neat else tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
     [] -> error $ "no such field: " ++ f
     h:_ -> h
@@ -502,7 +502,7 @@ inferModule tab acc name = case mlookup name acc of
       findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
     acc' <- foldM (inferModule tab) acc imps
-    let searcher = searcherNew acc' neat ienv
+    let searcher = searcherNew acc' neat
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
     typed <- inferDefs searcher depdefs (topDecls neat) typed
     typed <- inferTypeclasses searcher ienv typed

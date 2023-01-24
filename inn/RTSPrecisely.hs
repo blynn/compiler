@@ -582,7 +582,7 @@ compile topSize libc opts s = do
 compileModule objs (name, neat) = do
   let
     imps = dependentModules neat
-    searcher = searcherNew name (_neat <$> objs) neat ienv
+    searcher = searcherNew name (_neat <$> objs) neat
     typed = typedAsts neat
     fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
       [] -> Tycl (findSigs cl) is

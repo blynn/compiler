@@ -513,7 +513,7 @@ typeDecl = addTypeAlias <$> between (res "type") (res "=") conId <*> _type
 
 addTypeAlias s t neat = neat { typeAliases = insertWith (error $ "duplicate: " ++ s) s t $ typeAliases neat }
 
-topdecls = braceSep
+topdecls = fmap (foldr (.) id) $ braceSep
   $   adt
   <|> classDecl
   <|> addTopDecl <$> genDecl

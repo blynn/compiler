@@ -545,7 +545,7 @@ expandTypeAliases neat = pure $ if size als == 0 then neat else neat
   subDataCons (Constr s sts) = Constr s $ second go <$> sts
 
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< expandTypeAliases =<< maybe Right processExports mexs (foldr ($) neatEmpty {moduleImports = singleton "" [("#", const True)]} prog))
+  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< expandTypeAliases =<< maybe Right processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]}))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -603,7 +603,7 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
 
 assertType x t = A (E $ Basic "@") $ A x (E $ XQual t)
 
-searcherNew thisModule tab neat ienv = Searcher
+searcherNew thisModule tab neat = Searcher
   { astLink = astLink'
   , findPrec = findPrec'
   , findCon = findAmong dataCons visible
@@ -628,7 +628,7 @@ searcherNew thisModule tab neat ienv = Searcher
   qualNeats q s = [(im, n) | (im, isLegalImport) <- maybe [] id $ mlookup q $ moduleImports neat, let n = tab ! im, isLegalImport s && isLegalExport s n]
   importedNeats s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
-  classes im = if im == "" then ienv else typeclasses $ tab ! im
+  classes im = typeclasses $ if im == "" then neat else tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
     [] -> error $ "no such field: " ++ f
     h:_ -> h
@@ -651,7 +651,7 @@ searcherNew thisModule tab neat ienv = Searcher
         | otherwise -> case findQualifiedSym q s of
           [] -> badDep $ "missing: " ++ q ++ "." ++ s
           [(truename, t)] -> pure $ assertType (E $ Link truename s) t
-          _ -> badDep $ "ambiguous: " ++ q ++ "." ++ s
+          _ -> badDep $ "BUG! unreachable: " ++ q ++ "." ++ s
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
@@ -671,7 +671,7 @@ inferModule tab acc name = case mlookup name acc of
           typeclasses (tab ! im) | im <- imps]
       ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
     acc' <- foldM (inferModule tab) acc imps
-    let searcher = searcherNew name acc' neat ienv
+    let searcher = searcherNew name acc' neat
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
     typed <- inferDefs searcher depdefs (topDecls neat) typed
     typed <- inferTypeclasses searcher ienv typed
