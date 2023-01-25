@@ -581,19 +581,11 @@ compile topSize libc opts s = do
 
 compileModule objs (name, neat) = do
   let
-    imps = dependentModules neat
     searcher = searcherNew name (_neat <$> objs) neat
     typed = typedAsts neat
-    fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-      [] -> Tycl (findSigs cl) is
-      _ -> Tycl sigs is
-    findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
-      find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
-        typeclasses (_neat $ objs ! im) | im <- imps]
-    ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
   depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
   typed <- inferDefs searcher depdefs (topDecls neat) typed
-  typed <- inferTypeclasses searcher ienv typed
+  typed <- inferTypeclasses searcher (instances neat) typed
   let
     slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
     rawCombs = optim . nolam . inlineLone objs <$> slid

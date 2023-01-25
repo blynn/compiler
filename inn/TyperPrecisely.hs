@@ -320,7 +320,7 @@ findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
       <$> findProof searcher (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name) ps
 
 findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
-  Nothing -> findInstance searcher psn pred $ findTypeclass searcher classId
+  Nothing -> findInstance searcher psn pred $ findInstances searcher classId
   Just s -> Right (psn, V s)
 
 subProofVar tab pred = case lookup pred tab of
@@ -422,8 +422,8 @@ inferDefs searcher defs decls typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
-inferTypeclasses searcher ienv typed = foldM perClass typed $ toAscList ienv where
-  perClass typed (classId, Tycl sigs insts) = foldM perInstance typed insts where
+inferTypeclasses searcher iMap typed = foldM perClass typed $ toAscList iMap where
+  perClass typed (classId, insts) = foldM perInstance typed insts where
     perInstance typed (Instance ty name ps idefs) = do
       let
         dvs = map snd $ fst $ dictVars ps 0
@@ -450,7 +450,7 @@ inferTypeclasses searcher ienv typed = foldM perClass typed $ toAscList ienv whe
               if length ps2 /= length ps3
                 then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                 else pure tr
-      ms <- mapM perMethod sigs
+      ms <- mapM perMethod $ findSigs searcher classId
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
 primAdts =
@@ -564,7 +564,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
         where delta = [n | n <- ns, not $ elem n cnames]
       Nothing -> case mlookup c $ typeclasses neat of
         Nothing -> Left $ "bad export " ++ c
-        Just (Tycl methodNames _)
+        Just methodNames
           | ns == [".."] -> Right methodNames
           | null delta -> Right ns
           | True -> Left $ "bad exports: " ++ show delta
@@ -580,7 +580,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
     defName = "{default}" ++ s
     (q@(Qual ps0 t0), _) = qcs ! s
   genDefaultMethods neat = do
-    typed <- foldM genDefaultMethod (typedAsts neat) [(classId, sig) | (classId, Tycl sigs _) <- toAscList $ typeclasses neat, sig <- sigs]
+    typed <- foldM genDefaultMethod (typedAsts neat) [(classId, sig) | (classId, sigs) <- toAscList $ typeclasses neat, sig <- sigs]
     pure neat { typedAsts = typed }
 
 data Searcher = Searcher
@@ -589,7 +589,8 @@ data Searcher = Searcher
   , findCon :: String -> Either String (Qual, [Constr])
   , findField :: String -> (String, [(String, Type)])
   , typeOfMethod :: String -> Either String Qual
-  , findTypeclass :: String -> [(String, Instance)]
+  , findSigs :: String -> [String]
+  , findInstances :: String -> [(String, Instance)]
   }
 
 isLegalExport s neat = case moduleExports neat of
@@ -603,15 +604,23 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
 
 assertType x t = A (E $ Basic "@") $ A x (E $ XQual t)
 
+slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
+
 searcherNew thisModule tab neat = Searcher
   { astLink = astLink'
   , findPrec = findPrec'
   , findCon = findAmong dataCons visible
   , findField = findField'
   , typeOfMethod = fmap fst . findAmong typedAsts visible
-  , findTypeclass = \s -> concat [maybe [] (\(Tycl _ is) -> (im,) <$> is) $ mlookup s $ classes im | im <- "":map fst imps]
+  , findSigs = \s -> case mlookup s mergedSigs of
+    Nothing -> error $ "missing class: " ++ s
+    Just [sigs] -> sigs
+    _ -> error $ "ambiguous class: " ++ s
+  , findInstances = maybe [] id . (`mlookup` mergedInstances)
   }
   where
+  mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map ((tab !) . fst) imps
+  mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\(im, _) -> (im, tab ! im)) imps]
   defPrec = (9, LAssoc)
   findPrec' = \case
     V s
@@ -628,7 +637,6 @@ searcherNew thisModule tab neat = Searcher
   qualNeats q s = [(im, n) | (im, isLegalImport) <- maybe [] id $ mlookup q $ moduleImports neat, let n = tab ! im, isLegalImport s && isLegalExport s n]
   importedNeats s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
   visible s = neat : (snd <$> importedNeats s)
-  classes im = typeclasses $ if im == "" then neat else tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
     [] -> error $ "no such field: " ++ f
     h:_ -> h
@@ -663,18 +671,11 @@ inferModule tab acc name = case mlookup name acc of
     let
       imps = dependentModules neat
       typed = typedAsts neat
-      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-        [] -> Tycl (findSigs cl) is
-        _ -> Tycl sigs is
-      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
-        find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
-          typeclasses (tab ! im) | im <- imps]
-      ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
     acc' <- foldM (inferModule tab) acc imps
     let searcher = searcherNew name acc' neat
     depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
     typed <- inferDefs searcher depdefs (topDecls neat) typed
-    typed <- inferTypeclasses searcher ienv typed
+    typed <- inferTypeclasses searcher (instances neat) typed
     Right $ insert name neat { typedAsts = typed } acc'
   Just _ -> Right acc
 

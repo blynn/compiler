@@ -55,27 +55,19 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
       , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
       , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
       , typeclasses = foldr (uncurry insert) (typeclasses neat) $ toAscList $ typeclasses frag
+      , instances = foldr (uncurry insert) (instances neat) $ toAscList $ instances frag
       , topDefs = topDefs frag
       }
 
   tryAddDefs frag = let
     mos1 = mergeFragment frag mos
     neat = _neat $ mos1!">"
-
-    imps = dependentModules neat
-    fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-      [] -> Tycl (findSigs cl) is
-      _ -> Tycl sigs is
-    findSigs cl = maybe (error $ "no sigs: " ++ cl) id $
-      find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $
-        typeclasses (_neat $ mos1 ! im) | im <- imps]
-    ienv = fromList $ fillSigs <$> toAscList (typeclasses neat)
     searcher = searcherNew ">" (_neat <$> mos1) neat
     typed = typedAsts frag
     in do
       depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) (topDefs frag)
       typed <- inferDefs searcher depdefs Tip typed
-      typed <- inferTypeclasses searcher ienv typed
+      typed <- inferTypeclasses searcher (instances frag) typed
       pure (typed, mos1)
 
   addTyped (typed, mos) = do

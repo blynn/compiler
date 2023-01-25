@@ -62,12 +62,11 @@ data Instance = Instance
   -- Method definitions
   (Map String Ast)
 
-data Tycl = Tycl [String] [Instance]
-
 data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
 
 data Neat = Neat
-  { typeclasses :: Map String Tycl
+  { typeclasses :: Map String [String]
+  , instances :: Map String [Instance]
   , topDefs :: [(String, Ast)]
   , topDecls :: Map String Qual
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
@@ -83,7 +82,7 @@ data Neat = Neat
   , typeAliases :: Map String Type
   }
 
-neatEmpty = Neat Tip [] Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip Tip
+neatEmpty = Neat Tip Tip [] Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip Tip
 
 patVars = \case
   PatLit _ -> []
