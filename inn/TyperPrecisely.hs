@@ -422,34 +422,33 @@ inferDefs searcher defs decls typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
-inferTypeclasses searcher iMap typed = foldM perClass typed $ toAscList iMap where
-  perClass typed (classId, insts) = foldM perInstance typed insts where
-    perInstance typed (Instance ty name ps idefs) = do
+inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
+  inferInstance typed (classId, Instance ty name ps idefs) = let
+    dvs = map snd $ fst $ dictVars ps 0
+    perMethod s = do
+      let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
+      expr <- snd <$> patternCompile searcher rawExpr
+      (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
+        $ infer s typed [] expr (Tip, 0)
+      qc <- typeOfMethod searcher s
       let
-        dvs = map snd $ fst $ dictVars ps 0
-        perMethod s = do
-          let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
-          expr <- snd <$> patternCompile searcher rawExpr
-          (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-            $ infer s typed [] expr (Tip, 0)
-          qc <- typeOfMethod searcher s
-          let
-            (tx, ax) = typeAstSub sub ta
+        (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-            (Qual [Pred _ headT] tc, n1) = instantiate qc n
+        (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
 -- e.g. Eq a => [a] -> [a] -> Bool
-            Just subc = match headT ty
-            (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
-          case match tx t2 of
-            Nothing -> Left "class/instance type conflict"
-            Just subx -> do
-              ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
-              if length ps2 /= length ps3
-                then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
-                else pure tr
+        Just subc = match headT ty
+        (Qual ps2 t2, n2) = instantiate (Qual ps $ apply subc tc) n1
+      case match tx t2 of
+        Nothing -> Left "class/instance type conflict"
+        Just subx -> do
+          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
+          if length ps2 /= length ps3
+            then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
+            else pure tr
+    in do
       ms <- mapM perMethod $ findSigs searcher classId
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
