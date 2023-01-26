@@ -221,9 +221,8 @@ addAdt t cs ders neat = foldr derive neat' ders where
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
       , (PatVar "_" Nothing, V "False")])
 
-emptyTycl = Tycl [] []
-addClass classId v (sigs, defs) neat = if null ms then neat
-  { typeclasses = insert classId (Tycl (keys sigs) is) tycl
+addClass classId v (sigs, defs) neat = if not $ member classId $ typeclasses neat then neat
+  { typeclasses = insert classId (keys sigs) $ typeclasses neat
   , typedAsts = selectors ++ typedAsts neat
   , topDefs = defaults ++ topDefs neat
   } else error $ "duplicate class: " ++ classId
@@ -232,14 +231,10 @@ addClass classId v (sigs, defs) neat = if null ms then neat
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
-  tycl = typeclasses neat
-  Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
 
 addInstance classId ps ty ds neat = neat
-  { typeclasses = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
+  { instances = insertWith (++) classId [Instance ty name ps (fromList ds)] $ instances neat
   } where
-  tycl = typeclasses neat
-  Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   name = '{':classId ++ (' ':shows ty "}")
 
 addForeignImport foreignname ourname t neat = let ffis = ffiImports neat in neat

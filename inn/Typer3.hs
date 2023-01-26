@@ -258,8 +258,8 @@ inferDefs tycl defs typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
-inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed $ toAscList ienv where
-  perClass typed (classId, Tycl sigs insts) = foldM perInstance typed insts where
+inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs = foldM perClass typed $ toAscList iMap where
+  perClass typed (classId, insts) = foldM perInstance typed insts where
     perInstance typed (Instance ty name ps idefs) = do
       let
         dvs = map snd $ fst $ dictVars ps 0
@@ -286,7 +286,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed 
               if length ps2 /= length ps3
                 then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                 else pure tr
-      ms <- mapM perMethod sigs
+      ms <- mapM perMethod $ maybe (error $ "missing class: " ++ classId) id $ mlookup classId mergedSigs
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
 primAdts =
@@ -334,7 +334,7 @@ prims = let
       , ("intOr", "OR")
       ]
 
-neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip [] prims Tip Tip Tip []) primAdts
+neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip []) primAdts
 
 tabulateModules mods = foldM ins Tip $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
@@ -342,20 +342,17 @@ tabulateModules mods = foldM ins Tip $ go <$> mods where
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
 
+slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
+
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat rawIenv defs typedList adtTab ffis ffes imps = tab ! name
+      Neat mySigs iMap defs typedList adtTab ffis ffes imps = tab ! name
       typed = fromList typedList
-      fillSigs (cl, Tycl sigs is) = (cl,) $ case sigs of
-        [] -> Tycl (findSigs cl) is
-        _ -> Tycl sigs is
-      findSigs cl = maybe (error $ "no sigs: " ++ cl) id $ find (not . null) [maybe [] (\(Tycl sigs _) -> sigs) $ mlookup cl $ typeclasses (tab ! im) | im <- imps]
-      ienv = fromList $ fillSigs <$> toAscList rawIenv
+      mergedSigs = foldr (slowUnionWith const) Tip $ mySigs : map (typeclasses . (tab !)) imps
+      mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) m | (im, m) <- ("", iMap) : map (\im -> (im, instances $ tab ! im)) imps]
       locals = fromList $ map (, ()) $ (fst <$> typedList) ++ (fst <$> defs)
-      insts im (Tycl _ is) = (im,) <$> is
-      classes im = if im == "" then ienv else typeclasses $ tab ! im
-      tycl classId = concat [maybe [] (insts im) $ mlookup classId $ classes im | im <- "":imps]
+      tycl classId = maybe [] id $ mlookup classId mergedInstances
       dcs = adtTab : map (dataCons . (tab !)) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
       genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
@@ -372,8 +369,8 @@ inferModule tab acc name = case mlookup name acc of
     let linker = astLink typed locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
     typed <- inferDefs tycl depdefs typed
-    typed <- inferTypeclasses tycl typeOfMethod typed dcs linker ienv
-    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, Tycl sigs _) <- toAscList rawIenv, sig <- sigs]
+    typed <- inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs
+    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, sigs) <- toAscList mySigs, sig <- sigs]
     Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 

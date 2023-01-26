@@ -254,8 +254,8 @@ A logician might summarize this as:
 \]
 
 where $\Gamma$ is a list of antecedent propositions. Roughly speaking, this notation
-says that to prove the thing below the horizontal line, we must prove the
-things above the line.
+says that to prove the thing below the horizontal line, we can prove the things
+above the line.
 
 Since we classify the antecedents as passive or active, we ought to be more
 pedantic and split $\Gamma$ into two lists; see Pfenning for details.

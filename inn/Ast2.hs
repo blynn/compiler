@@ -59,10 +59,9 @@ data Instance = Instance
   -- Method definitions
   (Map String Ast)
 
-data Tycl = Tycl [String] [Instance]
-
 data Neat = Neat
-  { typeclasses :: Map String Tycl
+  { typeclasses :: Map String [String]
+  , instances :: Map String [Instance]
   , topDefs :: [(String, Ast)]
   -- | Typed ASTs, ready for compilation, including ADTs and methods,
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
