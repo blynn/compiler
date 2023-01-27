@@ -249,15 +249,12 @@ parseErrorRule = Parser \pasta -> case indents pasta of
   m:ms | m /= 0 -> Right ('}', pasta { indents = ms })
   _ -> badpos pasta "missing }"
 
-res w
-  | elem w ["let", "where", "do", "of"] = do
-    s <- curlyCheck varish
-    when (s /= w) $ bad $ "want \"" ++ w ++ "\""
-    pure w
-  | True = do
-    s <- varish <|> conSymish <|> varSymish
-    when (s /= w) $ bad $ "want \"" ++ w ++ "\""
-    pure w
+res w = do
+  s <- if elem w ["let", "where", "do", "of"]
+    then curlyCheck varish
+    else varish <|> conSymish <|> varSymish
+  when (s /= w) $ bad $ "want \"" ++ w ++ "\""
+  pure w
 
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
