@@ -34,6 +34,12 @@ lookahead p = do
   Parser \_ -> Right ((), saved)
   ret
 
+notFollowedBy p = do
+  saved <- Parser \pasta -> Right (pasta, pasta)
+  ret <- p *> pure (bad "") <|> pure (pure ())
+  Parser \_ -> Right ((), saved)
+  ret
+
 try p = Parser \inp -> case getParser p inp of
   Left (err, foo) -> Left (err, inp)
   Right x -> Right x
@@ -126,7 +132,8 @@ hexValue d
   | d <= 'f' = 10 + ord d - ord 'a'
 isNewline c = ord c `elem` [10, 11, 12, 13]
 isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
-small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_')
+isSmall c = c <= 'z' && 'a' <= c || c == '_'
+small = sat isSmall
 large = sat \x -> (x <= 'Z') && ('A' <= x)
 hexit = sat \x -> (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
@@ -141,7 +148,6 @@ escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> (chr .
 tokOne delim = escape <|> rawSat (delim /=)
 
 charSeq = try . mapM char
-
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
 quoteStr = between (char '"') (char '"') $ many $ many (charSeq "\\&") *> tokOne '"'
 quasiquoteStr = charSeq "[r|" *> quasiquoteBody
@@ -153,20 +159,18 @@ varish = lexeme $ nameTailed small
 bad s = Parser \pasta -> Left (s, pasta)
 
 reservedId s = elem s
-  ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+  ["export", "case", "cases", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
 
 varId = try do
   s <- varish
-  when (reservedId s) $ bad $ "reserved: " ++ s
-  pure s
+  if reservedId s then bad $ "reserved: " ++ s else pure s
 
 reservedSym s = elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
 
 varSymish = lexeme $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol)
 varSym = lexeme $ try do
   s <- varSymish
-  when (reservedSym s) $ bad $ "reserved: " ++ s
-  pure s
+  if reservedSym s then bad $ "reserved: " ++ s else pure s
 
 conId = lexeme $ nameTailed large
 conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
@@ -286,12 +290,10 @@ parseErrorRule = Parser \pasta -> case indents pasta of
   m:ms | m /= 0 -> Right ('}', pasta { indents = ms })
   _ -> Left ("missing }", pasta)
 
-res w = try do
-  s <- if elem w ["let", "where", "do", "of"]
-    then curlyCheck varish
-    else varish <|> conSymish <|> varSymish
-  when (s /= w) $ bad $ "want \"" ++ w ++ "\""
-  pure w
+res w@(h:_) = reservedSeq *> pure w <|> bad ("want \"" ++ w ++ "\"") where
+  reservedSeq = try $ if elem w ["let", "where", "do", "of"]
+    then curlyCheck $ lexeme $ charSeq w *> notFollowedBy nameTailChar
+    else lexeme $ charSeq w *> notFollowedBy (if isSmall h then nameTailChar else sat isSymbol)
 
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon

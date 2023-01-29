@@ -28,6 +28,12 @@ instance Alternative Parser where
   empty = bad ""
   x <|> y = Parser \inp -> either (const $ getParser y inp) Right $ getParser x inp
 
+notFollowedBy p = do
+  saved <- Parser \pasta -> Right (pasta, pasta)
+  ret <- p *> pure (bad "") <|> pure (pure ())
+  Parser \_ -> Right ((), saved)
+  ret
+
 parse f str = getParser f $ ParserState (rowcol str (1, 1)) [] [] where
   rowcol s rc = case s of
     [] -> []
@@ -93,7 +99,8 @@ hexValue d
   | d <= 'f' = 10 + ord d - ord 'a'
 isNewline c = ord c `elem` [10, 11, 12, 13]
 isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
-small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_')
+isSmall c = c <= 'z' && 'a' <= c || c == '_'
+small = sat isSmall
 large = sat \x -> (x <= 'Z') && ('A' <= x)
 hexit = sat \x -> (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
@@ -101,18 +108,21 @@ hexit = sat \x -> (x <= '9') && ('0' <= x)
 digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
+nameTailChar = small <|> large <|> digit <|> char '\''
+nameTailed p = liftA2 (:) p $ many nameTailChar
 
 escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure '\0' <|> char 'x' *> (chr <$> hexadecimal))
 tokOne delim = escape <|> rawSat (delim /=)
 
+charSeq = mapM char
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
-quoteStr = between (char '"') (char '"') $ many $ many (char '\\' *> char '&') *> tokOne '"'
-quasiquoteStr = char '[' *> char 'r' *> char '|' *> quasiquoteBody
-quasiquoteBody = (char '|' *> char ']' *> pure []) <|> (:) <$> rawSat (const True) <*> quasiquoteBody
+quoteStr = between (char '"') (char '"') $ many $ many (charSeq "\\&") *> tokOne '"'
+quasiquoteStr = charSeq "[r|" *> quasiquoteBody
+quasiquoteBody = charSeq "|]" *> pure [] <|> (:) <$> rawSat (const True) <*> quasiquoteBody
 tokStr = quoteStr <|> quasiquoteStr
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
 literal = lexeme $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
-varish = lexeme $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'')
+varish = lexeme $ nameTailed small
 bad s = Parser \pasta -> badpos pasta s
 badpos pasta s = Left $ loc $ ": " ++ s where
   loc = case readme pasta of
@@ -128,7 +138,7 @@ varSym = lexeme $ do
   s <- varSymish
   if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then bad $ "reserved: " ++ s else pure s
 
-conId = lexeme $ liftA2 (:) large $ many (small <|> large <|> digit <|> char '\'')
+conId = lexeme $ nameTailed large
 conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
 conSym = do
   s <- conSymish
@@ -255,12 +265,10 @@ parseErrorRule = Parser \pasta -> case indents pasta of
   m:ms | m /= 0 -> Right ('}', pasta { indents = ms })
   _ -> badpos pasta "missing }"
 
-res w = do
-  s <- if elem w ["let", "where", "do", "of"]
-    then curlyCheck varish
-    else varish <|> conSymish <|> varSymish
-  when (s /= w) $ bad $ "want \"" ++ w ++ "\""
-  pure w
+res w@(h:_) = reservedSeq *> pure w <|> bad ("want \"" ++ w ++ "\"") where
+  reservedSeq = if elem w ["let", "where", "do", "of"]
+    then curlyCheck $ lexeme $ charSeq w *> notFollowedBy nameTailChar
+    else lexeme $ charSeq w *> notFollowedBy (if isSmall h then nameTailChar else sat isSymbol)
 
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
