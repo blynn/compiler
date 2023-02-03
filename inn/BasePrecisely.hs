@@ -538,3 +538,23 @@ product = foldr (*) 1
 
 max a b = if a <= b then b else a
 min a b = if a <= b then a else b
+
+instance Ring Double where
+  (+) = doubleAdd
+  (-) = doubleSub
+  (*) = doubleMul
+  fromInteger = doubleFromInt . fromInteger
+instance Eq Double where (==) = doubleEq
+instance Ord Double where (<=) = doubleLE
+(/) = doubleDiv
+instance Show Double where
+  showsPrec _ d = go where
+    one = doubleFromInt 1
+    ten = doubleFromInt 10
+    tens = iterate (ten*) one
+    tenth = one / ten
+    tenths = iterate (tenth*) one
+    (as, bs) = if d >= one then span (<= d) tens else span (>= d) tenths
+    norm = if d >= one then d / last as else d / head bs
+    dig = intFromDouble norm
+    go = shows dig . ('.':) . shows (intFromDouble $ (tens!!6) * (norm - doubleFromInt dig)) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)

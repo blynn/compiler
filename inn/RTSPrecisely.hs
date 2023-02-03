@@ -67,6 +67,16 @@ I x = "sp[1] = arg(1); sp++;"
 LEFT x y z = y x
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
+NUM64 x y = y "sp[1]"
+FLO x = "lazy2(1, _I, app64d((double) num(1)));"
+OLF x = "_NUM" "((int) flo(1))"
+FADD x y = "lazy2(2, _I, app64d(flo(1) + flo(2)));"
+FSUB x y = "lazy2(2, _I, app64d(flo(1) - flo(2)));"
+FMUL x y = "lazy2(2, _I, app64d(flo(1) * flo(2)));"
+FDIV x y = "lazy2(2, _I, app64d(flo(1) / flo(2)));"
+FLE x y = "lazy2(2, _I, flo(1) <= flo(2) ? _K : _KI);"
+FEQ x y = "lazy2(2, _I, flo(1) == flo(2) ? _K : _KI);"
+PAIR64 x = "{uu n = (*((uu*) (mem + arg(1) + 2)));lazy2(1, app(_V, app(_NUM, n)), app(_NUM, n >> 32));}"
 DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
 DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
 DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
@@ -233,6 +243,11 @@ static u evac(u n) {
   mem[n + 1] = z;
   altmem[z] = x;
   altmem[z + 1] = y;
+  if (x == _NUM64) {
+    hp += 2;
+    altmem[z + 2] = mem[n + 2];
+    altmem[z + 3] = mem[n + 3];
+  }
   return z;
 }
 
@@ -245,7 +260,8 @@ static u gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x == _NUM64) di += 2;
+    else if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
@@ -270,6 +286,13 @@ static inline void lazy2(u height, u f, u x) {
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
 typedef unsigned long long uu;
+static inline u app64d(double d) {
+  mem[hp] = _NUM64;
+  mem[hp+1] = 0;
+  *((uu*) (mem + hp + 2)) = *((uu*) &d);
+  return (hp += 4) - 4;
+}
+static inline double flo(u n) { return *((double*) (mem + arg(n) + 2)); }
 static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
