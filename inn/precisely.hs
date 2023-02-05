@@ -46,6 +46,7 @@ main = getArgs >>= \case
     tab <- singleFile s
     pure $ second topDefs <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
+  "ffis":opts -> interact $ either id (($ "\n") . shows . keys) . allFFIs
   "warts":opts -> interact $ either id (warts $ "warts":opts) . allFFIs
   "wasm":opts -> interact $ either id id . compile "1<<22" libcWasm ("no-main":opts)
   _ -> interact $ either id id . compile "1<<24" libcHost []

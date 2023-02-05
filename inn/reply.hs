@@ -1,6 +1,7 @@
 module Main where
 import Ast
 import Base
+import System
 import Map
 import Kiselyov
 import Parser
@@ -11,28 +12,22 @@ kF = comEnum "F"
 kNUM = comEnum "NUM"
 kLINK = 0
 
-neatPrompt = neatEmpty {moduleImports = singleton "" [(">", const True), ("#", const True), ("Base", const True)]}
+neatPrompt = neatEmpty {moduleImports = singleton "" $ (, const True) <$> [">", "#", "Base", "System"]}
 
 initObjs = do
-  tab <- insert "#" neato <$> singleFile (source ++ sourceExtras)
+  tab <- insert "#" neatPrim <$> singleFile source
   topo <- topoModules tab
   objs <- foldM compileModule Tip topo
   pure (topo, objs)
-  where
-  neato = neatPrim { typedAsts = foldr (uncurry insert) (typedAsts neatPrim) ffiHack }
-  sourceExtras = [r|
-putStr = mapM_ putChar
-putStrLn = (>> putChar '\n') . putStr
-print = putStrLn . show
-|]
 
 genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
   where syms = _syms $ objs ! name
 
 initialState = do
   let
+    libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
     Right (topo, objs) = initObjs
-    (libStart, lib) = foldl (genIndex objs) (0, Tip) $ fst <$> topo
+    (libStart, lib) = foldl (genIndex objs) (0, libFFI) $ fst <$> topo
   forM ((objs !) . fst <$> topo) \ob -> do
     mapM vmPutScratchpad $ concatMap (link lib) $ elems (_syms ob)
     mapM vmPutScratchpad $ concatMap (link lib) $ _mem ob
@@ -108,7 +103,7 @@ repl st@(mos, (libStart, lib)) s = either complain (either addTyped exec) do
   searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
 
 link lib = \case
-  Left (moduleName, sym) -> [kLINK, lib ! moduleName ! sym]
+  Left (moduleName, sym) -> (if moduleName == "{foreign}" then id else (kLINK:)) [lib ! moduleName ! sym]
   Right x -> [x]
 
 source = [r|

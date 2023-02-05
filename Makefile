@@ -23,9 +23,12 @@ $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
 REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/Kiselyov1.hs inn/Map1.hs inn/ParserPrecisely.hs inn/RTSPrecisely.hs inn/TyperPrecisely.hs inn/Unify1.hs inn/reply.hs
-reply.c: precisely inn/System1.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System1.hs $(REPLYHS) inn/BasePrecisely.hs ; echo '|]'; cat inn/reply-native.hs) | ./precisely > $@
+reply.c: precisely inn/System1.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System1.hs $(REPLYHS) inn/BasePrecisely.hs inn/System1.hs; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/System1.hs; cat inn/reply-native.hs) | ./precisely > $@
 
-doh.c: precisely $(REPLYHS) inn/reply-wasm.hs; (cat $(REPLYHS) inn/BasePrecisely.hs ; echo '|]'; cat inn/reply-wasm.hs) | ./precisely wasm > $@
+doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat inn/SystemWasm.hs $(REPLYHS) inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/SystemWasm.hs; cat inn/reply-wasm.hs) | ./precisely wasm > $@
+
+#doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat $(REPLYHS) inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; cat inn/reply-wasm.hs) | ./precisely wasm > $@
+
 doh.o:doh.c;$(WCC) $^ -c -o $@
 doh.wasm:doh.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 doh.html:doh.txt menu.html;cobble mathbook menu $<
