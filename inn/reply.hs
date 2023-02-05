@@ -11,7 +11,7 @@ kF = comEnum "F"
 kNUM = comEnum "NUM"
 kLINK = 0
 
-neatBase = neatEmpty {moduleImports = singleton "" [("#", const True), ("Base", const True)]}
+neatPrompt = neatEmpty {moduleImports = singleton "" [(">", const True), ("#", const True), ("Base", const True)]}
 
 initObjs = do
   tab <- insert "#" neato <$> singleFile (source ++ sourceExtras)
@@ -37,20 +37,27 @@ initialState = do
     mapM vmPutScratchpad $ concatMap (link lib) $ elems (_syms ob)
     mapM vmPutScratchpad $ concatMap (link lib) $ _mem ob
     vmGCRootScratchpad $ size $ _syms ob
-  pure (insert ">" (Module neatBase Tip Tip []) objs, (libStart, lib))
+  pure (insert ">" (Module neatPrompt Tip Tip []) objs, (libStart, lib))
 
-repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
+repl st@(mos, (libStart, lib)) s = either complain (either addTyped exec) do
+  fragOrExpr <- fst <$> parse fmt s
+  case fragOrExpr of
+    Left frag -> Left <$> tryAddDefs frag
+    Right expr -> Right <$> tryExpr expr
   where
-  go = either (either complain addTyped . tryAddDefs) (either complain exec . tryExpr)
   complain err = putStrLn err >> pure st
   fmt = Left <$> fragment <|> Right <$> single
   fragment = ($ neatEmpty) <$> (lexemePrelude *> topdecls <* eof)
   single = many (char ' ') *> expr <* eof
 
-  mergeFragment frag mos = insert ">" obj { _neat = neat' } mos where
-    obj = mos!">"
-    neat = _neat obj
-    neat' = neat
+  tryAddDefs frag = do
+    let searcher = searcherNew ">" (_neat <$> mos) frag{moduleImports = moduleImports neatPrompt}
+    depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) (topDefs frag)
+    typed <- inferDefs searcher depdefs Tip $ typedAsts frag
+    typed <- inferTypeclasses searcher (instances frag) typed
+    pure (frag{typedAsts = typed}, mos)
+
+  mergeFragment neat frag = neat
       { typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
       , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
       , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
@@ -59,42 +66,29 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
       , topDefs = topDefs frag
       }
 
-  tryAddDefs frag = let
-    mos1 = mergeFragment frag mos
-    neat = _neat $ mos1!">"
-    searcher = searcherNew ">" (_neat <$> mos1) neat
-    typed = typedAsts frag
+  addTyped (frag, mos) = let
+    slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) $ typedAsts frag
+    rawCombs = optim . nolam . inlineLone mos <$> slid
+    combs = rewriteCombs rawCombs <$> rawCombs
+    (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
+    localmap = resolveLocal <$> symtab
+    mem = resolveLocal <$> memF []
+    resolveLocal = \case
+      Left ("", s) -> resolveLocal $ symtab ! s
+      x -> x
+
+    mergedNeat = mergeFragment (_neat $ mos!">") frag
+    mergedCombs = foldr (uncurry insert) (_combs $ mos!">") $ toAscList combs
+    mos' = insert ">" (Module mergedNeat mergedCombs Tip []) mos
+    roots = maybe Tip id $ mlookup ">" lib
+    roots' = foldr (uncurry insert) roots $ zip (keys localmap) [libStart..]
+    libStart' = libStart + size localmap
+    lib' = insert ">" roots' lib
     in do
-      depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) (topDefs frag)
-      typed <- inferDefs searcher depdefs Tip typed
-      typed <- inferTypeclasses searcher (instances frag) typed
-      pure (typed, mos1)
-
-  addTyped (typed, mos) = do
-    let
-      neat = _neat $ mos!">"
-      slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
-      rawCombs = optim . nolam . inlineLone mos <$> slid
-      combs = rewriteCombs rawCombs <$> rawCombs
-      (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
-      localmap = resolveLocal <$> symtab
-      mem = resolveLocal <$> memF []
-      resolveLocal = \case
-        Left ("", s) -> resolveLocal $ symtab ! s
-        x -> x
-
-      mergedTyped = foldr (uncurry insert) (typedAsts neat) $ toAscList typed
-      mergedCombs = foldr (uncurry insert) (_combs $ mos!">") $ toAscList combs
-      mos' = insert ">" (Module neat { typedAsts = mergedTyped } mergedCombs Tip []) mos
-      roots = maybe Tip id $ mlookup ">" lib
-      roots' = foldr (uncurry insert) roots $ zip (keys localmap) [libStart..]
-      libStart' = libStart + size localmap
-      lib' = insert ">" roots' lib
-
-    mapM vmPutScratchpad $ concatMap (link lib) $ elems localmap
-    mapM vmPutScratchpad $ concatMap (link lib) mem
-    vmGCRootScratchpad $ size localmap
-    pure (mos', (libStart', lib'))
+      mapM vmPutScratchpad $ concatMap (link lib) $ elems localmap
+      mapM vmPutScratchpad $ concatMap (link lib) mem
+      vmGCRootScratchpad $ size localmap
+      pure (mos', (libStart', lib'))
 
   tryExpr sugary = do
     ast <- snd <$> patternCompile searcherPrompt sugary
@@ -111,7 +105,6 @@ repl st@(mos, (libStart, lib)) s = either complain go $ fst <$> parse fmt s
     vmRunScratchpad $ either undefined id addr
     pure (mos, (libStart, lib))
 
-  neatPrompt = neatEmpty {moduleImports = singleton "" [(">", const True), ("#", const True), ("Base", const True)]}
   searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
 
 link lib = \case

@@ -654,8 +654,8 @@ searcherNew thisModule tab neat = Searcher
     go bound ast = case ast of
       V s
         | elem s bound -> pure ast
-        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
+        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | True -> case findImportSym s of
           [] -> badDep $ "missing: " ++ s
           [(im, t)] -> pure $ assertType (E $ Link im s) t
@@ -671,7 +671,7 @@ searcherNew thisModule tab neat = Searcher
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
-      _ -> badDep $ "ambiguous: " ++ s
+      [(im, _)] -> if im == ">" then f else badDep $ "ambiguous: " ++ s
 
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
