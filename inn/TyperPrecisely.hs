@@ -673,26 +673,6 @@ searcherNew thisModule tab neat = Searcher
       [] -> f
       [(im, _)] -> if im == ">" then f else badDep $ "ambiguous: " ++ s
 
-inferModule tab acc name = case mlookup name acc of
-  Nothing -> do
-    neat <- maybe (Left $ "missing module: " ++ name) pure $ mlookup name tab
-    let
-      imps = dependentModules neat
-      typed = typedAsts neat
-    acc' <- foldM (inferModule tab) acc imps
-    let searcher = searcherNew name acc' neat
-    depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
-    typed <- inferDefs searcher depdefs (topDecls neat) typed
-    typed <- inferTypeclasses searcher (instances neat) typed
-    Right $ insert name neat { typedAsts = typed } acc'
-  Just _ -> Right acc
-
 neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
-
-soloPrim = singleton "#" neatPrim
-
-untangle s = do
-  tab <- singleFile s
-  foldM (inferModule tab) soloPrim $ keys tab
 
 singleFile s = parseProgram s >>= tabulateModules

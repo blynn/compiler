@@ -505,13 +505,14 @@ void errchar(int c) {}
 void errexit() {}
 |]++)
 
-warts opts mods =
+allFFIs s =
+  fromList . concatMap (toAscList . ffiImports) . elems <$> singleFile s
+
+warts opts ffis =
   ("typedef unsigned u;\n"++)
   . libcWarts
   . runFun opts (toAscList ffis)
   $ ""
-  where
-  ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems mods
 
 topoModules tab = reverse <$> go [] [] (keys tab) where
   go todo done = \case
