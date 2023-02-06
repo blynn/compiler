@@ -328,7 +328,10 @@ tycon = do
 aType =
   lParen *>
     (   rParen *> pure (TC "()")
-    <|> (foldr1 (TAp . TAp (TC ",")) <$> sepBy1 _type comma) <* rParen)
+    <|> (foldr1 (TAp . TAp (TC ",")) <$> sepBy1 _type comma) <* rParen
+    <|> comma *> rParen *> pure (TC ",")
+    <|> TC <$> res "->" <* rParen
+    )
   <|> tycon
   <|> TV <$> varId
   <|> (lSquare *> (rSquare *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* rSquare)))
