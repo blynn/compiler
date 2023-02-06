@@ -112,6 +112,7 @@ ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
 VMSCRATCH = "*scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
+VMSCRATCHROOT = "*scratchpadend++ = _UNDEFINED; *scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
 VMRUN = "vmrun();"
 VMGCROOT = "vmgcroot();"
 |]
@@ -614,7 +615,7 @@ compileModule objs (name, neat) = do
     slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
     rawCombs = optim . nolam . inlineLone objs <$> slid
     combs = rewriteCombs rawCombs <$> rawCombs
-    (symtab, (_, (hp', memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
+    (symtab, (_, (_, memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
     localmap = resolveLocal <$> symtab
     mem = resolveLocal <$> memF []
     resolveLocal = \case
