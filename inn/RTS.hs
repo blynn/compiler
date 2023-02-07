@@ -149,7 +149,8 @@ ffiArgs n t = case t of
 
 ffiDefine n ffis = case ffis of
   [] -> id
-  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
+  (name, t):xt -> let
+    (args, ((isPure, ret), count)) = ffiArgs 2 t
     lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
     aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
     longDistanceCall = name ++ "(" ++ args ++ ")"
@@ -270,14 +271,12 @@ asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
   Tip combs
 
-hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
-  \symtab (_, (hp, f)) -> let
-    mem = (\case
-        Code n -> Right n
-        Local s -> Right $ symtab ! s
-        Global m s -> Left (m, s)
-      ) <$> f []
-    in (symtab, (hp, mem))
+hashcons hp0 combs = (symtab, (hp, resolve <$> memF [])) where
+  (symtab, (_, (hp, memF))) = runState (asm combs) (Tip, (hp0, id))
+  resolve = \case
+    Code n -> Right n
+    Local s -> Right $ symtab ! s
+    Global m s -> Left (m, s)
 
 lambsList typed = toAscList $ snd <$> typed
 

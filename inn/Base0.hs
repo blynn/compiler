@@ -49,7 +49,6 @@ instance Ord a => Ord [a] where
       y:yt -> if x <= y then if y <= x then compare xt yt else LT else GT
 data Maybe a = Nothing | Just a
 data Either a b = Left a | Right b
-fpair (x, y) f = f x y
 fst (x, y) = x
 snd (x, y) = y
 uncurry f (x, y) = f x y
@@ -60,7 +59,6 @@ x /= y = not $ x == y
 (.) f g x = f (g x)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
-flst xs n c = case xs of [] -> n; h:t -> c h t
 instance Eq a => Eq [a] where
   xs == ys = case xs of
     [] -> case ys of
@@ -69,13 +67,15 @@ instance Eq a => Eq [a] where
     x:xt -> case ys of
       [] -> False
       y:yt -> x == y && xt == yt
-take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t
+take 0 xs = []
+take _ [] = []
+take n (h:t) = h : take (n - 1) t
 maybe n j m = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
 instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
 instance Alternative Maybe where empty = Nothing ; x <|> y = maybe y Just x
-foldr c n l = flst l n (\h t -> c h(foldr c n t))
+foldr c n = \case [] -> n; h:t -> c h $ foldr c n t
 length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
@@ -99,20 +99,20 @@ lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
-last xs = flst xs undefined last' where last' x xt = flst xt x \y yt -> last' y yt
-init (x:xt) = flst xt [] \_ _ -> x : init xt
-intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
-intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
+last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
+init (x:xt) = case xt of [] -> []; _ -> x : init xt
+intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
+intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
-zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt
+zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))
 runState (State f) = f
 instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
 instance Applicative (State s) where
   pure a = State (a,)
-  (State f) <*> (State x) = State \s -> fpair (f s) \g s' -> first g $ x s'
+  (State f) <*> (State x) = State \s -> case f s of (g, s') -> first g $ x s'
 instance Monad (State s) where
   return a = State (a,)
   (State h) >>= f = State $ uncurry (runState . f) . h

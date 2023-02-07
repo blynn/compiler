@@ -1,5 +1,4 @@
 -- Record fields.
--- Remove `fpair.
 -- Shims for `getChar` and `isEOF`.
 module RTS where
 
@@ -290,14 +289,12 @@ asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
   Tip combs
 
-hashcons hp combs = fpair (runState (asm combs) (Tip, (hp, id)))
-  \symtab (_, (hp, f)) -> let
-    mem = (\case
-        Code n -> Right n
-        Local s -> Right $ symtab ! s
-        Global m s -> Left (m, s)
-      ) <$> f []
-    in (symtab, (hp, mem))
+hashcons hp0 combs = (symtab, (hp, resolve <$> memF [])) where
+  (symtab, (_, (hp, memF))) = runState (asm combs) (Tip, (hp0, id))
+  resolve = \case
+    Code n -> Right n
+    Local s -> Right $ symtab ! s
+    Global m s -> Left (m, s)
 
 lambsList typed = toAscList $ snd <$> typed
 

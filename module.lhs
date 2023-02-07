@@ -324,8 +324,6 @@ recursively resolve `Local` and `Global` symbols until we reach an address.
 This relies on `optiComb` removing cycles involving lone variables on the
 right-hand side, and the absence of cycles among module dependencies.
 
-While we're in the neighbourhood, we eliminate `flst` and `fpair`.
-
 ------------------------------------------------------------------------
 cat Base0.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Typer1.hs party.hs
 ------------------------------------------------------------------------
@@ -543,7 +541,6 @@ data constructor.
 
 We also check for name conflicts among foreign imports and exports.
 
-We remove our ancient `fpair` and `flst` functions, a long overdue cleanup.
 We take advantage of our new ability to derive `Eq` and `Show` instances,
 and also name the fields of the `Neat` data type.
 

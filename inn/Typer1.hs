@@ -1,5 +1,4 @@
 -- Preload primitives.
--- Remove `flst`, `fpair`.
 module Typer where
 
 import Base

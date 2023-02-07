@@ -30,8 +30,9 @@ advanceRC x (r, c)
   | True = (r, c + 1)
   where n = ord x
 pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp)
-sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
-  if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
+sat f = Lexer \(LexState inp rc) -> case inp of
+  [] -> Left "EOF"
+  h:t -> if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
 char c = sat (c ==)
 
 data Token = Reserved String
@@ -432,10 +433,14 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  f _ _ = error "bad multidef"
-  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+coalesce = \case
+  [] -> []
+  h@(s, x):t -> case t of
+    [] -> [h]
+    (s', x'):t' -> let
+      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+      f _ _ = error "bad multidef"
+      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 defSemi = coalesce . concat <$> sepBy1 def (some $ res ";")
 braceDef = concat <$> braceSep defSemi
 

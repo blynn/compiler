@@ -64,7 +64,6 @@ instance Ord a => Ord [a] where
         EQ -> xt <= yt
 data Maybe a = Nothing | Just a
 data Either a b = Left a | Right b
-fpair (x, y) f = f x y
 fst (x, y) = x
 snd (x, y) = y
 uncurry f (x, y) = f x y
@@ -75,7 +74,6 @@ x /= y = not $ x == y
 (.) f g x = f (g x)
 (||) f g = if f then True else g
 (&&) f g = if f then g else False
-flst xs n c = case xs of [] -> n; h:t -> c h t
 instance Eq a => Eq [a] where
   xs == ys = case xs of
     [] -> case ys of
@@ -84,13 +82,15 @@ instance Eq a => Eq [a] where
     x:xt -> case ys of
       [] -> False
       y:yt -> x == y && xt == yt
-take n xs = if n == 0 then [] else flst xs [] \h t -> h:take (n - 1) t
+take 0 xs = []
+take _ [] = []
+take n (h:t) = h : take (n - 1) t
 maybe n j m = case m of Nothing -> n; Just x -> j x
 instance Functor Maybe where fmap f = maybe Nothing (Just . f)
 instance Applicative Maybe where pure = Just ; mf <*> mx = maybe Nothing (\f -> maybe Nothing (Just . f) mx) mf
 instance Monad Maybe where return = Just ; mf >>= mg = maybe Nothing mg mf
 instance Alternative Maybe where empty = Nothing ; x <|> y = maybe y Just x
-foldr c n l = flst l n (\h t -> c h(foldr c n t))
+foldr c n = \case [] -> n; h:t -> c h $ foldr c n t
 length = foldr (\_ n -> n + 1) 0
 mapM f = foldr (\a rest -> liftA2 (:) (f a) rest) (pure [])
 mapM_ f = foldr ((>>) . f) (pure ())
@@ -117,21 +117,21 @@ lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter f = foldr (\x xs -> if f x then x:xs else xs) []
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
-last xs = flst xs undefined last' where last' x xt = flst xt x \y yt -> last' y yt
-init (x:xt) = flst xt [] \_ _ -> x : init xt
-intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
-intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
+last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
+init (x:xt) = case xt of [] -> []; _ -> x : init xt
+intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
+intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
 upFrom n = n : upFrom (n + 1)
-zipWith f xs ys = flst xs [] $ \x xt -> flst ys [] $ \y yt -> f x y : zipWith f xt yt
+zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))
 runState (State f) = f
 instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
 instance Applicative (State s) where
   pure a = State (a,)
-  (State f) <*> (State x) = State \s -> fpair (f s) \g s' -> first g $ x s'
+  (State f) <*> (State x) = State \s -> case f s of (g, s') -> first g $ x s'
 instance Monad (State s) where
   return a = State (a,)
   (State h) >>= f = State $ uncurry (runState . f) . h
@@ -331,8 +331,9 @@ advanceRC x (r, c)
   | True = (r, c + 1)
   where n = ord x
 pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp)
-sat f = Lexer \(LexState inp rc) -> flst inp (Left "EOF") \h t ->
-  if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
+sat f = Lexer \(LexState inp rc) -> case inp of
+  [] -> Left "EOF"
+  h:t -> if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
 char c = sat (c ==)
 
 data Token = Reserved String
@@ -732,10 +733,14 @@ leftyPat p expr = case pvars of
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
-coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
-  f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
-  f _ _ = error "bad multidef"
-  in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
+coalesce = \case
+  [] -> []
+  h@(s, x):t -> case t of
+    [] -> [h]
+    (s', x'):t' -> let
+      f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
+      f _ _ = error "bad multidef"
+      in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 defSemi = coalesce . concat <$> sepBy1 def (some $ res ";")
 braceDef = concat <$> braceSep defSemi
 
@@ -942,7 +947,7 @@ classifyAlt v x = case v of
   PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
 
 genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
-  firstC = flst (toAscList tab) undefined (\h _ -> fst h)
+  firstC = case toAscList tab of ((con, _):_) -> con
   cs = maybe (error $ "bad constructor: " ++ firstC) id $ mlookup firstC dcs
   in foldl A (A (V $ specialCase cs) (V "of"))
     $ map (\(Constr s ts) -> case mlookup s tab of
@@ -954,8 +959,8 @@ updateCaseSt dcs (acc, tab) alt = case alt of
   Left f -> (acc . genCase dcs tab . f, Tip)
   Right upd -> (acc, upd tab)
 
-rewriteCase dcs as = fpair (foldl (updateCaseSt dcs) (id, Tip)
-  $ uncurry classifyAlt <$> as) \acc tab -> acc . genCase dcs tab $ V "fail#"
+rewriteCase dcs as = acc . genCase dcs tab $ V "fail#" where
+  (acc, tab) = foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as
 
 secondM f (a, b) = (a,) <$> f b
 patternCompile dcs t = optiApp $ evalState (go t) 0 where
@@ -1022,16 +1027,15 @@ instantiate' t n tab = case t of
   TV s -> case lookup s tab of
     Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
-  TAp x y ->
-    fpair (instantiate' x n tab) \(t1, n1) tab1 ->
-    fpair (instantiate' y n1 tab1) \(t2, n2) tab2 ->
-    ((TAp t1 t2, n2), tab2)
+  TAp x y -> let
+    ((t1, n1), tab1) = instantiate' x n tab
+    ((t2, n2), tab2) = instantiate' y n1 tab1
+    in ((TAp t1 t2, n2), tab2)
 
 instantiatePred (Pred s t) ((out, n), tab) = first (first ((:out) . Pred s)) (instantiate' t n tab)
 
-instantiate (Qual ps t) n =
-  fpair (foldr instantiatePred (([], n), []) ps) \(ps1, n1) tab ->
-  first (Qual ps1) (fst (instantiate' t n1 tab))
+instantiate (Qual ps t) n = first (Qual ps1) $ fst $ instantiate' t n1 tab where
+  ((ps1, n1), tab) = foldr instantiatePred (([], n), []) ps
 
 proofApply sub a = case a of
   Proof (Pred cl ty) -> Proof (Pred cl $ apply sub ty)
@@ -1041,23 +1045,23 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn = fpair csn \cs n ->
-  let
-    va = TV (showInt n "")
-    insta ty = fpair (instantiate ty n) \(Qual preds ty) n1 -> ((ty, foldl A ast (map Proof preds)), (cs, n1))
-  in case ast of
-    E x -> Right $ case x of
-      Const _ -> ((TC "Int", ast), csn)
-      ChrCon _ -> ((TC "Char", ast), csn)
-      StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
-    V s -> maybe (Left $ "undefined: " ++ s) Right
-      $ (\t -> ((t, ast), csn)) <$> lookup s loc
-      <|> insta <$> mlookup s typed
-    A x y -> infer typed loc x (cs, n + 1) >>=
-      \((tx, ax), csn1) -> infer typed loc y csn1 >>=
-      \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
-      \cs -> Right ((va, A ax ay), (cs, n2))
-    L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+infer typed loc ast csn@(cs, n) = case ast of
+  E x -> Right $ case x of
+    Const _ -> ((TC "Int", ast), csn)
+    ChrCon _ -> ((TC "Char", ast), csn)
+    StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
+  V s -> maybe (Left $ "undefined: " ++ s) Right
+    $ (\t -> ((t, ast), csn)) <$> lookup s loc
+    <|> insta <$> mlookup s typed
+  A x y -> infer typed loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
+    \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
+    \cs -> Right ((va, A ax ay), (cs, n2))
+  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+  where
+  va = TV (showInt n "")
+  insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
+    where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
   [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
@@ -1275,7 +1279,8 @@ ffiArgs n t = case t of
 
 ffiDefine n ffis = case ffis of
   [] -> id
-  (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
+  (name, t):xt -> let
+    (args, ((isPure, ret), count)) = ffiArgs 2 t
     lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
     aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
     longDistanceCall = name ++ "(" ++ args ++ ")"

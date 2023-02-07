@@ -18,7 +18,6 @@ class Alternative f where
 
 (&) x f = f x
 liftA2 f x y = f <$> x <*> y
-flst xs n c = case xs of [] -> n; h:t -> c h t
 many p = liftA2 (:) p (many p) <|> pure []
 some p = liftA2 (:) p (many p)
 sepBy1 p sep = liftA2 (:) p (many (sep *> p))
@@ -28,9 +27,8 @@ asum = foldr (<|>) empty
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
-intercalate sep xs = flst xs [] \x xt -> x ++ concatMap (sep ++) xt
-intersperse sep xs = flst xs [] \x xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
-fpair (x, y) f = f x y
+intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
+intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 
 data State s a = State (s -> (a, s))
@@ -38,7 +36,7 @@ runState (State f) = f
 instance Functor (State s) where fmap f = \(State h) -> State (first f . h)
 instance Applicative (State s) where
   pure a = State (a,)
-  (State f) <*> (State x) = State \s -> fpair (f s) \g s' -> first g $ x s'
+  (State f) <*> (State x) = State \s -> case f s of (g, s') -> first g $ x s'
 instance Monad (State s) where
   return a = State (a,)
   (State h) >>= f = State $ uncurry (runState . f) . h

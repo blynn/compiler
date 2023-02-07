@@ -1,6 +1,5 @@
 -- Record fields.
 -- Deriving `Eq`, `Show`.
--- Remove `flst`.
 module Parser where
 import Base
 import Ast

@@ -1,5 +1,4 @@
 -- Define `Show`. Uses `deriving`.
--- Remove `flst`, `fpair`.
 -- Change `isEOF` and `getChar` to behave more like Haskell's.
 module Base where
 

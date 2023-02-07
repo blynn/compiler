@@ -241,6 +241,8 @@ Trailing `let` statements are legal; they just have no effect. It is also legal
 for the last statement to be a binding, in which case we implicitly follow it
 with `pure ()`.
 
+We replace `fpair` and `flst` with more idiomatic Haskell.
+
 ++++++++++
 <p><a onclick='hideshow("marginally");'>&#9654; Toggle `marginally.hs`</a></p>
 <div id='marginally' style='display:none'>
