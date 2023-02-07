@@ -10,7 +10,7 @@ import System
 
 hide_prelude_here' = hide_prelude_here'
 
-dumpWith dumper s = case objDump s of
+dumpWith dumper s = case getObjs s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper $ _neat mod)) $ toAscList tab
 
@@ -29,17 +29,34 @@ dumpMatrix neat = map go combs where
   combs = toAscList $ matrixComb . optiApp . snd <$> typedAsts neat
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-objDump s = do
+getObjs s = do
   tab <- insert "#" neatPrim <$> singleFile s
   foldM compileModule Tip =<< topoModules tab
 
+recomb objs = dumpCombs . toAscList $ fmap (toAscList . combTyped objs . typedAsts . _neat) objs
+
+objDump s = do
+  tab <- insert "#" neatPrim <$> singleFile s
+  topo <- topoModules tab
+  objs <- foldM compileModule Tip topo
+  pure $ ("objs = fromList\n    [ "++)
+    . foldr (.) id (intersperse ("    , "++) $ go <$> toAscList objs)
+    . ("    ]\n"++)
+  where
+  go (k, m) = ("("++) . shows k . (", Module"++)
+    . ("\n  { _syms = fromList "++)
+    . shows (toAscList $ _syms m)
+    . ("\n  , _mem = "++)
+    . shows (_mem m)
+    . ("\n  })\n"++)
+
 main = getArgs >>= \case
-  "obj":_ -> interact $ either id (show . toAscList . fmap (\m -> (toAscList $ _syms m, _mem m))) . objDump
+  "obj":_ -> interact $ either id ($ "") . objDump
   "matrix":_ -> interact $ dumpWith dumpMatrix
   "topo":_ -> interact \s -> either id show $ do
     tab <- insert "#" neatPrim <$> singleFile s
     map fst <$> topoModules tab
-  "comb":_ -> interact $ either id (dumpCombs . toAscList . fmap (toAscList . _combs)) . objDump
+  "comb":_ -> interact $ either id recomb . getObjs
   "rawcomb":_ -> interact $ dumpWith dumpRawCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "parse":_ -> interact \s -> either id show $ do

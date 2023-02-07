@@ -486,7 +486,7 @@ slideY name orig = stripArgs id orig where
 
 inlineLone objs expr = go expr where
   go = \case
-    E (Link m s) | m /= "{foreign}", Lf (Basic c) <- _combs (objs ! m) ! s -> E (Basic c)
+    E (Link m s) | m /= "{foreign}", Right i <- _syms (objs ! m) ! s, i < 128 -> E (Basic $ comName i)
     A x y -> A (go x) (go y)
     L w t -> L w (go t)
     t -> t
@@ -528,7 +528,6 @@ topoModules tab = reverse <$> go [] [] (keys tab) where
 
 data Module = Module
   { _neat :: Neat
-  , _combs :: Map String IntTree
   , _syms :: Map String (Either (String, String) Int)
   , _mem :: [Either (String, String) Int]
   }
@@ -604,6 +603,10 @@ compile topSize libc opts s = do
     . foldr (.) id (zipWith (\(expName, (_, ourType)) n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++) . genExport ourType n) (toAscList ffes) [0..])
     $ mainStr
 
+combTyped objs typed = rewriteCombs rawCombs <$> rawCombs where
+  slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
+  rawCombs = optim . nolam . inlineLone objs <$> slid
+
 compileModule objs (name, neat) = do
   let
     searcher = searcherNew name (_neat <$> objs) neat
@@ -612,16 +615,14 @@ compileModule objs (name, neat) = do
   typed <- inferDefs searcher depdefs (topDecls neat) typed
   typed <- inferTypeclasses searcher (instances neat) typed
   let
-    slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
-    rawCombs = optim . nolam . inlineLone objs <$> slid
-    combs = rewriteCombs rawCombs <$> rawCombs
+    combs = combTyped objs typed
     (symtab, (_, (_, memF))) = runState (asm $ toAscList combs) (Tip, (128, id))
     localmap = resolveLocal <$> symtab
     mem = resolveLocal <$> memF []
     resolveLocal = \case
       Left ("", s) -> resolveLocal $ symtab ! s
       x -> x
-  Right $ insert name (Module (neat { typedAsts = typed }) combs localmap mem) objs
+  Right $ insert name (Module (neat { typedAsts = typed }) localmap mem) objs
 
 data MatExpr = Mat [[Bool]] | MatFree IntTree | MatExpr :@ MatExpr
 instance Show MatExpr where

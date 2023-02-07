@@ -30,7 +30,7 @@ initialState = do
     Right (topo, objs) = initObjs
     (libStart, lib) = foldl (genIndex objs) (0, libFFI) $ fst <$> topo
   mapM (scratchObj lib) $ (objs !) . fst <$> topo
-  pure (insert ">" (Module neatPrompt Tip Tip []) objs, (libStart, lib))
+  pure (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
 
 mergeFragment neat frag = neat
   { typeclasses = foldr (uncurry insert) (typeclasses neat) $ toAscList $ typeclasses frag
@@ -49,13 +49,13 @@ addTyped (mos, (libStart, lib)) mos' = let
   orig = mos!">"
   fresh = mos'!">"
   mergedNeat = mergeFragment (_neat orig) (_neat fresh)
-  mergedCombs = foldr (uncurry insert) (_combs orig) $ toAscList $ _combs fresh
+  mergedSyms = foldr (uncurry insert) (_syms orig) $ toAscList $ _syms fresh
   syms = _syms fresh
   roots = maybe Tip id $ mlookup ">" lib
   roots' = foldr (uncurry insert) roots $ zip (keys syms) [libStart..]
   libStart' = libStart + size syms
   lib' = insert ">" roots' lib
-  mergedMos = insert ">" (Module mergedNeat mergedCombs Tip []) mos'
+  mergedMos = insert ">" (Module mergedNeat mergedSyms []) mos'
   in do
     scratchObj lib fresh
     pure (mergedMos, (libStart', lib'))
@@ -75,10 +75,10 @@ readInput mos s = do
     ast <- snd <$> patternCompile searcherPrompt sugary
     (typ, typedAst) <- (! "") <$> inferDefs searcherPrompt [("", ([], ast))] Tip Tip
     case typ of
-      Qual [] (TAp (TC "IO") _) -> do
-        let combs = nolam . optiApp $ typedAst
-        let (addr, (_, (hp', memF))) = runState (enc combs) (Tip, (128, id))
-        pure (hp', memF [Right $ comEnum "I", addr])
+      Qual [] (TAp (TC "IO") _) -> let
+        combs = nolam . optiApp $ typedAst
+        (addr, (_, (hp', memF))) = runState (enc combs) (Tip, (128, id))
+        in pure (hp', memF [Right $ comEnum "I", addr])
       _ -> tryExpr $ A (V "print") sugary
   searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
 
