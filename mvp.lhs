@@ -55,66 +55,7 @@ Instead, we must leave space for an address and fill it in later. We take
 advantage of lazy tying-the-knot style so the code appears to effortlessly
 solve this problem.
 
-As our previous now has a predefined `Bool` type, we take this opportunity to
-refactor to use if-then-else instead of matching on `True` and `False`.
-
-++++++++++
-<p><a onclick='hideshow("mutually");'>&#9654; Toggle `mutually.hs`</a></p>
-<div id='mutually' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::mutually.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-== Uniquely ==
-
-Now that code generation requires a map of addresses, it's a good time to
-experiment with hash consing. We reduce heap usage my maximizing sharing.
-However, it may cost too much, as this iteration of our compiler is appreciably
-slower!
-
-Consider definitions whose right-hand side is a lone variable. Our `optiComb`
-function follows lone variables so that:
-
-------------------------------------------------------------------------
-f = g
-g = h
-h = f
-x = (f, g, h)
-y = x
-z = y
-w = (x, y, z)
-------------------------------------------------------------------------
-
-compiles to:
-
-------------------------------------------------------------------------
-f = g
-h = g
-g = Y I
-x = (g, g, g)
-y = x
-z = x
-w = (x, x, x)
-------------------------------------------------------------------------
-
-That is, afterwards, a variable with a lone variable definition only appears on
-the right-hand side if its definition has been rewritten to `fix id`, so is no
-longer a lone variable. Our `asm` function relies on this, because it skips
-anything whose right-hand side is a lone variable.
-
-This causes a corner case to fail: our compiler crashes on attempting to export
-a symbol whose right-hand side remains a lone variable after `optiComb`.
-For the time being, we let this slide.
-
-We clean up top-level definitions as mutual recursion is now possible.
-
-We add support for definitions appearing in any order in a let block. This is
+We also support definitions appearing in any order in a let block. This is
 trickier than at the top-level, because of shared variable bindings floating
 around. Again, we find the strongly connected components to detect mutual
 dependencies, but instead of a table of addresses, we apply simple lambda
@@ -151,43 +92,55 @@ variables, such as `[[a, b, c], [b, c], [c]]` and because we perform
 substitutions in the syntax tree while it still possibly contains case
 expressions and pattern matches.
 
-The `leftyPat` function supports patterns on the left-hand side of definitions,
-for example:
-
-------------------------------------------------------------------------
-[a,b,c] = expr
-------------------------------------------------------------------------
-
-Our solution is simplistic. We find all pattern variables, such as  `a,b,c`. If
-nonempty, we prepend `@` to the first variable, for example `@a`, to generate a
-symbol unique to the current scope (a cheap trick to approximate Lisp's
-`gensym`). Then we define this generated symbol to be the expression on the
-right-hand side, for example `@a = expr`, and then we generate case expressions
-for each pattern variable to define them, for example
-
-------------------------------------------------------------------------
-@a = expr
-a = case @a of [a,b,c] -> a
-b = case @a of [a,b,c] -> b
-c = case @a of [a,b,c] -> c
-------------------------------------------------------------------------
-
-Our scheme fails to handle the wild-card pattern `_` correctly, which we'll
-fix in a later compiler. Until then, we tread carefully with patterns on the
-left.
+As we now have a predefined `Bool` type, we use if-then-else instead of
+matching on `True` and `False`.
 
 ++++++++++
-<p><a onclick='hideshow("uniquely");'>&#9654; Toggle `uniquely.hs`</a></p>
-<div id='uniquely' style='display:none'>
+<p><a onclick='hideshow("mutually");'>&#9654; Toggle `mutually.hs`</a></p>
+<div id='mutually' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::uniquely.hs[]
+include::mutually.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
 </div>
 ++++++++++
+
+We ignore the following subtle bug for now.
+Consider definitions whose right-hand side is a lone variable. Our `optiComb`
+function follows lone variables so that:
+
+------------------------------------------------------------------------
+f = g
+g = h
+h = f
+x = (f, g, h)
+y = x
+z = y
+w = (x, y, z)
+------------------------------------------------------------------------
+
+compiles to:
+
+------------------------------------------------------------------------
+f = g
+h = g
+g = Y I
+x = (g, g, g)
+y = x
+z = x
+w = (x, x, x)
+------------------------------------------------------------------------
+
+That is, afterwards, a variable with a lone variable definition only appears on
+the right-hand side if its definition has been rewritten to `fix id`, so is no
+longer a lone variable. Our `asm` function relies on this, because it skips
+anything whose right-hand side is a lone variable.
+
+This causes a corner case to fail: our compiler crashes on attempting to export
+a symbol whose right-hand side remains a lone variable after `optiComb`.
 
 == Virtually ==
 
@@ -228,6 +181,33 @@ WRITEREF also has a side effect: it overwrites the given app-cell with `REF
 value` before returning `cont`. It is the only combinator that can modify the
 values in the heap, excluding changes caused by lazy updates and garbage
 collection.
+
+We clean up top-level definitions as mutual recursion is now possible.
+
+The `leftyPat` function supports patterns on the left-hand side of definitions,
+for example:
+
+------------------------------------------------------------------------
+[a,b,c] = expr
+------------------------------------------------------------------------
+
+Our solution is simplistic. We find all pattern variables, such as  `a,b,c`. If
+nonempty, we prepend `@` to the first variable, for example `@a`, to generate a
+symbol unique to the current scope (a cheap trick to approximate Lisp's
+`gensym`). Then we define this generated symbol to be the expression on the
+right-hand side, for example `@a = expr`, and then we generate case expressions
+for each pattern variable to define them, for example
+
+------------------------------------------------------------------------
+@a = expr
+a = case @a of [a,b,c] -> a
+b = case @a of [a,b,c] -> b
+c = case @a of [a,b,c] -> c
+------------------------------------------------------------------------
+
+Our scheme fails to handle the wild-card pattern `_` correctly, which we'll
+fix in a later compiler. Until then, we tread carefully with patterns on the
+left.
 
 ++++++++++
 <p><a onclick='hideshow("virtually");'>&#9654; Toggle `virtually.hs`</a></p>

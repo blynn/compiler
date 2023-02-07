@@ -37,8 +37,7 @@ $(call rtsup,patty,lonely)
 $(call rtsup,guardedly,patty)
 $(call rtsup,assembly,guardedly)
 $(call rtsup,mutually,assembly)
-$(call rtsup,uniquely,mutually)
-$(call rtsup,virtually,uniquely)
+$(call rtsup,virtually,mutually)
 marginally.c:marginally.hs virtually;time ./virtually < $< > $@
 methodically.c:methodically.hs marginally;time ./marginally < $< > $@
 party.c:party.hs methodically;time ./methodically < $< > $@

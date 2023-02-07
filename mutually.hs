@@ -1,4 +1,4 @@
--- Top-level mutual recursion.
+-- Mutual recursion.
 infixr 9 .;
 infixl 7 * , / , %;
 infixl 6 + , -;
@@ -144,6 +144,23 @@ instance Monad (Either a) where { return = Right ; ex >>= f = case ex of
   ; Right x -> f x
   }
 };
+
+depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
+  if vertex `elem` visited then st else second (vertex:)
+    $ depthFirstSearch relation (vertex:visited, sequence) (relation vertex);
+
+spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
+  if vertex `elem` visited then st else second ((:setSequence) . (vertex:))
+    $ depthFirstSearch relation (vertex:visited, []) (relation vertex);
+
+scc ins outs = let
+  { depthFirst = snd . depthFirstSearch outs ([], [])
+  ; spanning   = snd . spanningSearch   ins  ([], [])
+  } in spanning . depthFirst;
+
+filter f = foldr (\x xs -> if f x then x:xs else xs) [];
+union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
+intersect xs ys = filter (\x -> fmaybe (find (x ==) ys) False (\_ -> True)) xs;
 
 -- Map.
 
@@ -410,7 +427,46 @@ coalesce ds = flst ds [] \h@(s, x) t -> flst t [h] \(s', x') t' -> let
 def r = opDef <$> apat <*> varSym <*> apat <*> guards "=" r
   <|> liftA2 (,) var (liftA2 onePat (many apat) (guards "=" r));
 
-addLets ls x = foldr (\(name, def) t -> A (L name t) $ maybeFix name def) x ls;
+patVars = \case
+  { PatLit _ -> []
+  ; PatVar s m -> s : maybe [] patVars m
+  ; PatCon _ args -> concat $ patVars <$> args
+  };
+
+fvPro bound expr = case expr of
+  { V s | not (elem s bound) -> [s]
+  ; A x y -> fvPro bound x `union` fvPro bound y
+  ; L s t -> fvPro (s:bound) t
+  ; Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
+  ; Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
+  ; _ -> []
+  };
+
+overFreePro s f t = case t of
+  { E _ -> t
+  ; V s' -> if s == s' then f t else t
+  ; A x y -> A (overFreePro s f x) (overFreePro s f y)
+  ; L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
+  ; Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
+  ; Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
+  };
+
+nonemptyTails [] = [];
+nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
+
+addLets ls x = let
+  { vs = fst <$> ls
+  ; ios = foldr (\(s, dsts) (ins, outs) ->
+    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
+  ; components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
+  ; triangle names expr = let
+    { tnames = nonemptyTails names
+    ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
+    ; insLams vs t = foldr L t vs
+    } in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+  } in foldr triangle x components;
+
 letin r = addLets <$> between (tok "let") (tok "in") (coalesce <$> braceSep (def r)) <*> r;
 ifthenelse r = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (tok "if" *> r) <*> (tok "then" *> r) <*> (tok "else" *> r);
@@ -744,9 +800,6 @@ instance Eq Type where
 
 instance Eq Pred where { (Pred s a) == (Pred t b) = s == t && a == b };
 
-filter f = foldr (\x xs -> if f x then x:xs else xs) [];
-intersect xs ys = filter (\x -> fmaybe (find (x ==) ys) False (\_ -> True)) xs;
-
 merge s1 s2 = if all (\v -> apply s1 (TV v) == apply s2 (TV v))
   $ map fst s1 `intersect` map fst s2 then Just $ s1 ++ s2 else Nothing;
 
@@ -899,7 +952,6 @@ rewritePatterns dcs = let {
   ; Right (cl, (q, ds)) -> Right (cl, (q, second (\t -> optiApp $ evalState (go t) 0) <$> ds))
   };
 
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys;
 fv bound = \case
   { V s | not (elem s bound) -> [s]
   ; A x y -> fv bound x `union` fv bound y
@@ -912,19 +964,6 @@ depGraph typed (s, ast) (vs, es) = (insert s ast vs,
     { Nothing -> (insertWith union k [s] ins, insertWith union s [k] outs)
     ; Just _ -> ios
     }) es $ fv [] ast);
-
-depthFirstSearch = (foldl .) \relation st@(visited, sequence) vertex ->
-  if vertex `elem` visited then st else second (vertex:)
-    $ depthFirstSearch relation (vertex:visited, sequence) (relation vertex);
-
-spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
-  if vertex `elem` visited then st else second ((:setSequence) . (vertex:))
-    $ depthFirstSearch relation (vertex:visited, []) (relation vertex);
-
-scc ins outs = let
-  { depthFirst = snd . depthFirstSearch outs ([], [])
-  ; spanning   = snd . spanningSearch   ins  ([], [])
-  } in spanning . depthFirst;
 
 inferno prove typed defmap syms = let
   { loc = zip syms $ TV . (' ':) <$> syms

@@ -709,6 +709,26 @@ optiApp t = case t of
   ; _ -> t
   };
 
+appCell (hp, bs) x y = (hp, (hp + 2, bs . (x:) . (y:)));
+
+enc tab mem t = case t of
+  { Lf n -> case n of
+    { Basic c -> (comEnum c, mem)
+    ; ForeignFun n -> enc tab mem $ Nd (Lf $ Basic "F") (Lf $ Const n)
+    ; Const c -> appCell mem (comEnum "NUM") c
+    ; ChrCon c -> appCell mem (comEnum "NUM") $ ord c
+    ; StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
+    }
+  ; LfVar s -> maybe (error $ "resolve " ++ s) (, mem) $ mlookup s tab
+  ; Nd x y -> fpair (enc tab mem x) \xAddr mem'
+    -> fpair (enc tab mem' y) \yAddr mem''
+    -> appCell mem'' xAddr yAddr
+  };
+
+asm combs = let
+  { tabmem = foldl (\(as, m) (s, t) -> let { pm' = enc (fst tabmem) m t } in
+    (insert s (fst pm') as, snd pm')) (Tip, (128, id)) combs } in tabmem;
+
 -- Type checking.
 
 apply sub t = case t of
@@ -995,7 +1015,9 @@ inferDefs' ienv defmap (typeTab, lambF) syms = let
 inferDefs ienv defs dcs typed = let
   { typeTab = foldr (\(k, (q, _)) -> insert k q) Tip typed
   ; lambs = second snd <$> typed
-  ; (defmap, graph) = foldr (depGraph typed dcs) (Tip, (Tip, Tip)) defs
+  ; defmapgraph = foldr (depGraph typed dcs) (Tip, (Tip, Tip)) defs
+  ; defmap = fst defmapgraph
+  ; graph = snd defmapgraph
   ; ins k = maybe [] id $ mlookup k $ fst graph
   ; outs k = maybe [] id $ mlookup k $ snd graph
   } in foldM (inferDefs' ienv defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
@@ -1071,7 +1093,7 @@ genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init(
 
 compile s = case untangle s of
   { Left err -> err
-  ; Right ((_, lambs), (ffis, exs)) -> fpair (hashcons $ optiComb lambs) \tab mem ->
+  ; Right ((_, lambs), (ffis, exs)) -> fpair (asm $ optiComb lambs) \tab memF -> let { mem = snd memF [] } in
       ("typedef unsigned u;\n"++)
     . ("enum{_UNDEFINED=0,"++)
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
@@ -1140,55 +1162,6 @@ dumpTypes s = case untangle s of
   ; Right ((typed, _), _) -> ($ "") $ foldr (.) id $
     map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
   };
-
-data NdKey = NdKey (Either String Int) (Either String Int);
-instance Eq (Either String Int) where
-{ (Left a) == (Left b) = a == b
-; (Right a) == (Right b) = a == b
-; _ == _ = False
-};
-instance Ord (Either String Int) where
-{ x <= y = case x of
-  { Left a -> case y of
-    { Left b -> a <= b
-    ; Right _ -> True
-    }
-  ; Right a -> case y of
-    { Left _ -> False
-    ; Right b -> a <= b
-    }
-  }
-};
-instance Eq NdKey where
-{ (NdKey a1 b1) == (NdKey a2 b2) = a1 == a2 && b1 == b2
-};
-instance Ord NdKey where
-{ (NdKey a1 b1) <= (NdKey a2 b2) = a1 <= a2 && (a1 /= a2 || b1 <= b2)
-};
-
-memget k@(NdKey a b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
-  { Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
-  ; Just v -> pure v
-  };
-
-enc t = case t of
-  { Lf n -> case n of
-    { Basic c -> pure $ Right $ comEnum c
-    ; ForeignFun n -> enc (Lf $ Const n) >>= \x -> Right <$> memget (NdKey (Right $ comEnum "F") x)
-    ; Const c -> Right <$> memget (NdKey (Right $ comEnum "NUM") (Right c))
-    ; ChrCon c -> enc $ Lf $ Const $ ord c
-    ; StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    }
-  ; LfVar s -> pure $ Left s
-  ; Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (NdKey hx hy)
-  };
-
-asm combs = foldM
-  (\symtab (s, t) -> either (const symtab) (flip (insert s) symtab) <$> enc t)
-  Tip combs;
-
-hashcons combs = fpair (runState (asm combs) (Tip, (128, id)))
-  \symtab (_, (_, f)) -> (symtab,) $ either (maybe undefined id . (`mlookup` symtab)) id <$> f [];
 
 getArg' k n = getArgChar n k >>= \c -> if ord c == 0 then pure [] else (c:) <$> getArg' (k + 1) n;
 getArgs = getArgCount >>= \n -> mapM (getArg' 0) (take (n - 1) $ upFrom 1);

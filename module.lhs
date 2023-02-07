@@ -154,6 +154,10 @@ as they made their way through our compiler. We change the code generator so
 it no longer needs this precondition, so that we can store compiled functions
 and modules in maps rather than delicately manicured lists.
 
+We experiment with hash consing which reduces heap usage my maximizing
+sharing. However, it may cost too much, as this iteration of our compiler is
+appreciably slower.
+
 ++++++++++
 <p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>
 <div id='party' style='display:none'>
