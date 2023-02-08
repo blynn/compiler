@@ -224,67 +224,40 @@ void rts_reduce(u n) {
 }
 |]++)
 
--- Hash consing.
-data Obj = Local String | Global String String | Code Int
+resolve bigmap (m, s) = either (resolve bigmap) id $ (bigmap ! m) ! s
 
-instance Eq Obj where
-  Local a == Local b = a == b
-  Global m a == Global n b = m == n && a == b
-  Code a == Code b = a == b
-  _ == _ = False
+mayResolve bigmap (m, s) = mlookup m bigmap
+  >>= fmap (either (resolve bigmap) id) . mlookup s
 
-instance Ord Obj where
-  x <= y = case x of
-    Local a -> case y of
-      Local b -> a <= b
-      _ -> True
-    Global m a -> case y of
-      Local _ -> False
-      Global n b -> if m == n then a <= b else m <= n
-      _ -> True
-    Code a -> case y of
-      Code b -> a <= b
-      _ -> False
+appCell (hp, bs) x y = (Right hp, (hp + 2, bs . (x:) . (y:)))
 
-memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
-  Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
-  Just v -> pure v
-
-enc t = case t of
+enc tab mem = \case
   Lf n -> case n of
-    Basic c -> pure $ Code $ comEnum c
-    Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
-    ChrCon c -> enc $ Lf $ Const $ ord c
-    StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    Link m s _ -> pure $ Global m s
-  LfVar s -> pure $ Local s
-  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
+    Basic c -> (Right $ comEnum c, mem)
+    Const c -> appCell mem (Right $ comEnum "NUM") $ Right c
+    ChrCon c -> appCell mem (Right $ comEnum "NUM") $ Right $ ord c
+    StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
+    Link m s _ -> (Left (m, s), mem)
+  LfVar s -> maybe (error $ "resolve " ++ s) (, mem) $ mlookup s tab
+  Nd x y -> let
+    (xAddr, mem') = enc tab mem x
+    (yAddr, mem'') = enc tab mem' y
+    in appCell mem'' xAddr yAddr
 
-encTop t = enc t >>= \case
-  Code n -> pure n
-  other -> memget (Code $ comEnum "I", other)
-
-asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> encTop t)
-  Tip combs
-
-hashcons hp0 combs = (symtab, (hp, resolve <$> memF [])) where
-  (symtab, (_, (hp, memF))) = runState (asm combs) (Tip, (hp0, id))
-  resolve = \case
-    Code n -> Right n
-    Local s -> Right $ symtab ! s
-    Global m s -> Left (m, s)
+asm hp0 combs = tabmem where
+  tabmem = foldl (\(as, m) (s, t) -> let (p, m') = enc (fst tabmem) m t
+    in (insert s p as, m')) (Tip, (hp0, id)) combs
 
 lambsList typed = toAscList $ snd <$> typed
 
 codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . (mem'++)))
+  (insert name localmap bigmap, (hp', f . memF))
   where
-  (localmap, (hp', mem')) = hashcons hp $ optiComb $ lambsList typed
+  (localmap, (hp', memF)) = asm hp $ optiComb $ lambsList typed
 
 codegen mods = (bigmap, mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
-  mem = either (\(m, s) -> (bigmap ! m) ! s ) id <$> memF []
+  mem = either (resolve bigmap) id <$> memF []
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
 getIOType q = Left $ "main : " ++ showQual q ""
@@ -299,8 +272,7 @@ compile mods = do
       Just (Qual [] t, _) -> t
       _ -> error "TODO: report bad exports"
     mayMain = do
-      tab <- mlookup "Main" bigmap
-      mainAddr <- mlookup "main" tab
+      mainAddr <- mayResolve bigmap ("Main", "main")
       (mainType, _) <- mlookup "main" $ fst $ mods ! "Main"
       pure (mainAddr, mainType)
   mainStr <- case mayMain of
@@ -317,7 +289,7 @@ compile mods = do
     . ("static const u prog[]={" ++)
     . foldr (.) id (map (\n -> showInt n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
-    . foldr (\(modName, (_, ourName)) f -> maybe undefined showInt (mlookup ourName $ bigmap ! modName) . (", " ++) . f) id ffes
+    . foldr (\(modName, (_, ourName)) f -> showInt (resolve bigmap (modName, ourName)) . (", " ++) . f) id ffes
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)

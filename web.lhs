@@ -78,6 +78,10 @@ constructors, top-level variables, typeclasses, and so on. We reorganize them
 a little to standardize the logic for searching through the list of imports.
 This makes it easier to add support for lists of export symbols.
 
+We experiment with hash consing which reduces heap usage my maximizing
+sharing. However, it may cost too much, as our compiler has grown appreciably
+slower.
+
 ++++++++++
 <p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
 ++++++++++

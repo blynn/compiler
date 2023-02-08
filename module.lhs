@@ -106,14 +106,6 @@ these language features are used. The last of these implies we must define an
 `Applicative` instance for lists if `pure` has its standard meaning. To remove
 these gotchas, we could define low-level primitives as we do for the others.
 
-Back link:mvp.html[when we added hash consing], we ignored a potential crash
-from an unlikely corner case: a foreign export whose right-hand side is a lone
-variable. But now every symbol is exported to other modules, and there is also
-a new corner case where the right-hand side is a lone symbol defined in some
-import. We therefore ensure every symbol corresponds to some heap address by
-by applying the I combinator to lone variables or imported symbols, which
-creates an app cell that gets interned.
-
 Code generation now has two phases. The first corresponds to GHC incrementally
 compiling a module: it resolves all locally defined symbols, and leaves `Link`
 values indicating where to put addresses of symbols defined elsewhere. The
@@ -153,10 +145,6 @@ Up until now we had preserved topological order of the top-level definitions
 as they made their way through our compiler. We change the code generator so
 it no longer needs this precondition, so that we can store compiled functions
 and modules in maps rather than delicately manicured lists.
-
-We experiment with hash consing which reduces heap usage my maximizing
-sharing. However, it may cost too much, as this iteration of our compiler is
-appreciably slower.
 
 ++++++++++
 <p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>

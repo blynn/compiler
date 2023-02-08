@@ -259,39 +259,29 @@ void rts_reduce(u n) {
 }
 |]++)
 
--- Hash consing.
-data Obj = Local String | Global String String | Code Int deriving Eq
+resolve bigmap (m, s) = either (resolve bigmap) id $ (bigmap ! m) ! s
 
-instance Ord Obj where
-  x <= y = case x of
-    Local a -> case y of
-      Local b -> a <= b
-      _ -> True
-    Global m a -> case y of
-      Local _ -> False
-      Global n b -> if m == n then a <= b else m <= n
-      _ -> True
-    Code a -> case y of
-      Code b -> a <= b
-      _ -> False
+mayResolve bigmap (m, s) = mlookup m bigmap
+  >>= fmap (either (resolve bigmap) id) . mlookup s
 
-memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
-  Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
-  Just v -> pure v
+appCell (hp, bs) x y = (Right hp, (hp + 2, bs . (x:) . (y:)))
 
-enc t = case t of
+enc tab mem = \case
   Lf n -> case n of
-    Basic c -> pure $ Code $ comEnum c
-    Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
-    ChrCon c -> enc $ Lf $ Const $ ord c
-    StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    Link m s _ -> pure $ Global m s
-  LfVar s -> pure $ Local s
-  Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Code <$> memget (hx, hy)
+    Basic c -> (Right $ comEnum c, mem)
+    Const c -> appCell mem (Right $ comEnum "NUM") $ Right c
+    ChrCon c -> appCell mem (Right $ comEnum "NUM") $ Right $ ord c
+    StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
+    Link m s _ -> (Left (m, s), mem)
+  LfVar s -> maybe (error $ "resolve " ++ s) (, mem) $ mlookup s tab
+  Nd x y -> let
+    (xAddr, mem') = enc tab mem x
+    (yAddr, mem'') = enc tab mem' y
+    in appCell mem'' xAddr yAddr
 
-asm combs = foldM
-  (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
-  Tip combs
+asm hp0 combs = tabmem where
+  tabmem = foldl (\(as, m) (s, t) -> let (p, m') = enc (fst tabmem) m t
+    in (insert s p as, m')) (Tip, (hp0, id)) combs
 
 rewriteCombs tab = optim . go where
   go = \case
@@ -307,17 +297,11 @@ rewriteCombs tab = optim . go where
     t -> t
 
 codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
-  (insert name localmap bigmap, (hp', f . (mem++)))
+  (insert name localmap bigmap, (hp', f . memF))
   where
   rawCombs = optim . nolam . snd <$> typed
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
-  (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
-  localmap = resolveLocal <$> symtab
-  mem = resolveLocal <$> memF []
-  resolveLocal = \case
-    Code n -> Right n
-    Local s -> resolveLocal $ symtab ! s
-    Global m s -> Left (m, s)
+  (localmap, (hp', memF)) = asm hp combs
 
 codegen ffis mods = (bigmap', mem) where
   (bigmap, (_, memF)) = foldr codegenLocal (Tip, (128, id)) $ toAscList mods
