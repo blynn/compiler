@@ -1052,12 +1052,11 @@ ffiDefine n ffis = case ffis of
   { [] -> id
   ; (name, t):xt -> fpair (ffiArgs 2 t) \args ((isPure, ret), count) -> let
     { lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    ; aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-    ; longDistanceCall = name ++ "(" ++ args ++ ")"
-    } in
-    ("case " ++) . showInt n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+    ; cont tgt = if isPure then ("_I, "++) . tgt else ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
+    ; longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+    } in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+      then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
+      else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
   };
 
 getContents = getChar >>= \n -> if n <= 255 then (chr n:) <$> getContents else pure [];

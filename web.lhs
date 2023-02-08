@@ -247,7 +247,7 @@ To build a browser-based compiler, we essentially run the previous compiler on
 itself, thus producing a wasm binary that can translate Haskell directly into
 wasm.
 
-One change is needed: we swap `System1.hs` for `SystemWasm.hs`. The
+One change is needed: we swap `System.hs` for `SystemWasm.hs`. The
 Linux version declares foreign imports for those in our runtime system for
 Linux. The wasm version declares foreign imports for functions provided by
 the host environment.

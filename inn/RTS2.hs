@@ -1,6 +1,4 @@
 -- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
--- Change `isEOF` and `getChar` to behave more like Haskell's.
 -- Change `div` and `mod` to round down instead towards zero for `Int`.
 module RTS where
 
@@ -188,7 +186,7 @@ ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . if ret == TC "()"
   where
   (args, ((isPure, ret), count)) = ffiArgs 2 t
   lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
-  cont tgt = if isPure then ("I, "++) . tgt else  ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
+  cont tgt = if isPure then ("_I, "++) . tgt else ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
   longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"

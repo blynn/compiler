@@ -1019,15 +1019,13 @@ ffiArgs n t = case t of
 
 ffiDefine n ffis = case ffis of
   { [] -> id
-  ; (:) x xt -> fpair x \name t -> fpair (ffiArgs 2 t) \args pRetCount -> fpair pRetCount \pRet count -> fpair pRet \isPure ret ->
-    let
-      { lazyn = ("lazy(" ++) . showInt (ife isPure (count - 1) (count + 1)) . (", " ++)
-      ; aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
-      ; longDistanceCall = name ++ "(" ++ args ++ ")"
-      } in
-    ("case " ++) . showInt n . (": " ++) . ife (ret == "()")
-      ((longDistanceCall ++) . (';':) . lazyn . ((ife isPure "'I', 'K'" (aa "'K'") ++ "); break;") ++) . ffiDefine (n - 1) xt)
-      (lazyn . ((ife isPure ("'#', " ++ longDistanceCall) (aa $ "app('#', " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt)
+  ; (:) x xt -> fpair x \name t -> fpair (ffiArgs 2 t) \args pRetCount -> fpair pRetCount \pRet count -> fpair pRet \isPure ret -> let
+    { lazyn = ("lazy(" ++) . showInt (ife isPure (count - 1) (count + 1)) . (", " ++)
+    ; cont tgt = ife isPure (("'I', "++) . tgt) $ ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
+    ; longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
+    } in ("case " ++) . showInt n . (": " ++) . ife (ret == "()")
+      (longDistanceCall . cont ("'K'"++) . ("); break;"++) . ffiDefine (n - 1) xt)
+      (("{u r = "++) . longDistanceCall . cont ("app('#', r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt)
   };
 
 getContents = getChar >>= \n -> ife (n <= 255) ((chr n:) <$> getContents) (pure []);

@@ -13,6 +13,22 @@ static int env_argc;
 int getargcount() { return env_argc; }
 static char **env_argv;
 int getargchar(int n, int k) { return env_argv[n][k]; }
+static int nextCh, isAhead;
+int eof_shim() {
+  if (!isAhead) {
+    isAhead = 1;
+    nextCh = getchar();
+  }
+  return nextCh == -1;
+}
+void exit(int);
+void putchar_shim(int c) { putchar(c); }
+int getchar_shim() {
+  if (!isAhead) nextCh = getchar();
+  if (nextCh == -1) exit(1);
+  isAhead = 0;
+  return nextCh;
+}
 void errchar(int c) { fputc(c, stderr); }
 void errexit() { fputc('\n', stderr); }
 |]
@@ -155,11 +171,11 @@ ffiDefine n ffis = case ffis of
   (name, t):xt -> let
     (args, ((isPure, ret), count)) = ffiArgs 2 t
     lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ shows (count + 1) "), " ++ tgt ++ "), arg(" ++ shows count ")"
-    longDistanceCall = name ++ "(" ++ args ++ ")"
+    cont tgt = if isPure then ("_I, "++) . tgt else ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
+    longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
     in ("case " ++) . shows n . (": " ++) . if ret == "()"
-      then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
-      else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
+      then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
+      else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
 
 genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 

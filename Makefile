@@ -23,7 +23,7 @@ $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
 REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/Kiselyov.hs inn/Map1.hs inn/ParserPrecisely.hs inn/RTSPrecisely.hs inn/TyperPrecisely.hs inn/Unify1.hs inn/reply.hs
-reply.c: precisely inn/System1.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System1.hs $(REPLYHS) inn/BasePrecisely.hs inn/System1.hs; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/System1.hs; cat inn/reply-native.hs) | ./precisely > $@
+reply.c: precisely inn/System.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System.hs $(REPLYHS) inn/BasePrecisely.hs inn/System.hs; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/System.hs; cat inn/reply-native.hs) | ./precisely > $@
 
 doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat inn/SystemWasm.hs $(REPLYHS) inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/SystemWasm.hs; cat inn/reply-wasm.hs) | ./precisely wasm > $@
 
@@ -52,30 +52,30 @@ endef
 
 $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS Typer party)
 $(call party,party1.c,multiparty,Base0 System Ast Map Parser Kiselyov Unify RTS Typer1 party)
-$(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS1 Typer2 party)
-$(call party,party3.c,party2,Base1 System1 Ast2 Map Parser2 Kiselyov Unify1 RTS2 Typer3 party1)
-$(call party,crossly.c,party3,Base1 System1 Ast3 Map Parser3 Kiselyov Unify1 RTS3 Typer4 party2)
-$(call party,precisely.c,crossly,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer2 party)
+$(call party,party3.c,party2,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS2 Typer3 party1)
+$(call party,crossly.c,party3,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS3 Typer4 party2)
+$(call party,precisely.c,crossly,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,check.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,check.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,webby.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
+$(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
 $(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
 
 $(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
 imp.o:imp.c;$(WCC) $^ -c -o $@
 imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 
-$(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS1 Typer1 party)
-$(call cat,tmp.hs,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call cat,cat-party1.hs,Base0 System Ast Map Parser Kiselyov Unify RTS Typer1 party)
+$(call cat,tmp.hs,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
 #warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
 warts.o:warts.c;$(WCC) $^ -c -o $@
 warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
-$(call party,warts2hs.c,crossly,Base1 System1 warts2hs)
+$(call party,warts2hs.c,crossly,Base1 System warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
-$(call party,tabby.c,precisely,BasePrecisely System1 ../tabby)
+$(call party,tabby.c,precisely,BasePrecisely System ../tabby)
 
 hilsys.c:hilsys.lhs methodically;sed '/\\begin{code}/,/\\end{code}/!d;//d' $< | ./methodically > $@
 test/mandelbrot.c:test/mandelbrot.hs lonely;(cat rts.c && ./lonely < $<) > $@
@@ -110,4 +110,4 @@ fol.js fol.wasm: fol.lhs
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
 
-$(call party,repl.c,precisely,BasePrecisely System1 AstPrecisely Map ParserPrecisely Kiselyov Unify RTSPrecisely TyperPrecisely ../repl)
+$(call party,repl.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify RTSPrecisely TyperPrecisely ../repl)
