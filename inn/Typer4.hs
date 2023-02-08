@@ -10,19 +10,23 @@ import Ast
 import Parser
 import Unify
 
-freeCount v expr = case expr of
-  E _ -> 0
-  V s -> if s == v then 1 else 0
-  A x y -> freeCount v x + freeCount v y
-  L w t -> if v == w then 0 else freeCount v t
-app01 s x = case freeCount s x of
-  0 -> const x
-  1 -> flip (fill s) x
-  _ -> A $ L s x
+app01 s x y = maybe (A (L s x) y) snd $ go x where
+  go expr = case expr of
+    E _ -> Just (False, expr)
+    V v -> Just $ if s == v then (True, y) else (False, expr)
+    A l r -> do
+      (a, l') <- go l
+      (b, r') <- go r
+      if a && b then Nothing else pure (a || b, A l' r')
+    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
+
 optiApp t = case t of
-  A x y -> case optiApp x of
-    L s x -> app01 s x (optiApp y)
-    x -> A x (optiApp y)
+  A x y -> let
+    x' = optiApp x
+    y' = optiApp y
+    in case x' of
+      L s v -> app01 s v y'
+      _ -> A x' y'
   L s x -> L s (optiApp x)
   _ -> t
 

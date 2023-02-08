@@ -248,7 +248,7 @@ For a less outlandish algorithm, see Peyton Jones,
 https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
 Implementation of Functional Programming Languages'], Chapter 5.
 
-link:web.html[In a later compiler, we clean up pattern matching]. Eventually,
+link:mvp.html[In a later compiler, we clean up pattern matching]. Eventually,
 we ought to backport the changes.
 
 ++++++++++

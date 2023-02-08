@@ -111,7 +111,6 @@ foreign import ccall "get_module" getModule :: IO ()
 
 needed tab = filter (\s -> not (s == "#" || s `member` tab)) $ concatMap dependentModules $ elems tab
 complete tab = case needed tab of
-  -- [] -> putStr $ either id id $ toWasm <$> foldM (inferModule tab) soloPrim (keys tab)
   [] -> putStr $ either id id $ toWasm tab
   f:_ -> do
     putStr f

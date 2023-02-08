@@ -106,6 +106,3 @@ spanningSearch   = (foldl .) \relation st@(visited, setSequence) vertex ->
 scc ins outs = spanning . depthFirst where
   depthFirst = snd . depthFirstSearch outs ([], [])
   spanning   = snd . spanningSearch   ins  ([], [])
-
-encodeCase x alts = A (E $ Basic "case") $ A x $ Pa $ first (:[]) <$> alts
-decodeCaseArg (A x (Pa pas)) = (x, first head <$> pas)

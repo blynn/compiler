@@ -327,6 +327,16 @@ We can work around this problem with a better `getContents` implementation,
 and indeed, perhaps this would already improve current build times.
 For now we'll just put up with `exit()` instead of exceptions.
 
+We clean up pattern matching. The `Ca` data constructor is superfluous. The
+`Pa` data constructor can handle case expressions. In a similar vein, it turns
+out we only need two functions to match patterns and build a jump table for
+more efficient case expressions. Losing specialized functions may lead to
+slightly slower compile times, but the simplicity is worth it.
+
+Instead of `cjoin#` and `pjoin#` to protect parts of a lambda term from each
+other, we make it the responsibility of the caller rather than the callee to
+set the join point. Then we can use simply `join#` everywhere.
+
 ++++++++++
 <p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>
 <div id='methodically' style='display:none'>

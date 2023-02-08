@@ -282,6 +282,8 @@ maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
+joinIsFail t = A (L "join#" t) (V "fail#")
+
 addLets ls x = foldr triangle x components where
   vs = fst <$> ls
   ios = foldr (\(s, dsts) (ins, outs) ->
@@ -293,7 +295,7 @@ addLets ls x = foldr triangle x components where
     appem vs = foldl1 A $ V <$> vs
     suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
     redef tns expr = foldr L (suball expr) tns
-    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined id $ lookup x ls) (suball expr) tnames
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined joinIsFail $ lookup x ls) (suball expr) tnames
 
 data Assoc = NAssoc | LAssoc | RAssoc
 instance Eq Assoc where
@@ -381,9 +383,9 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr)
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
-alts = braceSep $ (,) <$> pat <*> guards "->"
-cas = encodeCase <$> between (res "case") (res "of") expr <*> alts
-lamCase = res "case" *> (L "\\case" . encodeCase (V "\\case") <$> alts)
+alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> guards "->")
+cas = flip A <$> between (res "case") (res "of") expr <*> alts
+lamCase = res "case" *> alts
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
@@ -465,20 +467,21 @@ pat = patP 0
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some ((\x y -> case x of
   V "True" -> \_ -> y
   _ -> A (A (A (V "if") x) y)
   ) <$> (res "|" *> expr) <*> (res s *> expr))
 
-onePat vs x = Pa [(vs, x)]
-opDef x f y rhs = [(f, onePat [x, y] rhs)]
+onePat vs x = joinIsFail $ Pa [(vs, x)]
+defOnePat vs x = Pa [(vs, x)]
+opDef x f y rhs = [(f, defOnePat [x, y] rhs)]
 leftyPat p expr = case pvars of
   [] -> []
   (h:t) -> let gen = '@':h in
-    (gen, expr):map (\v -> (v, encodeCase (V gen) [(p, V v)])) pvars
+    (gen, expr):map (\v -> (v, A (Pa [([p], V v)]) $ V gen)) pvars
   where
   pvars = filter (/= "_") $ patVars p
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 defOnePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
 coalesce = \case
   [] -> []
