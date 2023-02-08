@@ -536,8 +536,7 @@ with its name in the syntax tree, which we map to a number during our code
 generation that corresponds to linking.
 
 We reuse the `Link` data constructor for this. The special `{foreign}` module
-indicates the function name is foreign. Thus we can discard the `ForeignFun`
-data constructor.
+indicates the function name is foreign.
 
 We also check for name conflicts among foreign imports and exports.
 

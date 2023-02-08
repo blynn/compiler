@@ -271,9 +271,6 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    ForeignFun n -> do
-      x <- enc $ Lf $ Const n
-      Code <$> memget (Code $ comEnum "F", x)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s

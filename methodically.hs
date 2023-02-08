@@ -216,7 +216,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String
+data Extra = Basic String | Const Int | ChrCon Char | StrCon String
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [Type]
@@ -499,8 +499,9 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   name = '{':classId ++ (' ':showType ty "") ++ "}"
   in Neat tycl' fs typed dcs ffis exs
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) exs
+addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) = let
+  fn = A (ro "F") $ E $ Const $ length ffis
+  in Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t fn)) : typed) dcs ((foreignname, t):ffis) exs
 addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (ds ++ fs) typed dcs ffis exs
 addExport e f (Neat tycl fs typed dcs ffis exs) = Neat tycl fs typed dcs ffis ((e, f):exs)
 
@@ -1198,7 +1199,6 @@ showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
   Basic s -> (s++)
-  ForeignFun n -> ("FFI_"++) . showInt n
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)
@@ -1244,7 +1244,6 @@ appCell (hp, bs) x y = (hp, (hp + 2, bs . (x:) . (y:)))
 enc tab mem = \case
   Lf n -> case n of
     Basic c -> (comEnum c, mem)
-    ForeignFun n -> enc tab mem $ Nd (Lf $ Basic "F") (Lf $ Const n)
     Const c -> appCell mem (comEnum "NUM") c
     ChrCon c -> appCell mem (comEnum "NUM") $ ord c
     StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -1254,9 +1253,9 @@ enc tab mem = \case
     (yAddr, mem'') = enc tab mem' y
     in appCell mem'' xAddr yAddr
 
-asm combs = let
-  { tabmem = foldl (\(as, m) (s, t) -> let { pm' = enc (fst tabmem) m t } in
-    (insert s (fst pm') as, snd pm')) (Tip, (128, id)) combs } in tabmem
+asm combs = tabmem where
+  tabmem = foldl (\(as, m) (s, t) -> let (p, m') = enc (fst tabmem) m t
+    in (insert s p as, m')) (Tip, (128, id)) combs
 
 -- Code generation.
 argList t = case t of

@@ -6,7 +6,7 @@ import Map
 
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
@@ -83,7 +83,6 @@ showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
   Basic s -> (s++)
-  ForeignFun n -> ("FFI_"++) . showInt n
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)

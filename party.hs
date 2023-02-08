@@ -229,7 +229,7 @@ keys = map fst . toAscList
 -- Syntax tree.
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
-data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String | Link String String Qual
+data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
 data Constr = Constr String [Type]
@@ -505,8 +505,9 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   name = '{':classId ++ (' ':showType ty "") ++ "}"
   in Neat tycl' fs typed dcs ffis ffes ims
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) ffes ims
+addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) = let
+  fn = A (ro "F") $ E $ Const $ length ffis
+  in Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t fn)) : typed) dcs ((foreignname, t):ffis) ffes ims
 addDefs ds (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl (ds ++ fs) typed dcs ffis ffes ims
 addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
 addExport e f (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl fs typed dcs ffis ((e, f):ffes) ims
@@ -1301,7 +1302,6 @@ showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
 showExtra = \case
   Basic s -> (s++)
-  ForeignFun n -> ("FFI_"++) . showInt n
   Const i -> showInt i
   ChrCon c -> ('\'':) . (c:) . ('\'':)
   StrCon s -> ('"':) . (s++) . ('"':)
@@ -1373,9 +1373,6 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
 enc t = case t of
   Lf n -> case n of
     Basic c -> pure $ Code $ comEnum c
-    ForeignFun n -> do
-      x <- enc $ Lf $ Const n
-      Code <$> memget (Code $ comEnum "F", x)
     Const c -> Code <$> memget (Code $ comEnum "NUM", Code c)
     ChrCon c -> enc $ Lf $ Const $ ord c
     StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s

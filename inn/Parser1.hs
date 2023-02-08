@@ -234,8 +234,9 @@ addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   name = '{':classId ++ (' ':showType ty "") ++ "}"
   in Neat tycl' fs typed dcs ffis ffes ims
 
-addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) =
-  Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) ffes ims
+addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) = let
+  fn = A (E $ Basic "F") $ E $ Const $ length ffis
+  in Neat tycl fs ((ourname, (Qual [] t, mkFFIHelper 0 t fn)) : typed) dcs ((foreignname, t):ffis) ffes ims
 addDefs ds (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl (ds ++ fs) typed dcs ffis ffes ims
 addImport im (Neat tycl fs typed dcs ffis exs ims) = Neat tycl fs typed dcs ffis exs (im:ims)
 addExport e f (Neat tycl fs typed dcs ffis ffes ims) = Neat tycl fs typed dcs ffis ((e, f):ffes) ims

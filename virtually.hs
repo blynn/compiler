@@ -213,7 +213,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 -- Parsing.
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
-data Extra = Basic String | ForeignFun Int | Const Int | ChrCon Char | StrCon String;
+data Extra = Basic String | Const Int | ChrCon Char | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
 data ParseState = ParseState String (Map String (Int, Assoc));
@@ -279,8 +279,9 @@ addClass classId v ms (Neat ienv idefs fs typed dcs ffis exs) = let
 dictName cl (Qual _ t) = '{':cl ++ (' ':showType t "") ++ "}";
 addInst cl q ds (Neat ienv idefs fs typed dcs ffis exs) = let { name = dictName cl q } in
   Neat (insertWith (++) cl [(name, q)] ienv) ((name, (q, ds)):idefs) fs typed dcs ffis exs;
-addFFI foreignname ourname t (Neat ienv idefs fs typed dcs ffis exs) =
-  Neat ienv idefs fs ((ourname, (Qual [] t, mkFFIHelper 0 t $ E $ ForeignFun $ length ffis)) : typed) dcs ((foreignname, t):ffis) exs;
+addFFI foreignname ourname t (Neat ienv idefs fs typed dcs ffis exs) = let
+  { fn = A (ro "F") $ E $ Const $ length ffis
+  } in Neat ienv idefs fs ((ourname, (Qual [] t, mkFFIHelper 0 t fn)) : typed) dcs ((foreignname, t):ffis) exs;
 addDefs ds (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs (ds ++ fs) typed dcs ffis exs;
 addExport e f (Neat ienv idefs fs typed dcs ffis exs) = Neat ienv idefs fs typed dcs ffis ((e, f):exs);
 
@@ -714,7 +715,6 @@ appCell (hp, bs) x y = (hp, (hp + 2, bs . (x:) . (y:)));
 enc tab mem t = case t of
   { Lf n -> case n of
     { Basic c -> (comEnum c, mem)
-    ; ForeignFun n -> enc tab mem $ Nd (Lf $ Basic "F") (Lf $ Const n)
     ; Const c -> appCell mem (comEnum "NUM") c
     ; ChrCon c -> appCell mem (comEnum "NUM") $ ord c
     ; StrCon s -> enc tab mem $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
@@ -1118,7 +1118,6 @@ showVar s@(h:_) = (if elem h ":!#$%&*+./<=>?@\\^|-~" then par else id) (s++);
 
 showExtra = \case
   { Basic s -> (s++)
-  ; ForeignFun n -> ("FFI_"++) . showInt n
   ; Const i -> showInt i
   ; ChrCon c -> ('\'':) . (c:) . ('\'':)
   ; StrCon s -> ('"':) . (s++) . ('"':)
