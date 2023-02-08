@@ -53,8 +53,8 @@ endef
 $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS Typer party)
 $(call party,party1.c,multiparty,Base0 System Ast Map Parser Kiselyov Unify RTS Typer1 party)
 $(call party,party2.c,party1,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer2 party)
-$(call party,party3.c,party2,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS2 Typer3 party1)
-$(call party,crossly.c,party3,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS3 Typer4 party2)
+$(call party,party3.c,party2,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS1 Typer3 party1)
+$(call party,crossly.c,party3,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2 Typer4 party2)
 $(call party,precisely.c,crossly,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
 $(call party,check.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)

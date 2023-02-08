@@ -366,19 +366,18 @@ incarnate. In other words, we rely more on dynamic rather than static
 semantics, a distinction that sometimes blurs because beta-reducing may occur
 during optimization.
 
-One advantage of this approach is we can remove `overFreePro`, which is helper
-that traverses over syntax trees before case expressions and pattern matches
-have been transformed away.
+One advantage of this approach is we can remove `overFreePro`, a helper that
+traverses over syntax trees before case expressions and pattern matches have
+been transformed away.
 
-We add support for named record fields. We extend the parser to support
-data type declarations such as:
+We extend the parser to support named record fields in data type declarations
+such as:
 
 ------------------------------------------------------------------------
 data Foo = Foo { bar :: Int, baz :: String } | Qux
 ------------------------------------------------------------------------
 
-One function definition per field suffices for accessors.
-For example, we genarate:
+For accessors, we generate one function definition per field. For example:
 
 ------------------------------------------------------------------------
 bar = \case Foo bar baz -> bar
@@ -476,6 +475,20 @@ include::inn/Typer2.hs[]
 </div>
 ++++++++++
 
+We replace a list with a `Map` for faster type unification.
+
+++++++++++
+<p><a onclick='hideshow("Unify1");'>&#9654; Toggle `Unify1.hs`</a></p><div id='Unify1' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::inn/Unify1.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
 == Party3 ==
 
 We fix the problem with foreign imports across multiple modules. In the
@@ -557,11 +570,11 @@ include::inn/Typer3.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("RTS2");'>&#9654; Toggle `RTS2.hs`</a></p><div id='RTS2' style='display:none'>
+<p><a onclick='hideshow("RTS1");'>&#9654; Toggle `RTS1.hs`</a></p><div id='RTS1' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/RTS2.hs[]
+include::inn/RTS1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
