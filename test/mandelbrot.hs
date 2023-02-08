@@ -48,7 +48,7 @@ y24 = take 24 $ iterate (1+) 0;
 
 str = foldr ($) "" $ map (\y -> (map (\x -> ife (douady (616*x - 2*prec, 1502*y - 18022)) '*' ' ') x80 ++) . ("\n" ++)) y24;
 
-ffi "putchar" putChar :: Char -> IO ();
+foreign import ccall "putchar" putChar :: Char -> IO ();
 
 instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };

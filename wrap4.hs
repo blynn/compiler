@@ -78,8 +78,6 @@ charLE :: Char -> Char -> Bool
 charLE = (Prelude.<=)
 ioPure = Prelude.pure :: a -> IO a
 ioBind = (Prelude.>>=) :: IO a -> (a -> IO b) -> IO b
-#define ffi foreign import ccall
-#define export --
 #include "methodically.hs"
 instance Prelude.Functor Parser where fmap = fmap
 instance Prelude.Applicative Parser where pure = pure ; (<*>) = (<*>)

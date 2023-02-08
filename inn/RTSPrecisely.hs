@@ -8,7 +8,6 @@ import Ast
 import Kiselyov
 import Map
 import Parser
-
 import Typer
 
 import_qq_here = import_qq_here
@@ -510,9 +509,6 @@ static u *root = (u*) ROOT_BASE, *vmroot, *rootend, *scratchpad, *scratchpadend;
 void errchar(int c) {}
 void errexit() {}
 |]++)
-
-allFFIs s =
-  fromList . concatMap (toAscList . ffiImports) . elems <$> singleFile s
 
 warts opts ffis =
   ("typedef unsigned u;\n"++)

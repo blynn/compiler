@@ -4,14 +4,14 @@ infixl 7 * , / , %;
 infixl 6 + , -;
 infixr 5 ++;
 infixl 4 <*> , <$> , <* , *>;
-infix 4 == , /= , <=;
+infix 4 == , <=;
 infixl 3 && , <|>;
 infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
-ffi "getchar" getChar :: IO Int;
+foreign import ccall "putchar" putChar :: Int -> IO Int;
+foreign import ccall "getchar" getChar :: IO Int;
 
 data Bool = True | False;
 ife a b c = case a of { True -> b ; False -> c };
@@ -514,16 +514,16 @@ instDecl r = keyword "instance" *>
   (((wrap .) . Pred <$> conId <*> (inst <* want varSym "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> (coalesce <$> braceSep (def r))));
 
-ffiDecl = keyword "ffi" *>
-  (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType));
-
 tops precTab = sepBy
   (   adt
   <|> classDecl
   <|> instDecl (expr precTab 0)
-  <|> ffiDecl
+  <|> keyword "foreign" *>
+    ( keyword "import" *> var *>
+      (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType))
+    <|> keyword "export" *> var *> (addExport <$> litStr <*> var)
+    )
   <|> addDefs . coalesce <$> sepBy1 (def $ expr precTab 0) (spch ';')
-  <|> keyword "export" *> (addExport <$> litStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 

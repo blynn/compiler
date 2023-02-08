@@ -43,7 +43,7 @@ rewritePats searcher = \case
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase searcher v Tip [(p, b)]) x (zip at $ tail vs)
       flip (foldr L) vs <$> rewriteCase searcher (head vs) Tip cs
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"

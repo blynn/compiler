@@ -22,7 +22,7 @@ rewritePats searcher = \case
 
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"

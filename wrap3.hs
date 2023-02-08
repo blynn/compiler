@@ -33,6 +33,4 @@ div = Prelude.div
 mod = Prelude.mod
 succ :: Int -> Int
 succ = Prelude.succ
-#define ffi foreign import ccall
-#define export --
 #include "marginally.hs"

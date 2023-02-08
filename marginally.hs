@@ -10,10 +10,10 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
-ffi "getchar" getChar :: IO Int;
-ffi "getargcount" getArgCount :: IO Int;
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
+foreign import ccall "putchar" putChar :: Int -> IO Int;
+foreign import ccall "getchar" getChar :: IO Int;
+foreign import ccall "getargcount" getArgCount :: IO Int;
+foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -361,7 +361,7 @@ integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal;
 literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr;
 varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
   { ck s = (if elem s
-    ["ffi", "export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
+    ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
     then Reserved else VarId) s };
 varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
   { ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s };
@@ -767,8 +767,10 @@ topdecls = braceSep
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> res "ffi" *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
-  <|> res "export" *> (addExport <$> wantString <*> var)
+  <|> res "foreign" *>
+    (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
+    <|> res "export" *> var *> (addExport <$> wantString <*> var)
+    )
   <|> addDefs <$> defSemi
   <|> fixity
   );

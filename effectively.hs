@@ -308,7 +308,7 @@ instDecl r = keyword "instance" *>
   (((wrap .) . Pred <$> conId <*> (inst <* want op "=>")) <|> pure [])
     <*> conId <*> inst <*> (keyword "where" *> braceSep (def r)));
 
-ffiDecl = keyword "ffi" *>
+ffiDecl = keyword "foreign" *> keyword "import" *> var *>
   (FFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType));
 
 eqn r = Def <$> (keyword "export" *> (Just <$> litStr) <|> pure Nothing) <*> def r;

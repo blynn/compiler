@@ -27,8 +27,6 @@ reply.c: precisely inn/System.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System
 
 doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat inn/SystemWasm.hs $(REPLYHS) inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/SystemWasm.hs; cat inn/reply-wasm.hs) | ./precisely wasm > $@
 
-#doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat $(REPLYHS) inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; cat inn/reply-wasm.hs) | ./precisely wasm > $@
-
 doh.o:doh.c;$(WCC) $^ -c -o $@
 doh.wasm:doh.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 doh.html:doh.txt menu.html;cobble mathbook menu $<
@@ -54,7 +52,8 @@ $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS T
 $(call party,party1.c,multiparty,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer1 party)
 $(call party,party2.c,party1,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS1 Typer2 party1)
 $(call party,crossly.c,party2,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2 Typer3 party2)
-$(call party,precisely.c,crossly,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,slowprecisely.c,crossly,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,precisely.c,slowprecisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
 $(call party,check.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 

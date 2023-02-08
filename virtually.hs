@@ -10,10 +10,10 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
-ffi "getchar" getChar :: IO Int;
-ffi "getargcount" getArgCount :: IO Int;
-ffi "getargchar" getArgChar :: Int -> Int -> IO Char;
+foreign import ccall "putchar" putChar :: Int -> IO Int;
+foreign import ccall "getchar" getChar :: IO Int;
+foreign import ccall "getargcount" getArgCount :: IO Int;
+foreign import ccall "getargchar" getArgChar :: Int -> Int -> IO Char;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -544,16 +544,16 @@ instDecl = tok "instance" *>
   (((wrap .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
     <*> conId <*> inst <*> (tok "where" *> (coalesce . concat <$> braceSep def)));
 
-ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type));
-
 tops = sepBy
   (   adt
   <|> classDecl
   <|> instDecl
-  <|> ffiDecl
+  <|> tok "foreign" *>
+    ( tok "import" *> var *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type))
+    <|> tok "export" *> var *> (addExport <$> litStr <*> var)
+    )
   <|> addDefs <$> def
   <|> fixity
-  <|> tok "export" *> (addExport <$> litStr <*> var)
   <|> pure id
   ) (spch ';');
 program s = parse (between sp (spch ';' <|> pure ';') tops) $ ParseState s $ insert ":" (5, RAssoc) Tip;

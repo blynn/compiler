@@ -10,8 +10,8 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
-ffi "getchar" getChar :: IO Int;
+foreign import ccall "putchar" putChar :: Int -> IO Int;
+foreign import ccall "getchar" getChar :: IO Int;
 
 class Functor f where { fmap :: (a -> b) -> f a -> f b };
 class Applicative f where
@@ -448,15 +448,15 @@ instDecl r = tok "instance" *>
   (((wrap .) . Pred <$> conId <*> (inst <* tok "=>")) <|> pure [])
     <*> conId <*> inst <*> (tok "where" *> (coalesce <$> braceSep (def r))));
 
-ffiDecl = tok "ffi" *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType));
-
 tops precTab = sepBy
   (   adt
   <|> classDecl
   <|> instDecl (expr precTab 0)
-  <|> ffiDecl
+  <|> tok "foreign" *>
+    ( tok "import" *> var *> (addFFI <$> litStr <*> var <*> (char ':' *> spch ':' *> _type aType))
+    <|> tok "export" *> var *> (addExport <$> litStr <*> var)
+    )
   <|> addDefs . coalesce <$> sepBy1 (def $ expr precTab 0) (spch ';')
-  <|> tok "export" *> (addExport <$> litStr <*> var)
   ) (spch ';');
 program' = sp *> (((":", (5, RAssoc)):) . concat <$> many fixity) >>= tops;
 

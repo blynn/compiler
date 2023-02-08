@@ -10,7 +10,7 @@ infixl 2 ||;
 infixl 1 >> , >>=;
 infixr 0 $;
 
-ffi "putchar" putChar :: Int -> IO Int;
+foreign import ccall "putchar" putChar :: Int -> IO Int;
 class Eq a where { (==) :: a -> a -> Bool };
 instance Eq Int where { (==) = intEq };
 class Ord a where { (<=) :: a -> a -> Bool };

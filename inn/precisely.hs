@@ -50,6 +50,8 @@ objDump s = do
     . shows (_mem m)
     . ("\n  })\n"++)
 
+allFFIs s = fromList . concatMap (toAscList . ffiImports) . elems <$> singleFile s
+
 main = getArgs >>= \case
   "obj":_ -> interact $ either id ($ "") . objDump
   "matrix":_ -> interact $ dumpWith dumpMatrix

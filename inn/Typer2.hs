@@ -42,7 +42,7 @@ rewritePats dcs = \case
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase dcs v Tip [(p, b)]) x (zip at $ tail vs)
       flip (foldr L) vs <$> rewriteCase dcs (head vs) Tip cs
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
 
 rewriteCase dcs caseVar tab = \case
   [] -> flush $ V "join#"

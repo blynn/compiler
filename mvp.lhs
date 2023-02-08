@@ -279,10 +279,6 @@ Now that the syntax is slightly more pleasant:
 
   * We support list comprehensions.
 
-  * To match GHC, we support `foreign import ccall` as well as `ffi`,
-  and `foreign export ccall` as well as `export`. In the next compiler,
-  we'll remove `ffi` and plain `export`.
-
 We prepare to change `getChar` to match Haskell's, which throws an exception on
 end of input. Up until now, ours simply calls the `getchar` function of C,
 which returns -1 on end of input. Also, we would like Haskell's `isEOF` so we

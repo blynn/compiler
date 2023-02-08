@@ -42,7 +42,7 @@ norm p = fpair p \x y -> sh (x*x + y*y);
 
 douady p = null . dropWhile (\z -> norm z < 4*prec) . take 30 . iterate (sqAdd p) $ (0, 0);
 
-ffi "plot" plot :: Int -> Int -> IO ();
+foreign import ccall "plot" plot :: Int -> Int -> IO ();
 
 instance Applicative IO where { pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y) };
 instance Monad IO where { return = ioPure ; (>>=) = ioBind };

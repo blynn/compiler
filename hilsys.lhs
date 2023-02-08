@@ -64,7 +64,7 @@ infixl 2 ||
 infixl 1 >> , >>=
 infixr 0 $
 
-ffi "putchar" putChar :: Int -> IO Int
+foreign import ccall "putchar" putChar :: Int -> IO Int
 
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
