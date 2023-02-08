@@ -311,7 +311,7 @@ different subdirectories containing the same filenames.
 We can test later iterations with GHCi by symlinking appropriate versions of
 each file in a dedicated subdirectory.
 
-== Party2 ==
+== Party1 ==
 
 Modules feel revolutionary. Our source becomes clearer, because modularization
 forces us to think about interdependencies, which guided refactoring so
@@ -432,11 +432,11 @@ include::inn/Parser1.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("Typer2");'>&#9654; Toggle `Typer2.hs`</a></p><div id='Typer2' style='display:none'>
+<p><a onclick='hideshow("Typer1");'>&#9654; Toggle `Typer1.hs`</a></p><div id='Typer1' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Typer2.hs[]
+include::inn/Typer1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -457,7 +457,7 @@ include::inn/Unify1.hs[]
 </div>
 ++++++++++
 
-== Party3 ==
+== Party2 ==
 
 We fix the problem with foreign imports across multiple modules. In the
 lone-module days, we numbered the imports as we parsed the source. Now,
@@ -526,11 +526,11 @@ include::inn/Parser2.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("Typer3");'>&#9654; Toggle `Typer3.hs`</a></p><div id='Typer3' style='display:none'>
+<p><a onclick='hideshow("Typer2");'>&#9654; Toggle `Typer2.hs`</a></p><div id='Typer2' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Typer3.hs[]
+include::inn/Typer2.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++

@@ -107,11 +107,11 @@ include::inn/Parser3.hs[]
 ++++++++++
 
 ++++++++++
-<p><a onclick='hideshow("Typer4");'>&#9654; Toggle `Typer4.hs`</a></p><div id='Typer4' style='display:none'>
+<p><a onclick='hideshow("Typer3");'>&#9654; Toggle `Typer3.hs`</a></p><div id='Typer3' style='display:none'>
 ++++++++++
 
 ------------------------------------------------------------------------
-include::inn/Typer4.hs[]
+include::inn/Typer3.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
@@ -277,10 +277,6 @@ of our compiler will appear jumpy.
 
 Examples:
 
-  * Built-in primitives were once in their own `#` module. This was replaced by
-  code that pre-defined them for every module. But now I think I was right the
-  first time, and I've changed `precisely` back to the original scheme.
-
   * Rewriting let expressions as lambda terms should happen after
   type-checking, so that type annotations are easier to handle.
 
@@ -298,3 +294,7 @@ which slowed compilation and whose code changed markedly as syntax features
 were added. I pushed it to a far later compiler for faster bootstrapping and
 more stable code. Another example is the `Show` typeclass, which I originally
 added in a surprisingly recent compiler.
+
+Built-in primitives were once in their own `#` module. This was replaced by
+code that pre-defined them for every module. But now I think I was right the
+first time, and hopefully there are no traces of my misadventure left.

@@ -1,4 +1,7 @@
--- FFI across multiple modules.
+-- Separate fixity phase.
+-- Export lists.
+-- Detect missing instances.
+-- Top-level type annotations.
 module Typer where
 
 import Base
@@ -28,9 +31,7 @@ optiApp t = case t of
   _ -> t
 
 -- Pattern compiler.
-findCon dcs s = foldr (<|>) Nothing $ mlookup s <$> dcs
-
-rewritePats dcs = \case
+rewritePats searcher = \case
   [] -> pure $ V "join#"
   vsxs@((as0, _):_) -> case as0 of
     [] -> pure $ foldr1 (A . L "join#") $ snd <$> vsxs
@@ -39,19 +40,19 @@ rewritePats dcs = \case
       n <- get
       put $ n + k
       let vs = take k $ (`shows` "#") <$> [n..]
-      cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase dcs v Tip [(p, b)]) x (zip at $ tail vs)
-      flip (foldr L) vs <$> rewriteCase dcs (head vs) Tip cs
+      cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase searcher v Tip [(p, b)]) x (zip at $ tail vs)
+      flip (foldr L) vs <$> rewriteCase searcher (head vs) Tip cs
 
 patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#")  y
 
-rewriteCase dcs caseVar tab = \case
+rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
   ((v, x):rest) -> go v x rest
   where
-  rec = rewriteCase dcs caseVar
+  rec = rewriteCase searcher caseVar
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
-    PatVar s m -> let x' = beta s (V caseVar) x in case m of
+    PatVar s m -> let x' = fill s (V caseVar) x in case m of
       Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
     PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
@@ -59,18 +60,14 @@ rewriteCase dcs caseVar tab = \case
     [] -> pure onFail
     -- TODO: Check rest of `tab` lies in cs.
     (firstC, _):_ -> do
-      let cs = maybe undefined id $ findCon dcs firstC
+      let cs = either error id $ findCon searcher firstC
       jumpTable <- mapM (\(Constr s ts) -> case mlookup s tab of
           Nothing -> pure $ foldr L (V "join#") $ const "_" <$> ts
-          Just f -> rewritePats dcs $ f []
+          Just f -> rewritePats searcher $ f []
         ) cs
       pure $ A (L "join#" $ foldl A (A (V $ specialCase cs) $ V caseVar) jumpTable) onFail
 
-findField dcs f = case [(con, fields) | tab <- dcs, (_, cons) <- toAscList tab, Constr con fields <- cons, (f', _) <- fields, f == f'] of
-  [] -> error $ "no such field: " ++ f
-  h:_ -> h
-
-resolveFieldBinds dcs t = go t where
+resolveFieldBinds searcher t = go t where
   go t = case t of
     E _ -> t
     V _ -> t
@@ -80,8 +77,8 @@ resolveFieldBinds dcs t = go t where
         A (A (E (StrCon f)) body) rest -> (f, go body):fromAst rest
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
-      (con, fields) = findField dcs firstField
-      cs = maybe undefined id $ findCon dcs con
+      (con, fields) = findField searcher firstField
+      cs = either error id $ findCon searcher con
       newValue = foldl A (V con) [maybe (V $ "[old]"++f) id $ lookup f fbs | (f, _) <- fields]
       initValue = foldl A expr [maybe (V "undefined") id $ lookup f fbs | (f, _) <- fields]
       updater = foldr L newValue $ ("[old]"++) . fst <$> fields
@@ -96,14 +93,80 @@ resolveFieldBinds dcs t = go t where
     A x y -> A (go x) (go y)
     L s x -> L s $ go x
 
+fixFixity searcher t = case t of
+  E _ -> pure t
+  V _ -> pure t
+  A (E (Basic "{+")) ch -> infixer searcher =<< go ch
+  A x y -> A <$> go x <*> go y
+  L s b -> L s <$> go b
+  Pa vsxs -> Pa <$> mapM (\(ps, a) -> (,) <$> mapM pgo ps <*> go a) vsxs
+  where
+  go = fixFixity searcher
+  pgo = pure . patFixFixity searcher
+
+infixer searcher (A (A (A s x) y) t) = go seed t where
+  seed = A (A s $ protect x) $ protect y
+  protect t = A (E (Basic "!")) t
+  unprotectAll = \case
+    A (E (Basic "!")) x -> unprotectAll x
+    A a b -> A (unprotectAll a) (unprotectAll b)
+    t -> t
+  go acc t = case t of
+    E (Basic "+}") -> pure $ unprotectAll acc
+    A (A (V s) z) rest -> go (rebase s (protect z) acc) rest
+    _ -> error "unreachable"
+  rebase s z = \case
+    A (A (V s') x) y -> let
+      stay = A (A (V s) $ A (A (V s') x) y) z
+      down = A (A (V s') x) $ rebase s z y
+      in extendChain searcher stay down s s'
+    x -> A (A (V s) x) z
+
+patFixFixity searcher p = case p of
+  PatLit _ -> p
+  PatVar s m -> PatVar s $ go <$> m
+  PatCon "{+" args -> patFixer searcher args
+  PatCon con args -> PatCon con $ go <$> args
+  where
+  go = patFixFixity searcher
+
+patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldl (flip rebase) seed rest where
+  seed = PatCon f [protect a, protect b]
+  protect x = PatCon "!" [x]
+  unprotectAll = \case
+    PatCon "!" [x] -> unprotectAll x
+    PatCon con args -> PatCon con $ unprotectAll <$> args
+    p -> p
+  rebase sz@(PatCon s [z]) = \case
+    PatCon s' [x, y] -> let
+      stay = PatCon s [PatCon s' [x, y], z]
+      down = PatCon s' [x, rebase sz y]
+      in extendChain searcher stay down s s'
+    x -> PatCon s [x, z]
+
+extendChain searcher stay down s s' =
+  if prec <= prec'
+    then if prec == prec'
+      then if assoc == assoc'
+        then case assoc of
+          LAssoc -> stay
+          RAssoc -> down
+          NAssoc -> error $ "adjacent NAssoc: " ++ s ++ " vs " ++ s'
+        else error $ "assoc mismatch: " ++ s ++ " vs " ++ s'
+      else stay
+    else down
+  where
+  (prec, assoc) = either (const (9, LAssoc)) id $ findPrec searcher s
+  (prec', assoc') = either (const (9, LAssoc)) id $ findPrec searcher s'
+
 secondM f (a, b) = (a,) <$> f b
-patternCompile dcs t = optiApp $ resolveFieldBinds dcs $ evalState (go t) 0 where
+patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
     A x y -> liftA2 A (go x) (go y)
     L s x -> L s <$> go x
-    Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
+    Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats searcher
 
 -- Type inference.
 instantiate' t n tab = case t of
@@ -129,41 +192,45 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
-infer typed loc ast csn@(cs, n) = case ast of
+infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
-    Const _ -> ((TC "Int", ast), csn)
+    Basic bug -> error bug
+    Const n -> ((TC "Int", E $ ChrCon $ chr n), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q
   V s -> maybe (Left $ "undefined: " ++ s) Right
-    $ (\t -> ((t, ast), csn)) <$> lookup s loc
+    $ either (\t -> ((t, ast), csn)) insta <$> lookup s loc
     <|> insta . fst <$> mlookup s typed
-  A x y -> infer typed loc x (cs, n + 1) >>=
-    \((tx, ax), csn1) -> infer typed loc y csn1 >>=
-    \((ty, ay), (cs2, n2)) -> unify tx (arr ty va) cs2 >>=
+  A x y -> rec loc x (cs, n + 1) >>=
+    \((tx, ax), csn1) -> rec loc y csn1 >>=
+    \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
-  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
+  L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, Left va):loc) x (cs, n + 1)
   where
+  rec = infer msg typed
   va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
-findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
+findInstance searcher qn@(q, n) p@(Pred cl ty) insts = case insts of
+  []  -> case ty of
+    TV _ -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
+    _ -> Left $ "no instance: " ++ show p
   (modName, Instance h name ps _):rest -> case match h ty of
-    Nothing -> findInstance tycl qn p rest
+    Nothing -> findInstance searcher qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
-      <$> findProof tycl (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name undefined) ps
+      <$> findProof searcher (Pred cl1 $ apply subs ty1) qn1) (qn, if modName == "" then V name else E $ Link modName name undefined) ps
 
-findProof tycl pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
-  Nothing -> findInstance tycl psn pred $ tycl classId
+findProof searcher pred@(Pred classId t) psn@(ps, n) = case lookup pred ps of
+  Nothing -> findInstance searcher psn pred $ findInstances searcher classId
   Just s -> Right (psn, V s)
 
-prove tycl psn a = case a of
-  Proof pred -> findProof tycl pred psn
-  A x y -> prove tycl psn x >>= \(psn1, x1) ->
-    second (A x1) <$> prove tycl psn1 y
-  L s t -> second (L s) <$> prove tycl psn t
+prove searcher psn a = case a of
+  Proof pred -> findProof searcher pred psn
+  A x y -> prove searcher psn x >>= \(psn1, x1) ->
+    second (A x1) <$> prove searcher psn1 y
+  L s t -> second (L s) <$> prove searcher psn t
   _ -> Right (psn, a)
 
 data Dep a = Dep ([String] -> Either String ([String], a))
@@ -181,20 +248,7 @@ addDep s = Dep \deps -> Right (if s `elem` deps then deps else s : deps, ())
 badDep s = Dep $ const $ Left s
 runDep (Dep f) = f []
 
-astLink typed locals imps mods ast = runDep $ go [] ast where
-  go bound ast = case ast of
-    V s
-      | elem s bound -> pure ast
-      | member s locals -> case findImportSym imps mods s of
-        [] -> (if member s typed then pure () else addDep s) *> pure ast
-        _ -> badDep $ "ambiguous: " ++ s
-      | True -> case findImportSym imps mods s of
-        [] -> badDep $ "missing: " ++ s
-        [(im, t)] -> pure $ E $ Link im s t
-        _ -> badDep $ "ambiguous: " ++ s
-    A x y -> A <$> go bound x <*> go bound y
-    L s t -> L s <$> go (s:bound) t
-    _ -> pure ast
+unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
 forFree cond f bound t = case t of
   E _ -> t
@@ -203,20 +257,27 @@ forFree cond f bound t = case t of
   L s t' -> L s $ rec (s:bound) t'
   where rec = forFree cond f
 
-inferno tycl typed defmap syms = let
-  loc = zip syms $ TV . (' ':) <$> syms
-  principal (acc, (subs, n)) s = do
+inferno searcher decls typed defmap syms = let
+  anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
+  loc = zip syms $ anno <$> syms
+  principal ((acc, preds), (subs, n)) s = do
     expr <- maybe (Left $ "missing: " ++ s) Right (mlookup s defmap)
-    ((t, a), (ms, n1)) <- infer typed loc expr (subs, n)
-    cs <- unify (TV (' ':s)) t ms
-    Right ((s, (t, a)):acc, (cs, n1))
+    ((t, a), (ms, n)) <- infer s typed loc expr (subs, n)
+    case mlookup s decls of
+      Nothing -> do
+        soln <- unifyMsg s (TV (' ':s)) t ms
+        Right (((s, (t, a)):acc, preds), (soln, n))
+      Just qAnno -> do
+        let (Qual pAnno tAnno, n1) = instantiate qAnno n
+        soln <- maybe (Left $ s ++ ": match failed: " ++ show qAnno ++ " vs " ++ show (apply ms t)) Right $ match (apply ms t) tAnno
+        Right (((s, (t, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
   gatherPreds (acc, psn) (s, (t, a)) = do
-    (psn, a) <- prove tycl psn a
+    (psn, a) <- prove searcher psn a
     pure ((s, (t, a)):acc, psn)
   in do
-    (stas, (soln, _)) <- foldM principal ([], (Tip, 0)) syms
-    stas <- pure $ second (typeAstSub soln) <$> stas
-    (stas, (ps, _)) <- foldM gatherPreds ([], ([], 0)) $ second (typeAstSub soln) <$> stas
+    ((stas, preds), (soln, _)) <- foldM principal (([], []), (Tip, 0)) syms
+    let ps = zip preds $ ("anno*"++) . show  <$> [0..]
+    (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     let
       preds = fst <$> ps
       dicts = snd <$> ps
@@ -224,14 +285,10 @@ inferno tycl typed defmap syms = let
         foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
     pure $ map applyDicts stas
 
-findImportSym imps mods s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s qas | im <- imps, let qas = fst $ mods ! im]
-
-inferDefs tycl defs typed = do
+inferDefs searcher defs decls typed = do
   let
     insertUnique m (s, (_, t)) = case mlookup s m of
-      Nothing -> case mlookup s typed of
-        Nothing -> Right $ insert s t m
-        _ -> Left $ "reserved: " ++ s
+      Nothing -> Right $ insert s t m
       _ -> Left $ "duplicate: " ++ s
     addEdges (sym, (deps, _)) (ins, outs) = (foldr (\dep es -> insertWith union dep [sym] es) ins deps, insertWith union sym deps outs)
     graph = foldr addEdges (Tip, Tip) defs
@@ -239,24 +296,24 @@ inferDefs tycl defs typed = do
   let
     ins k = maybe [] id $ mlookup k $ fst graph
     outs k = maybe [] id $ mlookup k $ snd graph
-    inferComponent typed syms = foldr (uncurry insert) typed <$> inferno tycl typed defmap syms
+    inferComponent typed syms = foldr (uncurry insert) typed <$> inferno searcher decls typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
-inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
+inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
   inferInstance typed (classId, Instance ty name ps idefs) = let
     dvs = map snd $ fst $ dictVars ps 0
     perMethod s = do
       let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
-      expr <- snd <$> linker (patternCompile dcs rawExpr)
+      expr <- snd <$> patternCompile searcher rawExpr
       (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
-        $ infer typed [] expr (Tip, 0)
+        $ infer s typed [] expr (Tip, 0)
+      qc <- typeOfMethod searcher s
       let
         (tx, ax) = typeAstSub sub ta
 -- e.g. qc = Eq a => a -> a -> Bool
 -- We instantiate: Eq a1 => a1 -> a1 -> Bool.
-        qc = typeOfMethod s
         (Qual [Pred _ headT] tc, n1) = instantiate qc n
 -- Mix the predicates `ps` with the type of `headT`, applying a
 -- substitution such as (a1, [a]) so the variable names match.
@@ -266,12 +323,12 @@ inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs = foldM infe
       case match tx t2 of
         Nothing -> Left "class/instance type conflict"
         Just subx -> do
-          ((ps3, _), tr) <- prove tycl (dictVars ps2 0) (proofApply subx ax)
+          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
           if length ps2 /= length ps3
             then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
             else pure tr
     in do
-      ms <- mapM perMethod $ maybe (error $ "missing class: " ++ classId) id $ mlookup classId mergedSigs
+      ms <- mapM perMethod $ findSigs searcher classId
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
 primAdts =
@@ -284,14 +341,28 @@ primAdts =
 prims = let
   ro = E . Basic
   dyad s = TC s `arr` (TC s `arr` TC s)
+  wordy = foldr arr (TAp (TAp (TC ",") (TC "Word")) (TC "Word")) [TC "Word", TC "Word", TC "Word", TC "Word"]
   bin s = A (ro "Q") (ro s)
   in map (second (first $ Qual [])) $
-    [ ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
+    [ ("doubleFromInt", (arr (TC "Int") (TC "Double"), A (ro "T") (ro "FLO")))
+    , ("intFromDouble", (arr (TC "Double") (TC "Int"), A (ro "T") (ro "OLF")))
+    , ("doubleAdd", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FADD")))
+    , ("doubleSub", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FSUB")))
+    , ("doubleMul", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FMUL")))
+    , ("doubleDiv", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FDIV")))
+    , ("doubleEq", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FEQ"))
+    , ("doubleLE", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FLE"))
+    , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
+    , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))
+    , ("wordEq", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "EQ"))
+
     , ("charEq", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "EQ"))
     , ("charLE", (arr (TC "Char") (arr (TC "Char") (TC "Bool")), bin "LE"))
     , ("fix", (arr (arr (TV "a") (TV "a")) (TV "a"), ro "Y"))
     , ("if", (arr (TC "Bool") $ arr (TV "a") $ arr (TV "a") (TV "a"), ro "I"))
+    , ("intFromWord", (arr (TC "Word") (TC "Int"), ro "I"))
+    , ("wordFromInt", (arr (TC "Int") (TC "Word"), ro "I"))
     , ("chr", (arr (TC "Int") (TC "Char"), ro "I"))
     , ("ord", (arr (TC "Char") (TC "Int"), ro "I"))
     , ("ioBind", (arr (TAp (TC "IO") (TV "a")) (arr (arr (TV "a") (TAp (TC "IO") (TV "b"))) (TAp (TC "IO") (TV "b"))), ro "C"))
@@ -304,8 +375,13 @@ prims = let
       A (A (ro "R") (ro "WRITEREF")) (ro "B")))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
-    , ("join#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("join#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
+    , ("word64Add", (wordy, A (ro "QQ") (ro "DADD")))
+    , ("word64Sub", (wordy, A (ro "QQ") (ro "DSUB")))
+    , ("word64Mul", (wordy, A (ro "QQ") (ro "DMUL")))
+    , ("word64Div", (wordy, A (ro "QQ") (ro "DDIV")))
+    , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
@@ -319,47 +395,133 @@ prims = let
       , ("intAnd", "AND")
       , ("intOr", "OR")
       ]
+    ++ map (\(s, v) -> (s, (dyad "Word", bin v)))
+      [ ("wordAdd", "ADD")
+      , ("wordSub", "SUB")
+      , ("wordMul", "MUL")
+      , ("wordDiv", "U_DIV")
+      , ("wordMod", "U_MOD")
+      , ("wordQuot", "U_DIV")
+      , ("wordRem", "U_MOD")
+      ]
 
-tabulateModules mods = foldM ins Tip $ go <$> mods where
-  go (name, prog) = (name, foldr ($) neatEmpty{moduleImports = ["#"]} prog)
+tabulateModules mods = foldM ins Tip =<< mapM go mods where
+  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< maybe Right processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
+  processExports exs neat = do
+    mes <- Just . concat <$> mapM (processExport neat) exs
+    pure neat { moduleExports = mes }
+  processExport neat = \case
+    ExportVar v -> case lookup v $ topDefs neat of
+      Nothing -> Left $ "bad export " ++ v
+      Just _ -> Right [v]
+    ExportCon c ns -> case mlookup c $ type2Cons neat of
+      Just cnames
+        | ns == [".."] -> Right cnames
+        | null delta -> Right ns
+        | True -> Left $ "bad exports: " ++ show delta
+        where delta = [n | n <- ns, not $ elem n cnames]
+      Nothing -> case mlookup c $ typeclasses neat of
+        Nothing -> Left $ "bad export " ++ c
+        Just methodNames
+          | ns == [".."] -> Right methodNames
+          | null delta -> Right ns
+          | True -> Left $ "bad exports: " ++ show delta
+          where delta = [n | n <- ns, not $ elem n methodNames]
+  genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
+    Nothing -> Right $ insert defName (q, E $ Link "#" "fail#" undefined) qcs
+    Just (Qual ps t, _) -> case match t t0 of
+      Nothing -> Left $ "bad default method type: " ++ s
+      _ -> case ps of
+        [Pred cl _] | cl == classId -> Right qcs
+        _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
+    where
+    defName = "{default}" ++ s
+    (q@(Qual ps0 t0), _) = qcs ! s
+  genDefaultMethods neat = do
+    typed <- foldM genDefaultMethod (typedAsts neat) [(classId, sig) | (classId, sigs) <- toAscList $ typeclasses neat, sig <- sigs]
+    pure neat { typedAsts = typed }
+
+data Searcher = Searcher
+  { astLink :: Ast -> Either String ([String], Ast)
+  , findPrec :: String -> Either String (Int, Assoc)
+  , findCon :: String -> Either String [Constr]
+  , findField :: String -> (String, [(String, Type)])
+  , typeOfMethod :: String -> Either String Qual
+  , findSigs :: String -> [String]
+  , findInstances :: String -> [(String, Instance)]
+  }
+
+isExportOf s neat = case moduleExports neat of
+  Nothing -> True
+  Just es -> elem s es
+
+findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s of
+  [] -> Left $ "missing: " ++ s
+  [unique] -> Right unique
+  _ -> Left $ "ambiguous: " ++ s
 
 slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
+
+searcherNew tab neat = Searcher
+  { astLink = astLink'
+  , findPrec = \s -> if s == ":" then Right (5, RAssoc) else findAmong opFixity visible s
+  , findCon = findAmong dataCons visible
+  , findField = findField'
+  , typeOfMethod = fmap fst . findAmong typedAsts visible
+  , findSigs = \s -> case mlookup s mergedSigs of
+    Nothing -> error $ "missing class: " ++ s
+    Just [sigs] -> sigs
+    _ -> error $ "ambiguous class: " ++ s
+  , findInstances = maybe [] id . (`mlookup` mergedInstances)
+  }
+  where
+  mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map (tab !) imps
+  mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\im -> (im, tab ! im)) imps]
+  findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
+  importedNeats s@(h:_) = [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
+  visible s = neat : (snd <$> importedNeats s)
+  classes im = typeclasses $ if im == "" then neat else tab ! im
+  findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
+    [] -> error $ "no such field: " ++ f
+    h:_ -> h
+  imps = moduleImports neat
+  defs = fromList $ topDefs neat
+  astLink' ast = runDep $ go [] ast where
+    go bound ast = case ast of
+      V s
+        | elem s bound -> pure ast
+        | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
+        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
+        | True -> case findImportSym s of
+          [] -> badDep $ "missing: " ++ s
+          [(im, t)] -> pure $ E $ Link im s t
+          _ -> badDep $ "ambiguous: " ++ s
+      A x y -> A <$> go bound x <*> go bound y
+      L s t -> L s <$> go (s:bound) t
+      _ -> pure ast
+    unlessAmbiguous s f = case findImportSym s of
+      [] -> f
+      _ -> badDep $ "ambiguous: " ++ s
 
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat mySigs iMap defs typedList adtTab ffis ffes imps = tab ! name
-      typed = fromList typedList
-      mergedSigs = foldr (slowUnionWith const) Tip $ mySigs : map (typeclasses . (tab !)) imps
-      mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) m | (im, m) <- ("", iMap) : map (\im -> (im, instances $ tab ! im)) imps]
-      locals = fromList $ map (, ()) $ (fst <$> typedList) ++ (fst <$> defs)
-      tycl classId = maybe [] id $ mlookup classId mergedInstances
-      dcs = adtTab : map (dataCons . (tab !)) imps
-      typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
-      genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
-        Nothing -> Right $ insert defName (q, E $ Link "#" "fail#" undefined) qcs
-        Just (Qual ps t, _) -> case match t t0 of
-          Nothing -> Left $ "bad default method type: " ++ s
-          _ -> case ps of
-            [Pred cl _] | cl == classId -> Right qcs
-            _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
-        where
-        defName = "{default}" ++ s
-        (q@(Qual ps0 t0), _) = qcs ! s
+      neat = tab ! name
+      imps = moduleImports neat
+      typed = typedAsts neat
     acc' <- foldM (inferModule tab) acc imps
-    let linker = astLink typed locals imps acc'
-    depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
-    typed <- inferDefs tycl depdefs typed
-    typed <- inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs
-    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, sigs) <- toAscList mySigs, sig <- sigs]
-    Right $ insert name (typed, (ffis, ffes)) acc'
+    let searcher = searcherNew acc' neat
+    depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
+    typed <- inferDefs searcher depdefs (topDecls neat) typed
+    typed <- inferTypeclasses searcher (instances neat) typed
+    Right $ insert name neat { typedAsts = typed } acc'
   Just _ -> Right acc
 
 untangle s = do
   tab <- insert "#" neatPrim <$> (parseProgram s >>= tabulateModules)
   foldM (inferModule tab) Tip $ keys tab
 
-neatPrim = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip []) primAdts
+neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
