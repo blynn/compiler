@@ -202,34 +202,35 @@ addAdt t cs ders neat = foldr derive neat' ders where
     , dataCons = updateDcs cs $ dataCons neat
     }
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ encodeCase (V "lhs") $ map eqCase cs
+    [("==", Pa $ map eqCase cs
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ encodeCase (V "x") $ map showCase cs
+    [("showsPrec", L "prec" $ Pa $ map showCase cs
     )]
   derive der = error $ "bad deriving: " ++ der
+  prec0 = E $ Const 0
   showCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "" <$> as), case args of
-      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
+    in ([PatCon con $ mkPatVar "" <$> as], case args of
+      [] -> A (V "++") (E $ StrCon con)
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
-          [ A (V "shows") (V "1")
-          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
-          , A (V "shows") (V "2")
+          [ A (A (V "showsPrec") prec0) (V "1")
+          , A (V "++") (E $ StrCon $ ' ':con++" ")
+          , A (A (V "showsPrec") prec0) (V "2")
           ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 0)) $ V "prec")
+        _ -> A (A (V "showParen") $ A (A (V "<=") prec0) $ V "prec")
           $ A (A (V ".") $ A (V "++") (E $ StrCon con))
           $ foldr (\f g -> A (A (V ".") f) g) (L "x" $ V "x")
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (V "shows") (V a)) as
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") prec0) (V a)) as
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
   eqCase (Constr con args) = let as = show <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), encodeCase (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+    in ([PatCon con $ mkPatVar "l" <$> as], Pa
+      [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , (PatVar "_" Nothing, V "False")])
+      , ([PatVar "_" Nothing], V "False")])
 
 addClass classId v (sigs, defs) neat = if not $ member classId $ typeclasses neat then neat
   { typeclasses = insert classId (keys sigs) $ typeclasses neat

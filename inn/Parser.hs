@@ -175,7 +175,7 @@ mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
+  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
@@ -183,7 +183,7 @@ addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
-  vars = take (size sigs) $ (`showInt` "") <$> [0..]
+  vars = take (size sigs) $ show <$> [0..]
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
@@ -481,4 +481,4 @@ parseProgram s = do
     Ell [] [] -> pure mods
     _ -> Left $ ("parse error: "++) $ case ell s of
       Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""

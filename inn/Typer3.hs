@@ -1,5 +1,4 @@
 -- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
 module Typer where
 
 import Base
@@ -42,7 +41,7 @@ unpat dcs als x = case als of
         Nothing -> error "bad data constructor"
         Just cons -> do
           n <- get
-          let als = zip args $ ($ "#") . shows <$> [n..]
+          let als = zip args $ (`shows` "#") <$> [n..]
           put $ n + length args
           y <- unpat dcs als t
           unpat dcs alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als

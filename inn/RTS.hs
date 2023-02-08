@@ -103,12 +103,15 @@ Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
 B x y z = x (y z)
+BK x y z = x y
 C x y z = x z y
 R x y z = y z x
 V x y z = z x y
 T x y = y x
 K x y = "_I" x
+KI x y = "_I" y
 I x = "sp[1] = arg(1); sp++;"
+LEFT x y z = y x
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
 ADD x y = "_NUM" "num(1) + num(2)"
@@ -145,41 +148,41 @@ ffiDeclare (name, t) = let tys = argList t in concat
 ffiArgs n t = case t of
   TC s -> ("", ((True, s), n))
   TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
 
 ffiDefine n ffis = case ffis of
   [] -> id
   (name, t):xt -> let
     (args, ((isPure, ret), count)) = ffiArgs 2 t
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
+    lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
+    aa tgt = "app(arg(" ++ shows (count + 1) "), " ++ tgt ++ "), arg(" ++ shows count ")"
     longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+    in ("case " ++) . shows n . (": " ++) . if ret == "()"
       then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
   _ -> 0
 
-genExport m n = ("void f"++) . showInt n . ("("++)
+genExport m n = ("void f"++) . shows n . ("("++)
   . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . showInt) [0..m - 1]
-  rt = ("root["++) . showInt n . ("]"++)
+  xs = map ((('x':) .) . shows) [0..m - 1]
+  rt = ("root["++) . shows n . ("]"++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
-  argc = ('(':) . showInt (length args)
+  argc = ('(':) . shows (length args)
   m = zip args [1..]
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
@@ -248,6 +251,19 @@ asm hp0 combs = tabmem where
   tabmem = foldl (\(as, m) (s, t) -> let (p, m') = enc (fst tabmem) m t
     in (insert s p as, m')) (Tip, (hp0, id)) combs
 
+optiComb' (subs, combs) (s, lamb) = let
+  gosub t = case t of
+    LfVar v -> maybe t id $ lookup v subs
+    Nd a b -> Nd (gosub a) (gosub b)
+    _ -> t
+  c = optim $ gosub $ nolam lamb
+  combs' = combs . ((s, c):)
+  in case c of
+    Lf (Basic _) -> ((s, c):subs, combs')
+    LfVar v -> if v == s then (subs, combs . ((s, Nd (lf "Y") (lf "I")):)) else ((s, gosub c):subs, combs')
+    _ -> (subs, combs')
+optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
+
 lambsList typed = toAscList $ snd <$> typed
 
 codegenLocal (name, (typed, _)) (bigmap, (hp, f)) =
@@ -287,9 +303,9 @@ compile mods = do
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("};\nstatic u root[]={" ++)
-    . foldr (\(modName, (_, ourName)) f -> showInt (resolve bigmap (modName, ourName)) . (", " ++) . f) id ffes
+    . foldr (\(modName, (_, ourName)) f -> shows (resolve bigmap (modName, ourName)) . (", " ++) . f) id ffes
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
@@ -298,6 +314,6 @@ compile mods = do
     . ffiDefine (length ffis - 1) ffis
     . ("\n  }\n}\n" ++)
     . runFun
-    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
+    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++)
       . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
     $ mainStr

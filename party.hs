@@ -103,6 +103,44 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
+class Show a where
+  showsPrec :: Int -> a -> String -> String
+  showsPrec _ x = (show x++)
+  show :: a -> String
+  show x = shows x ""
+  showList :: [a] -> String -> String
+  showList = showList__ shows
+shows = showsPrec 0
+showList__ _     []     s = "[]" ++ s
+showList__ showx (x:xs) s = '[' : showx x (showl xs)
+  where
+    showl []     = ']' : s
+    showl (y:ys) = ',' : showx y (showl ys)
+showInt__ n
+  | 0 == n = id
+  | True = showInt__ (n`div`10) . (chr (48+n`mod`10):)
+instance Show () where show () = "()"
+instance Show Bool where
+  show True = "True"
+  show False = "False"
+instance Show a => Show [a] where showsPrec _ = showList
+instance Show Int where
+  showsPrec _ n
+    | 0 == n = ('0':)
+    | 1 <= n = showInt__ n
+    | 2 * n == 0 = ("-2147483648"++)
+    | True = ('-':) . showInt__ (0 - n)
+showLitChar__ '\n' = ("\\n"++)
+showLitChar__ '\\' = ("\\\\"++)
+showLitChar__ c = (c:)
+instance Show Char where
+  showsPrec _ '\'' = ("'\\''"++)
+  showsPrec _ c = ('\'':) . showLitChar__ c . ('\'':)
+  showList s = ('"':) . foldr (.) id (map go s) . ('"':) where
+    go '"' = ("\\\""++)
+    go c = showLitChar__ c
+instance (Show a, Show b) => Show (a, b) where
+  showsPrec _ (a, b) = showParen True $ shows a . (',':) . shows b
 putStr = mapM_ putChar
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
@@ -231,7 +269,7 @@ data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [Type]
 data Pred = Pred String Type
 data Qual = Qual [Pred] Type
@@ -298,8 +336,6 @@ beta s a t = case t of
   L v u -> if s == v then t else L v $ beta s a u
 
 showParen b f = if b then ('(':) . f . (')':) else f
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
-showInt n = if 0 == n then ('0':) else showInt' n
 par = showParen True
 showType t = case t of
   TC s -> (s++)
@@ -482,7 +518,7 @@ mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
+  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
@@ -490,7 +526,7 @@ addAdt t cs (Neat tycl fs typed dcs ffis ffes ims) =
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
-  vars = take (size sigs) $ (`showInt` "") <$> [0..]
+  vars = take (size sigs) $ show <$> [0..]
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
@@ -788,7 +824,7 @@ parseProgram s = do
     Ell [] [] -> pure mods
     _ -> Left $ ("parse error: "++) $ case ell s of
       Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""
 
 -- Primitives.
 primAdts =
@@ -833,11 +869,11 @@ prims = let
       ]
 
 -- Conversion to De Bruijn indices.
-data LC = Ze | Su LC | Pass Extra | PassVar String | La LC | App LC LC
+data LC = Ze | Su LC | Pass IntTree | La LC | App LC LC
 
 debruijn n e = case e of
-  E x -> Pass x
-  V v -> maybe (PassVar v) id $
+  E x -> Pass $ Lf x
+  V v -> maybe (Pass $ LfVar v) id $
     foldr (\h found -> if h == v then Just Ze else Su <$> found) Nothing n
   A x y -> App (debruijn n x) (debruijn n y)
   L s t -> La (debruijn (s:n) t)
@@ -848,44 +884,35 @@ data Sem = Defer | Closed IntTree | Need Sem | Weak Sem
 
 lf = Lf . Basic
 
-ldef y = case y of
-  Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
-  Closed d -> Need $ Closed (Nd (lf "T") d)
-  Need e -> Need $ (Closed (Nd (lf "S") (lf "I"))) ## e
-  Weak e -> Need $ (Closed (lf "T")) ## e
-
-lclo d y = case y of
-  Defer -> Need $ Closed d
-  Closed dd -> Closed $ Nd d dd
-  Need e -> Need $ (Closed (Nd (lf "B") d)) ## e
-  Weak e -> Weak $ (Closed d) ## e
-
-lnee e y = case y of
-  Defer -> Need $ Closed (lf "S") ## e ## Closed (lf "I")
-  Closed d -> Need $ Closed (Nd (lf "R") d) ## e
-  Need ee -> Need $ Closed (lf "S") ## e ## ee
-  Weak ee -> Need $ Closed (lf "C") ## e ## ee
-
-lwea e y = case y of
-  Defer -> Need e
-  Closed d -> Weak $ e ## Closed d
-  Need ee -> Need $ (Closed (lf "B")) ## e ## ee
-  Weak ee -> Weak $ e ## ee
-
 x ## y = case x of
-  Defer -> ldef y
-  Closed d -> lclo d y
-  Need e -> lnee e y
-  Weak e -> lwea e y
+  Defer -> case y of
+    Defer -> Need $ Closed (Nd (Nd (lf "S") (lf "I")) (lf "I"))
+    Closed d -> Need $ Closed (Nd (lf "T") d)
+    Need e -> Need $ Closed (Nd (lf "S") (lf "I")) ## e
+    Weak e -> Need $ Closed (lf "T") ## e
+  Closed d -> case y of
+    Defer -> Need $ Closed d
+    Closed dd -> Closed $ Nd d dd
+    Need e -> Need $ Closed (Nd (lf "B") d) ## e
+    Weak e -> Weak $ Closed d ## e
+  Need e -> case y of
+    Defer -> Need $ Closed (lf "S") ## e ## Closed (lf "I")
+    Closed d -> Need $ Closed (Nd (lf "R") d) ## e
+    Need ee -> Need $ Closed (lf "S") ## e ## ee
+    Weak ee -> Need $ Closed (lf "C") ## e ## ee
+  Weak e -> case y of
+    Defer -> Need e
+    Closed d -> Weak $ e ## Closed d
+    Need ee -> Need $ Closed (lf "B") ## e ## ee
+    Weak ee -> Weak $ e ## ee
 
 babs t = case t of
   Ze -> Defer
-  Su x -> Weak (babs x)
-  Pass x -> Closed (Lf x)
-  PassVar s -> Closed (LfVar s)
+  Su x -> Weak $ babs x
+  Pass x -> Closed x
   La t -> case babs t of
-    Defer -> Closed (lf "I")
-    Closed d -> Closed (Nd (lf "K") d)
+    Defer -> Closed $ lf "I"
+    Closed d -> Closed $ Nd (lf "K") d
     Need e -> e
     Weak e -> Closed (lf "K") ## e
   App x y -> babs x ## babs y
@@ -898,16 +925,28 @@ optim t = case t of
   where
   go (Lf (Basic "I")) q = q
   go p q@(Lf (Basic c)) = case c of
+    "K" -> case p of
+      Lf (Basic "B") -> lf "BK"
+      _ -> Nd p q
     "I" -> case p of
-      Lf (Basic "C") -> lf "T"
-      Lf (Basic "B") -> lf "I"
+      Lf (Basic r) -> case r of
+        "C" -> lf "T"
+        "B" -> lf "I"
+        "K" -> lf "KI"
+        _ -> Nd p q
       Nd p1 p2 -> case p1 of
         Lf (Basic "B") -> p2
         Lf (Basic "R") -> Nd (lf "T") p2
         _ -> Nd (Nd p1 p2) q
       _ -> Nd p q
     "T" -> case p of
-      Nd (Lf (Basic "B")) (Lf (Basic "C")) -> lf "V"
+      Nd (Lf (Basic "B")) (Lf (Basic r)) -> case r of
+        "C" -> lf "V"
+        "BK" -> lf "LEFT"
+        _ -> Nd p q
+      _ -> Nd p q
+    "V" -> case p of
+      Nd (Lf (Basic "B")) (Lf (Basic "BK")) -> lf "CONS"
       _ -> Nd p q
     _ -> Nd p q
   go p q = Nd p q
@@ -944,7 +983,7 @@ unpat dcs als x = case als of
         Nothing -> error "bad data constructor"
         Just cons -> do
           n <- get
-          let als = zip args $ ($ "#") . showInt <$> [n..]
+          let als = zip args $ (`shows` "#") <$> [n..]
           put $ n + length args
           y <- unpat dcs als t
           unpat dcs alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
@@ -956,7 +995,7 @@ rewritePats' dcs asxs ls = case asxs of
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
 
 rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (flip showInt "#") $ take (length vs0) [n..]
+  ls = map (`shows` "#") $ take (length vs0) [n..]
   in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' dcs vsxs ls
 
 classifyAlt v x = case v of
@@ -1043,7 +1082,7 @@ match h t = case h of
 instantiate' t n tab = case t of
   TC s -> ((t, n), tab)
   TV s -> case lookup s tab of
-    Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
+    Nothing -> let va = TV $ show n in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
   TAp x y -> let
     ((t1, n1), tab1) = instantiate' x n tab
@@ -1078,12 +1117,12 @@ infer typed loc ast csn@(cs, n) = case ast of
     \cs -> Right ((va, A ax ay), (cs, n2))
   L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   where
-  va = TV (showInt n "")
+  va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
+  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
   (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance tycl qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
@@ -1192,7 +1231,7 @@ inferDefs tycl defs typed = do
     inferComponent typed syms = foldr (uncurry insert) typed <$> inferno tycl typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
-dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
+dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
 inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed $ toAscList ienv where
   perClass typed (classId, Tycl sigs insts) = foldM perInstance typed insts where
@@ -1300,32 +1339,34 @@ optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showExtra = \case
-  Basic s -> (s++)
-  Const i -> showInt i
-  ChrCon c -> ('\'':) . (c:) . ('\'':)
-  StrCon s -> ('"':) . (s++) . ('"':)
-  Link im s _ -> (im++) . ('.':) . (s++)
+instance Show Extra where
+  showsPrec _ = \case
+    Basic s -> (s++)
+    Const i -> shows i
+    ChrCon c -> shows c
+    StrCon s -> shows s
+    Link im s _ -> (im++) . ('.':) . (s++)
 
 showPat = \case
-  PatLit e -> showExtra e
+  PatLit e -> shows e
   PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
   PatCon s ps -> (s++) . ("TODO"++)
 
 showAst prec t = case t of
-  E e -> showExtra e
+  E e -> shows e
   V s -> showVar s
   A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
   L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
   Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Ca x as -> ("case "++) . showAst False x . (" of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
   Proof p -> ("{Proof "++) . showPred p . ("}"++)
 
-showTree prec t = case t of
-  LfVar s -> showVar s
-  Lf extra -> showExtra extra
-  Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
-disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
+instance Show IntTree where
+  showsPrec prec = \case
+    LfVar s -> showVar s
+    Lf extra -> shows extra
+    Nd x y -> showParen (1 <= prec) $ showsPrec 0 x . (' ':) . showsPrec 1 y
+
+disasm (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 dumpWith dumper s = case untangle s of
   Left err -> err
@@ -1375,20 +1416,20 @@ ffiDeclare (name, t) = let tys = argList t in concat
 ffiArgs n t = case t of
   TC s -> ("", ((True, s), n))
   TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
 
 ffiDefine n ffis = case ffis of
   [] -> id
   (name, t):xt -> let
     (args, ((isPure, ret), count)) = ffiArgs 2 t
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    aa tgt = "app(arg(" ++ showInt (count + 1) "), " ++ tgt ++ "), arg(" ++ showInt count ")"
+    lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
+    aa tgt = "app(arg(" ++ shows (count + 1) "), " ++ tgt ++ "), arg(" ++ shows count ")"
     longDistanceCall = name ++ "(" ++ args ++ ")"
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+    in ("case " ++) . shows n . (": " ++) . if ret == "()"
       then (longDistanceCall ++) . (';':) . lazyn . (((if isPure then "_I, _K" else aa "_K") ++ "); break;") ++) . ffiDefine (n - 1) xt
       else lazyn . (((if isPure then "_NUM, " ++ longDistanceCall else aa $ "app(_NUM, " ++ longDistanceCall ++ ")") ++ "); break;") ++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_reduce(" ++ shows n ");return 0;}\n"
 
 resolve bigmap (m, s) = either (resolve bigmap) id $ (bigmap ! m) ! s
 
@@ -1436,10 +1477,10 @@ compile s = either id id do
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
+    . ("};\nstatic const u prog_size="++) . shows (length mem) . (";\n"++)
     . ("static u root[]={" ++)
-    . foldr (\(modName, (_, ourName)) f -> showInt (resolve bigmap (modName, ourName)) . (", " ++) . f) id ffes
+    . foldr (\(modName, (_, ourName)) f -> shows (resolve bigmap (modName, ourName)) . (", " ++) . f) id ffes
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
@@ -1448,18 +1489,18 @@ compile s = either id id do
     . ffiDefine (length ffis - 1) ffis
     . ("\n  }\n}\n" ++)
     . runFun
-    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . showInt n . (", \""++) . (expName++) . ("\")\n"++)
+    . foldr (.) id (zipWith (\(modName, (expName, ourName))  n -> ("EXPORT(f"++) . shows n . (", \""++) . (expName++) . ("\")\n"++)
       . genExport (arrCount $ mustType modName ourName) n) ffes [0..])
     $ mainStr
 
-genExport m n = ("void f"++) . showInt n . ("("++)
+genExport m n = ("void f"++) . shows n . ("("++)
   . foldr (.) id (intersperse (',':) $ map (("u "++) .) xs)
   . ("){rts_reduce("++)
   . foldl (\s x -> ("app("++) . s . (",app(_NUM,"++) . x . ("))"++)) rt xs
   . (");}\n"++)
   where
-  xs = map ((('x':) .) . showInt) [0..m - 1]
-  rt = ("root["++) . showInt n . ("]"++)
+  xs = map ((('x':) .) . shows) [0..m - 1]
+  rt = ("root["++) . shows n . ("]"++)
 
 arrCount = \case
   TAp (TAp (TC "->") _) y -> 1 + arrCount y
@@ -1472,12 +1513,15 @@ Y x = x "sp[1]"
 Q x y z = z(y x)
 S x y z = x z(y z)
 B x y z = x (y z)
+BK x y z = x y
 C x y z = x z y
 R x y z = y z x
 V x y z = z x y
 T x y = y x
 K x y = "_I" x
+KI x y = "_I" y
 I x = "sp[1] = arg(1); sp++;"
+LEFT x y z = y x
 CONS x y z w = w x y
 NUM x y = y "sp[1]"
 ADD x y = "_NUM" "num(1) + num(2)"
@@ -1614,12 +1658,12 @@ void rts_reduce(u n) {
 |]++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
-  argc = ('(':) . showInt (length args)
+  argc = ('(':) . shows (length args)
   m = zip args [1..]
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)

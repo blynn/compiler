@@ -189,3 +189,41 @@ null xs = case xs of
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
+class Show a where
+  showsPrec :: Int -> a -> String -> String
+  showsPrec _ x = (show x++)
+  show :: a -> String
+  show x = shows x ""
+  showList :: [a] -> String -> String
+  showList = showList__ shows
+shows = showsPrec 0
+showList__ _     []     s = "[]" ++ s
+showList__ showx (x:xs) s = '[' : showx x (showl xs)
+  where
+    showl []     = ']' : s
+    showl (y:ys) = ',' : showx y (showl ys)
+showInt__ n
+  | 0 == n = id
+  | True = showInt__ (n`div`10) . (chr (48+n`mod`10):)
+instance Show () where show () = "()"
+instance Show Bool where
+  show True = "True"
+  show False = "False"
+instance Show a => Show [a] where showsPrec _ = showList
+instance Show Int where
+  showsPrec _ n
+    | 0 == n = ('0':)
+    | 1 <= n = showInt__ n
+    | 2 * n == 0 = ("-2147483648"++)
+    | True = ('-':) . showInt__ (0 - n)
+showLitChar__ '\n' = ("\\n"++)
+showLitChar__ '\\' = ("\\\\"++)
+showLitChar__ c = (c:)
+instance Show Char where
+  showsPrec _ '\'' = ("'\\''"++)
+  showsPrec _ c = ('\'':) . showLitChar__ c . ('\'':)
+  showList s = ('"':) . foldr (.) id (map go s) . ('"':) where
+    go '"' = ("\\\""++)
+    go c = showLitChar__ c
+instance (Show a, Show b) => Show (a, b) where
+  showsPrec _ (a, b) = showParen True $ shows a . (',':) . shows b

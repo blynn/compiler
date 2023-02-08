@@ -182,44 +182,45 @@ mkAdtDefs t cs = mkCase t cs : concatMap (scottConstr t cs) cs
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
+  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs ders (Neat tycl fs typed dcs ffis ffes ims) = foldr derive ast ders where
   ast = Neat tycl fs (mkAdtDefs t cs ++ typed) (updateDcs cs dcs) ffis ffes ims
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", L "lhs" $ L "rhs" $ encodeCase (V "lhs") $ map eqCase cs
+    [("==", Pa $ map eqCase cs
     )]
   derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ L "x" $ encodeCase (V "x") $ map showCase cs
+    [("showsPrec", L "prec" $ Pa $ map showCase cs
     )]
   derive der = error $ "bad deriving: " ++ der
-  showCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
-    in (PatCon con (mkPatVar "" <$> as), case args of
-      [] -> L "s" $ A (A (V "++") (E $ StrCon con)) (V "s")
+  prec0 = E $ Const 0
+  showCase (Constr con args) = let as = show <$> [1..length args]
+    in ([PatCon con $ mkPatVar "" <$> as], case args of
+      [] -> A (V "++") (E $ StrCon con)
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
-          [ A (V "shows") (V "1")
-          , L "s" $ A (A (V "++") (E $ StrCon $ ' ':con++" ")) (V "s")
-          , A (V "shows") (V "2")
+          [ A (A (V "showsPrec") prec0) (V "1")
+          , A (V "++") (E $ StrCon $ ' ':con++" ")
+          , A (A (V "showsPrec") prec0) (V "2")
           ]
-        _ -> A (A (V "showParen") $ A (A (V "<=") (E $ Const 0)) $ V "prec")
+        _ -> A (A (V "showParen") $ A (A (V "<=") prec0) $ V "prec")
           $ A (A (V ".") $ A (V "++") (E $ StrCon con))
           $ foldr (\f g -> A (A (V ".") f) g) (L "x" $ V "x")
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (V "shows") (V a)) as
+          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") prec0) (V a)) as
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
-  eqCase (Constr con args) = let as = (`showInt` "") <$> [1..length args]
-    in (PatCon con (mkPatVar "l" <$> as), encodeCase (V "rhs")
-      [ (PatCon con (mkPatVar "r" <$> as), foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
+  eqCase (Constr con args) = let as = show <$> [1..length args]
+    in ([PatCon con $ mkPatVar "l" <$> as], Pa
+      [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
-      , (PatVar "_" Nothing, V "False")])
+      , ([PatVar "_" Nothing], V "False")])
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
-  vars = take (size sigs) $ (`showInt` "") <$> [0..]
+  vars = take (size sigs) $ show <$> [0..]
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
@@ -532,4 +533,4 @@ parseProgram s = do
     Ell [] [] -> pure mods
     _ -> Left $ ("parse error: "++) $ case ell s of
       Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+      Right (((r, c), _), _) -> ("row "++) . shows r . (" col "++) . shows c $ ""

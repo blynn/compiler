@@ -575,11 +575,11 @@ prims = let
 
 -- Conversion to De Bruijn indices.
 
-data LC = Ze | Su LC | Pass Extra | PassVar String | La LC | App LC LC;
+data LC = Ze | Su LC | Pass IntTree | La LC | App LC LC;
 
 debruijn n e = case e of
-  { E x -> Pass x
-  ; V v -> maybe (PassVar v) id $
+  { E x -> Pass $ Lf x
+  ; V v -> maybe (Pass $ LfVar v) id $
     foldr (\h found -> if h == v then Just Ze else Su <$> found) Nothing n
   ; A x y -> App (debruijn n x) (debruijn n y)
   ; L s t -> La (debruijn (s:n) t)
@@ -630,8 +630,7 @@ babsa x y = case x of
 babs t = case t of
   { Ze -> Defer
   ; Su x -> Weak (babs x)
-  ; Pass x -> Closed (Lf x)
-  ; PassVar s -> Closed (LfVar s)
+  ; Pass x -> Closed x
   ; La t -> case babs t of
     { Defer -> Closed (lf 'I')
     ; Closed d -> Closed (Nd (lf 'K') d)

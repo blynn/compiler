@@ -72,8 +72,6 @@ beta s a t = case t of
   A x y -> A (beta s a x) (beta s a y)
   L v u -> if s == v then t else L v $ beta s a u
 
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
-showInt n = if 0 == n then ('0':) else showInt' n
 par = showParen True
 showType t = case t of
   TC s -> (s++)
@@ -86,20 +84,21 @@ showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showExtra = \case
-  Basic s -> (s++)
-  Const i -> showInt i
-  ChrCon c -> ('\'':) . (c:) . ('\'':)
-  StrCon s -> ('"':) . (s++) . ('"':)
-  Link im s _ -> (im++) . ('.':) . (s++)
+instance Show Extra where
+  showsPrec _ = \case
+    Basic s -> (s++)
+    Const i -> shows i
+    ChrCon c -> shows c
+    StrCon s -> shows s
+    Link im s _ -> (im++) . ('.':) . (s++)
 
 showPat = \case
-  PatLit e -> showExtra e
+  PatLit e -> shows e
   PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
   PatCon s ps -> (s++) . ("TODO"++)
 
 showAst prec t = case t of
-  E e -> showExtra e
+  E e -> shows e
   V s -> showVar s
   A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
   L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t

@@ -39,7 +39,7 @@ unpat dcs als x = case als of
         Nothing -> error "bad data constructor"
         Just cons -> do
           n <- get
-          let als = zip args $ ($ "#") . showInt <$> [n..]
+          let als = zip args $ (`shows` "#") <$> [n..]
           put $ n + length args
           y <- unpat dcs als t
           unpat dcs alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
@@ -51,7 +51,7 @@ rewritePats' dcs asxs ls = case asxs of
     \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
 
 rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
-  ls = map (flip showInt "#") $ take (length vs0) [n..]
+  ls = map (`shows` "#") $ take (length vs0) [n..]
   in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' dcs vsxs ls
 
 classifyAlt v x = case v of
@@ -89,7 +89,7 @@ patternCompile dcs t = optiApp $ evalState (go t) 0 where
 instantiate' t n tab = case t of
   TC s -> ((t, n), tab)
   TV s -> case lookup s tab of
-    Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
+    Nothing -> let va = TV $ show n in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
   TAp x y -> let
     ((t1, n1), tab1) = instantiate' x n tab
@@ -124,12 +124,12 @@ infer typed loc ast csn@(cs, n) = case ast of
     \cs -> Right ((va, A ax ay), (cs, n2))
   L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   where
-  va = TV (showInt n "")
+  va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
+  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
   (modName, Instance h name ps _):rest -> case match h ty of
     Nothing -> findInstance tycl qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
@@ -223,7 +223,7 @@ inferDefs tycl defs typed = do
     inferComponent typed syms = foldr (uncurry insert) typed <$> inferno tycl typed defmap syms
   foldM inferComponent typed $ scc ins outs $ keys defmap
 
-dictVars ps n = (zip ps $ map (('*':) . flip showInt "") [n..], n + length ps)
+dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
 inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed $ toAscList ienv where
   perClass typed (classId, Tycl sigs insts) = foldM perInstance typed insts where

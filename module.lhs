@@ -146,6 +146,35 @@ as they made their way through our compiler. We change the code generator so
 it no longer needs this precondition, so that we can store compiled functions
 and modules in maps rather than delicately manicured lists.
 
+We introduce a single combinator to act as `BK` which frequently occurs due to
+Scott encoding.
+
+If `B K x y z = x y` is reduced individually, our virtual machine allocates
+a new app-cell for `K (x y)`, only to immediately rewrite it as `I (x y)`,
+which again must be reduced to yield `x y` at last. The `BK` combinator
+avoids this needless song and dance.
+
+A dedicated `BK` combinator is also aesthetically pleasing. Consider some
+three-argument combinator given `x y z`. We can leave `x` alone or apply it to
+`z`, and similarly for `y`, and then apply the first thing to the second:
+
+------------------------------------------------------------------------
+(x  )(y  )
+(x  )(y z)
+(x z)(y  )
+(x z)(y z)
+------------------------------------------------------------------------
+
+The last 3 are the `B C S` combinators. The first one is `BK`.
+Smullyan appears not to have assigned a bird to this combinator, so we resort
+to the clunky name `BK` throughout our code.
+
+The BK combinator makes it easy for `optim` to rewrite `B BK V` as `CONS`.
+
+We add the `LEFT` combinator, which is equivalent to `B BK T` and also arises
+frequently in Scott encodings; indeed, the data constructor `Left` compiles to
+`LEFT`. We add the KI combinator to shave off a few more reductions.
+
 ++++++++++
 <p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>
 <div id='party' style='display:none'>
@@ -602,50 +631,6 @@ include::inn/Parser2.hs[]
 
 ------------------------------------------------------------------------
 include::inn/Typer3.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-We take the opportunity to introduce a single combinator to act as `BK` which
-frequently occurs due to Scott encoding.
-
-If `B K x y z = x y` is reduced individually, our virtual machine allocates
-a new app-cell for `K (x y)`, only to immediately rewrite it as `I (x y)`,
-which again must be reduced to yield `x y` at last. A dedicated `BK` combinator
-avoids this needless song and dance.
-
-In addition to saving space, we wind up with over 6% fewer reductions when
-compiling our next compiler.
-
-A dedicated `BK` combinator is also aesthetically pleasing. Consider some
-three-argument combinator given `x y z`. We can leave `x` alone or apply it to
-`z`, and similarly for `y`, and then apply the first thing to the second:
-
-------------------------------------------------------------------------
-(x  )(y  )
-(x  )(y z)
-(x z)(y  )
-(x z)(y z)
-------------------------------------------------------------------------
-
-The last 3 are the `B C S` combinators. The first one is `BK`.
-Smullyan appears not to have assigned a bird to this combinator, so we resort
-to the clunky name `BK` throughout our code.
-
-The BK combinator makes it easier for `optim` to rewrite `B BK V` as `CONS`.
-We also add the `LEFT` combinator, which is equivalent to `B BK T` and also
-arises frequently in Scott encodings; indeed, the data constructor `Left`
-compiles to `LEFT`. We also add a combinator for KI to shave off a few more
-reductions.
-
-++++++++++
-<p><a onclick='hideshow("Kiselyov1");'>&#9654; Toggle `Kiselyov1.hs`</a></p><div id='Kiselyov1' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Kiselyov1.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
