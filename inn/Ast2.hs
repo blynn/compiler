@@ -72,6 +72,8 @@ data Neat = Neat
   , moduleImports :: [String]
   }
 
+neatEmpty = Neat Tip Tip [] [] Tip Tip Tip []
+
 patVars = \case
   PatLit _ -> []
   PatVar s m -> s : maybe [] patVars m

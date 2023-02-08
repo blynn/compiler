@@ -287,7 +287,7 @@ inferno searcher decls typed defmap syms = let
 
 inferDefs searcher defs decls typed = do
   let
-    insertUnique m (s, (_, t)) = if isBuiltIn s then Left $ "reserved: " ++ s else case mlookup s m of
+    insertUnique m (s, (_, t)) = case mlookup s m of
       Nothing -> Right $ insert s t m
       _ -> Left $ "duplicate: " ++ s
     addEdges (sym, (deps, _)) (ins, outs) = (foldr (\dep es -> insertWith union dep [sym] es) ins deps, insertWith union sym deps outs)
@@ -405,11 +405,8 @@ prims = let
       , ("wordRem", "U_MOD")
       ]
 
-neatNew = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
-isBuiltIn s = member s $ typedAsts neatNew
-
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< maybe Right processExports mexs (foldr ($) neatNew prog))
+  go (name, (mexs, prog)) = (name,) <$> (genDefaultMethods =<< maybe Right processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -434,7 +431,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
           | True -> Left $ "bad exports: " ++ show delta
           where delta = [n | n <- ns, not $ elem n methodNames]
   genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
-    Nothing -> Right $ insert defName (q, V "fail#") qcs
+    Nothing -> Right $ insert defName (q, E $ Link "#" "fail#" undefined) qcs
     Just (Qual ps t, _) -> case match t t0 of
       Nothing -> Left $ "bad default method type: " ++ s
       _ -> case ps of
@@ -484,7 +481,7 @@ searcherNew tab neat = Searcher
   mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map (tab !) imps
   mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\im -> (im, tab ! im)) imps]
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
-  importedNeats s@(h:_) = if isBuiltIn s then [] else [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
+  importedNeats s@(h:_) = [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
   visible s = neat : (snd <$> importedNeats s)
   classes im = typeclasses $ if im == "" then neat else tab ! im
   findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, cons) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
@@ -496,9 +493,8 @@ searcherNew tab neat = Searcher
     go bound ast = case ast of
       V s
         | elem s bound -> pure ast
-        | isBuiltIn s -> pure ast
-        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
+        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | True -> case findImportSym s of
           [] -> badDep $ "missing: " ++ s
           [(im, t)] -> pure $ E $ Link im s t
@@ -525,5 +521,7 @@ inferModule tab acc name = case mlookup name acc of
   Just _ -> Right acc
 
 untangle s = do
-  tab <- parseProgram s >>= tabulateModules
+  tab <- insert "#" neatPrim <$> (parseProgram s >>= tabulateModules)
   foldM (inferModule tab) Tip $ keys tab
+
+neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts

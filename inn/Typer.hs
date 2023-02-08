@@ -287,10 +287,6 @@ prims = let
       , ("intRem", "MOD")
       ]
 
-neatPrim = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
-
-soloPrim = singleton "#" (fromList $ typedAsts neatPrim, ([], []))
-
 tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
   go (name, prog) = (name, foldr ($) neatNew prog)
   ins tab (k, v) = case mlookup k tab of
@@ -336,3 +332,7 @@ inferModule tab acc name = case mlookup name acc of
 untangle s = do
   tab <- parseProgram s >>= tabulateModules
   foldM (inferModule tab) soloPrim $ keys tab
+
+neatPrim = foldr (uncurry addAdt) (Neat Tip [] prims Tip [] [] []) primAdts
+
+soloPrim = singleton "#" (fromList $ typedAsts neatPrim, ([], []))

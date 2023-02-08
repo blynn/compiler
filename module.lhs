@@ -311,11 +311,11 @@ different subdirectories containing the same filenames.
 We can test later iterations with GHCi by symlinking appropriate versions of
 each file in a dedicated subdirectory.
 
-== Party1 ==
+== Party2 ==
 
 Modules feel revolutionary. Our source becomes clearer, because modularization
-forces us to think about interdepedencies. (Behind the scenes, I refactored so
-breaking up was less hard to do.) And we can progress by making a small change
+forces us to think about interdependencies, which guided refactoring so
+breaking up was less hard to do. And we can progress by making a small change
 to a small file, like our earliest compilers back in the day.
 
 However, we face new challenges. Addressing the limitations listed above will
@@ -323,41 +323,9 @@ require effort. Prepending a little wrapper no longer suffices for GHC
 interoperability. And how are we going to keep track of many versions of many
 files?
 
-Our first answer to the last question is to tweak an existing filename and
+For now we answer the last question by tweaking an existing filename and
 `Makefile` rule. The module name remains the same but we concatenate a
 different file.
-
-An alternative to our strange "#" module is to preload each `Neat` value with
-the built-in primitives, at the cost of an extra case when checking for
-ambiguity. Every module now defines and exports `True`, for example, and we
-must exempt such entities from duplicate detection. On the other hand, our
-compiler can better optimize locally defined primitives.
-
-To explore this solution, we copy `Typer.hs` to `Typer1.hs`, modify a few
-lines, and add a new `Makefile` rule.
-
-We also remove `encTop` and the I combinator insertion trick, and instead
-recursively resolve `Local` and `Global` symbols until we reach an address.
-This relies on `optiComb` removing cycles involving lone variables on the
-right-hand side, and the absence of cycles among module dependencies.
-
-------------------------------------------------------------------------
-cat Base0.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Typer1.hs party.hs
-------------------------------------------------------------------------
-
-++++++++++
-<p><a onclick='hideshow("Typer1");'>&#9654; Toggle `Typer1.hs`</a></p><div id='Typer1' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::inn/Typer1.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-== Party2 ==
 
 For link:mvp.html[mutual let definitions] we wrote code that traversed a syntax
 tree to substitute certain variables. An alternative is to build a syntax tree

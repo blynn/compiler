@@ -185,7 +185,6 @@ astLink typed locals imps mods ast = runDep $ go [] ast where
   go bound ast = case ast of
     V s
       | elem s bound -> pure ast
-      | elem s $ fst <$> typedAsts neatNew -> pure ast
       | member s locals -> case findImportSym imps mods s of
         [] -> (if member s typed then pure () else addDep s) *> pure ast
         _ -> badDep $ "ambiguous: " ++ s
@@ -321,10 +320,8 @@ prims = let
       , ("intOr", "OR")
       ]
 
-neatNew = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip []) primAdts
-
 tabulateModules mods = foldM ins Tip $ go <$> mods where
-  go (name, prog) = (name, foldr ($) neatNew prog)
+  go (name, prog) = (name, foldr ($) neatEmpty{moduleImports = ["#"]} prog)
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
@@ -343,7 +340,7 @@ inferModule tab acc name = case mlookup name acc of
       dcs = adtTab : map (dataCons . (tab !)) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
       genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
-        Nothing -> Right $ insert defName (q, V "fail#") qcs
+        Nothing -> Right $ insert defName (q, E $ Link "#" "fail#" undefined) qcs
         Just (Qual ps t, _) -> case match t t0 of
           Nothing -> Left $ "bad default method type: " ++ s
           _ -> case ps of
@@ -362,5 +359,7 @@ inferModule tab acc name = case mlookup name acc of
   Just _ -> Right acc
 
 untangle s = do
-  tab <- parseProgram s >>= tabulateModules
+  tab <- insert "#" neatPrim <$> (parseProgram s >>= tabulateModules)
   foldM (inferModule tab) Tip $ keys tab
+
+neatPrim = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip []) primAdts
