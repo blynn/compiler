@@ -480,8 +480,9 @@ gateGuard f lhsParser s = do
   pure $ f x y
 
 guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
-guard = try (guardPat <$> pat <*> (res "<-" *> expr)) <|> guardExpr <$> expr
+guard = try (guardPat <$> pat <*> (res "<-" *> expr))
   <|> guardLets <$> (res "let" *> braceDef)
+  <|> guardExpr <$> expr
 guardExpr x yes no = case x of
   V "True" -> yes
   _ -> A (A (A (V "if") x) yes) no
