@@ -23,7 +23,10 @@ lambdas, case expressions, and the arguments of function definitions.
 We leave supporting patterns as the left-hand side of an equation for another
 day. We also ignore fixity declarations for pattern infix operators.
 
-*Definitions with multiple equations*
+We probably should have started by reading Peyton Jones,
+https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
+Implementation of Functional Programming Languages'], Chapter 5.
+Instead, we forge ahead with the first algorithm that comes to mind.
 
 Consider a top-level function defined with multiple equations:
 
@@ -149,13 +152,40 @@ f = \1# 2# 3# -> (\join# -> case 1# of
 }) $ fail#
 \end{code}
 
-*Case expressions*
+We treat case expressions as applying a special case of the above to the
+scrutinee, namely the case when there is exactly one pattern per alternative.
+This is horribly inefficient, and indeed, I originally insisted on coding a
+jump table. My position has evolved: better to put up with a few seconds extra
+of compilation, and postpone faster case expressions to our next compiler, so
+our our code is less incomprensible.
 
-We could apply the above to rewrite case expressions, but then we'd lose
-efficiency from performing a series of binary decisions instead of a single
-multi-way decision.
+We try to avoid dead code with the `optiApp` helper which beta-reduces
+applications of lambdas where the bound variable appears at most once in the
+body, but this is imperfect because of the `Pa` value that may appear during
+`Ca` rewrites: we look for the bound variable before rewriting the `Pa` value,
+thus our count is wrong if the variable is later eliminated when rewriting the
+`Pa` value.
 
-Instead, suppose we have:
+We predefine the `Bool` type, as our next compiler will handle guards, which
+translate to expressions involving booleans.
+
+++++++++++
+<p><a onclick='hideshow("patty");'>&#9654; Toggle `patty.hs`</a></p>
+<div id='patty' style='display:none'>
+++++++++++
+
+------------------------------------------------------------------------
+include::patty.hs[]
+------------------------------------------------------------------------
+
+++++++++++
+</div>
+++++++++++
+
+== Guardedly ==
+
+Now that the syntax lets us breathe easier, we immediately work on restoring
+the speed of case expressions with jump tables. Suppose we have:
 
 \begin{code}
 case scrutinee of
@@ -170,9 +200,9 @@ case scrutinee of
   x             -> expr9
 \end{code}
 
-Conceptually, we combine contiguous data constructor alternatives into maps,
-where the keys are the data constructors, and the values are the corresponding
-expressions appended in the order they appear.
+We combine contiguous data constructor alternatives into maps, where the keys
+are the data constructors, and the values are the corresponding expressions
+appended in the order they appear, leading to:
 
 \begin{code}
   [ (Foo, [(Left 42) -> expr1, (Right a) -> expr3])
@@ -194,100 +224,63 @@ x -> expr9
 We rewrite this to:
 
 \begin{code}
-(\v -> (\cjoin# -> case v of
+(\v -> (\join# -> case v of
   Foo 1# -> Pa [(Left 42) -> expr1, (Right a) -> expr3]
   Bar    -> Pa [x "bar" -> expr4]
   Baz    -> Pa [ -> expr2]
-) $ (\pjoin# -> expr5[v/z]
-) $ (\pjoin# -> expr6[v/z]
-) $ (\cjoin# -> case  v of
-  Foo _ -> cjoin#
+) $ (\join# -> expr5[v/z]
+) $ (\join# -> expr6[v/z]
+) $ (\join# -> case  v of
+  Foo _ -> join#
   Bar   -> [x y -> expr8]
   Baz   -> Pa [ -> expr7]
 ) $ (V "fail#")
 ) scrutinee
 \end{code}
 
-We then apply the first rewrite algorithm to get:
+Then:
 
 \begin{code}
-(\v -> (\cjoin# -> case v of
+(\v -> (\join# -> case v of
   Foo 1# -> case 1# of
-    Left 2# -> if 2# == 42 then expr1 else cjoin#
+    Left 2# -> if 2# == 42 then expr1 else join#
     Right 3# -> expr3[3#/a]
-  Bar 4# 5# -> if 5# == "bar" then expr 4 else cjoin#
+  Bar 4# 5# -> if 5# == "bar" then expr 4 else join#
   Baz -> expr2
-) $ (\pjoin# -> expr5[v/z]
-) $ (\pjoin# -> expr6[v/z]
-) $ (\cjoin# -> case v of
-  Foo 8# -> cjoin#
+) $ (\join# -> expr5[v/z]
+) $ (\join# -> expr6[v/z]
+) $ (\join# -> case v of
+  Foo 8# -> join#
   Bar 9# 10# -> expr8[9#/x 10#/y]
   Baz -> expr7
 ) $ (V "fail#")
 ) scrutinee
 \end{code}
 
-Our pattern rewriting algorithm sets `pjoin#` to `fail#`, that is, if none of
-the given patterns match, then the program exits. Our case rewriting algorithm
-subverts this by inserting a catch-all case that calls `cjoin#` before calling
-the pattern rewriting algorithm, so that instead of exiting, we examine the
-next batch of case patterns.
+We define the built-in primitive `join#` to `fail#`, so that by default, if
+none of the given patterns match, then the program exits.
 
-We try to avoid dead code with the `optiApp` helper which beta-reduces
-applications of lambdas where the bound variable appears at most once in the
-body, but this is imperfect because of the `Pa` value that may appear during
-`Ca` rewrites: we look for the bound variable before rewriting the `Pa` value,
-thus our count is wrong if the variable is later eliminated when rewriting the
-`Pa` value.
+Our case rewriting algorithm uses lambda abstractions to change the meaning of
+`join#`, so that instead of exiting, we examine the next batch of case
+patterns. For every case expression and let definition, we must restore the
+original meaning of `join#` so failed matches once again cause program exit,
+hence the `joinIsFail` function.
 
-It somehow all works, but it's a mess. I had forged ahead thinking it was easy
-to implement due to my familiarity with case expressions and patterns. Only
-afterwards did I realize how wrong I was.
-
-For a less outlandish algorithm, see Peyton Jones,
-https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
-Implementation of Functional Programming Languages'], Chapter 5.
-
-link:mvp.html[In a later compiler, we clean up pattern matching]. Eventually,
-we ought to backport the changes.
-
-++++++++++
-<p><a onclick='hideshow("patty");'>&#9654; Toggle `patty.hs`</a></p>
-<div id='patty' style='display:none'>
-++++++++++
-
-------------------------------------------------------------------------
-include::patty.hs[]
-------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
-
-We predefine the `Bool` type, as our next compiler will handle guards, which
-translate to expressions involving booleans.
-
-== Guardedly ==
+Rather than globally define `join#`, we could have applied `joinIsFail` to
+all definitions, but my hunch is this is slower.
 
 Our last compiler passed an unfortunate milestone: it's over 1000 lines long.
+We use language features we just added to shrink the code.
 
-We use language features we just added to shrink the code. At the same time, we
-add support for guards.
-
-Before, the right-hand sides of lambdas, equations, and case alternatives were
-simply `Ast` values.  We change to the type `[(Ast, Ast)]`, that is, a list of
-pairs of expressions. During parsing, the guard condition becomes the first
-element of a pair, and the corresponding expression is the second element. We
-use a list because there can be multiple guards.
-
-We rewrite guards as chains of if-then-else expressions, where the last else
-branch is the pattern join point.
+At the same time, we add support for guards. During parsing, we rewrite guard
+conditions as chains of if-then-else expressions, where the last else branch
+is the join point.
 
 Our previous compiler defined `charEq` and `charLE` which we use in this
 compiler to define the typeclass instance for `Eq Char`. This prepares for
 treating `Int` and `Char` as distinct types in our next compiler.
 
-Doing so will correct a subtle bug. Up until now, a hack treats `Int` and
+Doing so will quash a subtle bug. Up until now, a hack treats `Int` and
 `Char` as equal during type checking, but it fails to treat them as equals in
 dictionaries; for example, `Eq Char` differs to `Eq Int`. We could have fixed
 this by treating `Char` as a type synonym for `Int` in the same way `String` is
@@ -307,9 +300,6 @@ include::guardedly.hs[]
 ++++++++++
 
 == Assembly ==
-
-We split off rewriting cases and patterns into a separate function, and change
-it from top-down to bottom-up.
 
 We split off and delay address lookup for symbols from bracket abstraction, and
 also delay converting literals to combinators as late as possible.
