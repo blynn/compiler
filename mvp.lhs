@@ -243,6 +243,16 @@ with `pure ()`.
 
 We replace `fpair` and `flst` with more idiomatic Haskell.
 
+We clean up pattern matching. The `Ca` data constructor is superfluous. The
+`Pa` data constructor can handle case expressions. In a similar vein, it turns
+out we only need two functions to match patterns and build a jump table for
+more efficient case expressions. Losing specialized functions may lead to
+slightly slower compile times, but the simplicity is worth it.
+
+Instead of `cjoin#` and `pjoin#` to protect parts of a lambda term from each
+other, we make it the responsibility of the caller rather than the callee to
+set the join point. Then we can use simply `join#` everywhere.
+
 ++++++++++
 <p><a onclick='hideshow("marginally");'>&#9654; Toggle `marginally.hs`</a></p>
 <div id='marginally' style='display:none'>
@@ -322,16 +332,6 @@ mess up C compiler optimizations.
 We can work around this problem with a better `getContents` implementation,
 and indeed, perhaps this would already improve current build times.
 For now we'll just put up with `exit()` instead of exceptions.
-
-We clean up pattern matching. The `Ca` data constructor is superfluous. The
-`Pa` data constructor can handle case expressions. In a similar vein, it turns
-out we only need two functions to match patterns and build a jump table for
-more efficient case expressions. Losing specialized functions may lead to
-slightly slower compile times, but the simplicity is worth it.
-
-Instead of `cjoin#` and `pjoin#` to protect parts of a lambda term from each
-other, we make it the responsibility of the caller rather than the callee to
-set the join point. Then we can use simply `join#` everywhere.
 
 ++++++++++
 <p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>

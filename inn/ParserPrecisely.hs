@@ -507,7 +507,7 @@ coalesce = \case
       f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
       f _ _ = error "bad multidef"
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-defSemi = coalesce <$> sepBy1 def (some semicolon) <|> gateGuard leftyPat pat "="
+defSemi = coalesce <$> liftA2 (:) def (many $ try $ some semicolon *> def) <|> gateGuard leftyPat pat "="
 braceDef = do
   (defs, annos) <- foldr (\(f, g) (x, y) -> (f x, g y)) ([], []) <$> braceSep ((,id) . (++) <$> defSemi <|> (id,) . (:) <$> genDecl)
   let

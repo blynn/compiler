@@ -225,7 +225,7 @@ data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic String | Const Int | ChrCon Char | StrCon String;
 data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
-data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Ca Ast [(Pat, Ast)] | Proof Pred;
+data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred;
 data Constr = Constr String [Type];
 data Pred = Pred String Type;
 data Qual = Qual [Pred] Type;
@@ -530,7 +530,6 @@ fvPro bound expr = case expr of
   ; A x y -> fvPro bound x `union` fvPro bound y
   ; L s t -> fvPro (s:bound) t
   ; Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  ; Ca x as -> fvPro bound x `union` fvPro bound (Pa $ first (:[]) <$> as)
   ; _ -> []
   };
 
@@ -547,7 +546,6 @@ overFreePro s f t = case t of
   ; A x y -> A (overFreePro s f x) (overFreePro s f y)
   ; L s' t' -> if s == s' then t else L s' $ overFreePro s f t'
   ; Pa vsts -> Pa $ map (\(vs, t) -> (vs, if any (elem s . patVars) vs then t else overFreePro s f t)) vsts
-  ; Ca x as -> Ca (overFreePro s f x) $ (\(p, t) -> (p, if elem s $ patVars p then t else overFreePro s f t)) <$> as
   };
 
 beta s t x = overFree s (const t) x;
@@ -556,6 +554,8 @@ maybeFix s x = if elem s $ fvPro [] x then A (ro "Y") (L s x) else x;
 
 nonemptyTails [] = [];
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt;
+
+joinIsFail t = A (L "join#" t) (V "fail#");
 
 addLets ls x = let
   { vs = fst <$> ls
@@ -567,7 +567,7 @@ addLets ls x = let
     { tnames = nonemptyTails names
     ; suball t = foldr (\(x:xt) t -> overFreePro x (const $ foldl (\acc s -> A acc (V s)) (V x) xt) t) t tnames
     ; insLams vs t = foldr L t vs
-    } in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined id $ lookup x ls) (suball expr) tnames
+    } in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ insLams xt $ suball $ maybe undefined joinIsFail $ lookup x ls) (suball expr) tnames
   } in foldr triangle x components;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
@@ -667,9 +667,9 @@ ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
   (res "if" *> expr) <*> (res "then" *> expr) <*> (res "else" *> expr);
 listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 
-alts = braceSep $ (,) <$> pat <*> guards "->";
-cas = Ca <$> between (res "case") (res "of") expr <*> alts;
-lamCase = res "case" *> (L "\\case" . Ca (V "\\case") <$> alts);
+alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> guards "->");
+cas = flip A <$> between (res "case") (res "of") expr <*> alts;
+lamCase = res "case" *> alts;
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr));
 
 flipPairize y x = A (A (V ",") x) y;
@@ -725,19 +725,20 @@ pat = patP 0;
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id);
 
-guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "pjoin#") <$> some ((\x y -> case x of
+guards s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some ((\x y -> case x of
   { V "True" -> \_ -> y
   ; _ -> A (A (A (V "if") x) y)
   }) <$> (res "|" *> expr) <*> (res s *> expr));
 
-onePat vs x = Pa [(vs, x)];
-opDef x f y rhs = [(f, onePat [x, y] rhs)];
+onePat vs x = joinIsFail $ Pa [(vs, x)];
+defOnePat vs x = Pa [(vs, x)];
+opDef x f y rhs = [(f, defOnePat [x, y] rhs)];
 leftyPat p expr = case patVars p of
   { [] -> []
-  ; (h:t) -> let { gen = '@':h } in
-    (gen, expr):map (\v -> (v, Ca (V gen) [(p, V v)])) (patVars p)
+  ; pvars@(h:t) -> let { gen = '@':h } in
+    (gen, expr):map (\v -> (v, A (Pa [([p], V v)]) $ V gen)) pvars
   };
-def = liftA2 (\l r -> [(l, r)]) var (liftA2 onePat (many apat) $ guards "=")
+def = liftA2 (\l r -> [(l, r)]) var (liftA2 defOnePat (many apat) $ guards "=")
   <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=");
 coalesce = \case
   { [] -> []
@@ -809,6 +810,7 @@ prims = let
       A (A (ro "R") (ro "WRITEREF")) (ro "B")))
     , ("exitSuccess", (TAp (TC "IO") (TV "a"), ro "END"))
     , ("unsafePerformIO", (arr (TAp (TC "IO") (TV "a")) (TV "a"), A (A (ro "C") (A (ro "T") (ro "END"))) (ro "K")))
+    , ("join#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     , ("fail#", (TV "a", A (V "unsafePerformIO") (V "exitSuccess")))
     ] ++ map (\(s, v) -> (s, (iii, bin v)))
       [ ("+", "ADD")
@@ -1114,72 +1116,53 @@ inferMethod ienv dcs typed (Qual psi ti) (s, expr) =
 inferInst ienv dcs typed (name, (q@(Qual ps t), ds)) = let { dvs = map snd $ fst $ dictVars ps 0 } in
   (name,) . flip (foldr L) dvs . L "@" . foldl A (V "@") <$> mapM (inferMethod ienv dcs typed q) ds;
 
-singleOut s cs = \scrutinee x ->
-  foldl A (A (V $ specialCase cs) scrutinee) $ map (\(Constr s' ts) ->
-    if s == s' then x else foldr L (V "pjoin#") $ map (const "_") ts) cs;
+-- Pattern compiler.
+rewritePats dcs = \case
+  { [] -> pure $ V "join#"
+  ; vsxs@((as0, _):_) -> case as0 of
+    { [] -> pure $ foldr1 (A . L "join#") $ snd <$> vsxs
+    ; _ -> let { k = length as0 } in get >>= \n -> put (n + k)
+      >> let { vs@(vh:vt) = take k $ (`showInt` "#") <$> upFrom n } in
+      (flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase dcs v Tip [(p, b)]) x (zip at vt))
+        >>= \cs -> flip (foldr L) vs <$> rewriteCase dcs vh Tip cs
+    }
+  };
 
-patEq lit b x y = A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) y;
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y;
 
-unpat dcs als x = case als of
-  { [] -> pure x
-  ; (a, l):alt -> let
-    { go p t = case p of
-      { PatLit lit -> unpat dcs alt $ patEq lit (V l) t $ V "pjoin#"
-      ; PatVar s m -> maybe (unpat dcs alt) go m $ beta s (V l) t
-      ; PatCon con args -> case mlookup con dcs of
-        { Nothing -> error "bad data constructor"
-        ; Just cons -> get
-          >>= \n -> let { als = zip args $ ($ "#") . showInt <$> upFrom n }
-          in put (n + length args)
-          >> unpat dcs als t
-          >>= \y -> unpat dcs alt $ singleOut con cons (V l) $ foldr L y $ snd <$> als
-        }
+rewriteCase dcs caseVar tab expr = let
+  { rec = rewriteCase dcs caseVar
+  ; go v x rest = case v of
+    { PatLit lit -> patEq lit (V caseVar) x <$> rec Tip rest >>= flush
+    ; PatVar s m -> let { x' = beta s (V caseVar) x } in case m of
+      { Nothing -> A (L "join#" x') <$> rec Tip rest >>= flush
+      ; Just v' -> go v' x' rest
       }
-    } in go a x
+    ; PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
+    }
+  ; flush onFail = case toAscList tab of
+    { [] -> pure onFail
+    -- TODO: Check rest of `tab` lies in cs.
+    ; (firstC, _):_ -> let { cs = maybe undefined id $ mlookup firstC dcs } in
+      mapM (\(Constr s ts) -> case mlookup s tab of
+        { Nothing -> pure $ foldr L (V "join#") $ const "_" <$> ts
+        ; Just f -> rewritePats dcs $ f []
+        }) cs >>= \jumpTable ->
+      pure $ A (L "join#" $ foldl A (A (V $ specialCase cs) $ V caseVar) jumpTable) onFail
+    }
+  } in case expr of
+  { [] -> flush $ V "join#"
+  ; ((v, x):rest) -> go v x rest
   };
-
-rewritePats' dcs asxs ls = case asxs of
-  { [] -> pure $ V "fail#"
-  ; (as, t):asxt -> unpat dcs (zip as ls) t >>=
-    \y -> A (L "pjoin#" y) <$> rewritePats' dcs asxt ls
-  };
-
-rewritePats dcs vsxs@((vs0, _):_) = get >>= \n -> let
-  { ls = map (flip showInt "#") $ take (length vs0) $ upFrom n }
-  in put (n + length ls) >> flip (foldr L) ls <$> rewritePats' dcs vsxs ls;
-
-classifyAlt v x = case v of
-  { PatLit lit -> Left $ patEq lit (V "of") x
-  ; PatVar s m -> maybe (Left . A . L "pjoin#") classifyAlt m $ A (L s x) $ V "of"
-  ; PatCon s ps -> Right (insertWith (flip (.)) s ((ps, x):))
-  };
-
-genCase dcs tab = if size tab == 0 then id else A . L "cjoin#" $ let
-  { firstC = case toAscList tab of { ((con, _):_) -> con }
-  ; cs = maybe (error $ "bad constructor: " ++ firstC) id $ mlookup firstC dcs
-  } in foldl A (A (V $ specialCase cs) (V "of"))
-    $ map (\(Constr s ts) -> case mlookup s tab of
-      { Nothing -> foldr L (V "cjoin#") $ const "_" <$> ts
-      ; Just f -> Pa $ f [(const (PatVar "_" Nothing) <$> ts, V "cjoin#")]
-      }) cs;
-
-updateCaseSt dcs (acc, tab) alt = case alt of
-  { Left f -> (acc . genCase dcs tab . f, Tip)
-  ; Right upd -> (acc, upd tab)
-  };
-
-rewriteCase dcs as = let { (acc, tab) = foldl (updateCaseSt dcs) (id, Tip) $ uncurry classifyAlt <$> as
-  } in acc . genCase dcs tab $ V "fail#";
 
 secondM f (a, b) = (a,) <$> f b;
-patternCompile dcs t = let {
-  go t = case t of
+patternCompile dcs t = let
+  { go t = case t of
     { E _ -> pure t
     ; V _ -> pure t
     ; A x y -> liftA2 A (go x) (go y)
     ; L s x -> L s <$> go x
     ; Pa vsxs -> mapM (secondM go) vsxs >>= rewritePats dcs
-    ; Ca x as -> liftA2 A (L "of" . rewriteCase dcs <$> mapM (secondM go) as >>= go) (go x)
     }
   } in optiApp $ evalState (go t) 0;
 
@@ -1344,7 +1327,6 @@ showAst prec t = case t of
   ; A x y -> (if prec then par else id) (showAst False x . (' ':) . showAst True y)
   ; L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
   ; Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  ; Ca x as -> ("case "++) . showAst False x . ("of {"++) . foldr (.) id (intersperse (',':) $ map (\(p, a) -> showPat p . (" -> "++) . showAst False a) as)
   };
 
 showTree prec t = case t of
