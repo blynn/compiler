@@ -1,5 +1,4 @@
 -- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
 module Main where
 import Base
 import Map

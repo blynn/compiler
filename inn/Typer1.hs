@@ -270,7 +270,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed 
             Just subx -> do
               ((ps3, _), tr) <- prove tycl (dictVars ps2 0) (proofApply subx ax)
               if length ps2 /= length ps3
-                then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                 else pure tr
       ms <- mapM perMethod sigs
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
@@ -348,7 +348,7 @@ inferModule tab acc name = case mlookup name acc of
           Nothing -> Left $ "bad default method type: " ++ s
           _ -> case ps of
             [Pred cl _] | cl == classId -> Right qcs
-            _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
+            _ -> Left $ "bad default method constraints: " ++ shows (Qual ps0 t0) ""
         where
         defName = "{default}" ++ s
         (q@(Qual ps0 t0), _) = qcs ! s

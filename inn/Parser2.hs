@@ -1,5 +1,5 @@
 -- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
+-- Rewrite with named fields.
 module Parser where
 import Base
 import Ast

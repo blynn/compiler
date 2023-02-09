@@ -14,9 +14,9 @@ dumpWith dumper s = case untangle s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper mod)) $ toAscList tab
 
-dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . showAst False t . ('\n':)) $ toAscList typed
+dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . shows t . ('\n':)) $ toAscList typed
 
-dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
 
 dumpCombs (typed, _) = go <$> optiComb (lambsList typed) where
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)

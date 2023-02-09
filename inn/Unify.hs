@@ -20,7 +20,7 @@ varBind s t = case t of
   TV v -> Right $ if v == s then [] else [(s, t)]
   TAp a b -> if occurs s t then Left "occurs check" else Right [(s, t)]
 
-ufail t u = Left $ ("unify fail: "++) . showType t . (" vs "++) . showType u $ ""
+ufail t u = Left $ ("unify fail: "++) . shows t . (" vs "++) . shows u $ ""
 
 mgu t u = case t of
   TC a -> case u of

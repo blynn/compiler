@@ -1,5 +1,5 @@
 -- FFI across multiple modules.
--- Rewrite with named fields, Show, Eq.
+-- Rewrite with named fields, deriving.
 module Ast where
 import Base
 import Map
@@ -34,7 +34,7 @@ instance Show Pat where
   showsPrec _ = \case
     PatLit e -> shows e
     PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
-    PatCon s ps -> (s++) . ("TODO"++)
+    PatCon s ps -> (s++) . foldr (.) id (((' ':) .) . shows <$> ps)
 
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
@@ -46,8 +46,6 @@ instance Show Ast where
     L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
     Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
     Proof p -> ("{Proof "++) . shows p . ("}"++)
-
-showType = shows  -- for Unify.
 
 data Instance = Instance
   -- Type, e.g. Int for Eq Int.

@@ -195,7 +195,7 @@ addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
-  name = '{':classId ++ (' ':showType ty "") ++ "}"
+  name = '{':classId ++ (' ':shows ty "}")
   in Neat tycl' fs typed dcs ffis ffes ims
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) = let

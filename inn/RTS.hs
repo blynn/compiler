@@ -292,7 +292,7 @@ codegen mods = (bigmap, mem) where
   mem = either (resolve bigmap) id <$> memF []
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-getIOType q = Left $ "main : " ++ showQual q ""
+getIOType q = Left $ "main : " ++ shows q ""
 
 ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 

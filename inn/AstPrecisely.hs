@@ -50,8 +50,6 @@ instance Show Ast where
     Pa vsts -> ("[Pa]"++) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
     Proof p -> ("{Proof "++) . shows p . ("}"++)
 
-showType = shows  -- for Unify.
-
 data Instance = Instance
   -- Type, e.g. Int for Eq Int.
   Type

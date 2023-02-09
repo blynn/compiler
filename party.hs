@@ -357,13 +357,6 @@ beta s a t = case t of
   L v u -> if s == v then t else L v $ beta s a u
 
 showParen b f = if b then ('(':) . f . (')':) else f
-par = showParen True
-showType t = case t of
-  TC s -> (s++)
-  TV s -> (s++)
-  TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
-  TAp a b -> par $ showType a . (' ':) . showType b
-showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
 
 -- Lexer.
 data LexState = LexState String (Int, Int)
@@ -559,7 +552,7 @@ addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes ims) = let
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis ffes ims) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
-  name = '{':classId ++ (' ':showType ty "") ++ "}"
+  name = '{':classId ++ (' ':shows ty "}")
   in Neat tycl' fs typed dcs ffis ffes ims
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis ffes ims) = let
@@ -1060,7 +1053,7 @@ varBind s t = case t of
   TV v -> Right $ if v == s then [] else [(s, t)]
   TAp a b -> if occurs s t then Left "occurs check" else Right [(s, t)]
 
-ufail t u = Left $ ("unify fail: "++) . showType t . (" vs "++) . showType u $ ""
+ufail t u = Left $ ("unify fail: "++) . shows t . (" vs "++) . shows u $ ""
 
 mgu t u = case t of
   TC a -> case u of
@@ -1269,7 +1262,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed 
             Just subx -> do
               ((ps3, _), tr) <- prove tycl (dictVars ps2 0) (proofApply subx ax)
               if length ps2 /= length ps3
-                then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                 else pure tr
       ms <- mapM perMethod sigs
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
@@ -1317,7 +1310,7 @@ inferModule tab acc name = case mlookup name acc of
           Nothing -> Left $ "bad default method type: " ++ s
           _ -> case ps of
             [Pred cl _] | cl == classId -> Right qcs
-            _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
+            _ -> Left $ "bad default method constraints: " ++ shows (Qual ps0 t0) ""
         where
         defName = "{default}" ++ s
         (q@(Qual ps0 t0), _) = qcs ! s
@@ -1347,8 +1340,16 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
-showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
-
+instance Show Type where
+  showsPrec _ = \case
+    TC s -> (s++)
+    TV s -> (s++)
+    TAp (TAp (TC "->") a) b -> showParen True $ shows a . (" -> "++) . shows b
+    TAp a b -> showParen True $ shows a . (' ':) . shows b
+instance Show Pred where
+  showsPrec _ (Pred s t) = (s++) . (' ':) . shows t . (" => "++)
+instance Show Qual where
+  showsPrec _ (Qual ps t) = foldr (.) id (map shows ps) . shows t
 instance Show Extra where
   showsPrec _ = \case
     Basic s -> (s++)
@@ -1356,19 +1357,22 @@ instance Show Extra where
     ChrCon c -> shows c
     StrCon s -> shows s
     Link im s _ -> (im++) . ('.':) . (s++)
+instance Show Pat where
+  showsPrec _ = \case
+    PatLit e -> shows e
+    PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
+    PatCon s ps -> (s++) . foldr (.) id (((' ':) .) . shows <$> ps)
 
-showPat = \case
-  PatLit e -> shows e
-  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
-  PatCon s ps -> (s++) . ("TODO"++)
+showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showAst prec t = case t of
-  E e -> shows e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Proof p -> ("{Proof "++) . showPred p . ("}"++)
+instance Show Ast where
+  showsPrec prec = \case
+    E e -> shows e
+    V s -> showVar s
+    A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
+    L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
+    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 instance Show IntTree where
   showsPrec prec = \case
@@ -1384,11 +1388,9 @@ dumpWith dumper s = case untangle s of
 
 dumpCombs (typed, _) = map disasm $ optiComb $ lambsList typed
 
-dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . showAst False t . ('\n':)) $ toAscList typed
+dumpLambs (typed, _) = map (\(s, (_, t)) -> (s++) . (" = "++) . shows t . ('\n':)) $ toAscList typed
 
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
-
-dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+dumpTypes (typed, _) = map (\(s, (q, _)) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
 
 -- Code generation.
 appCell (hp, bs) x y = (Right hp, (hp + 2, bs . (x:) . (y:)))
@@ -1458,7 +1460,7 @@ codegen mods = (bigmap, mem) where
   mem = either (resolve bigmap) id <$> memF []
 
 getIOType (Qual [] (TAp (TC "IO") t)) = Right t
-getIOType q = Left $ "main : " ++ showQual q ""
+getIOType q = Left $ "main : " ++ shows q ""
 
 ffcat (name, (_, (ffis, ffes))) (xs, ys) = (ffis ++ xs, ((name,) <$> ffes) ++ ys)
 

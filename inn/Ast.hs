@@ -72,18 +72,16 @@ beta s a t = case t of
   A x y -> A (beta s a x) (beta s a y)
   L v u -> if s == v then t else L v $ beta s a u
 
-par = showParen True
-showType t = case t of
-  TC s -> (s++)
-  TV s -> (s++)
-  TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
-  TAp a b -> par $ showType a . (' ':) . showType b
-showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
-
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
-
-showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
-
+instance Show Type where
+  showsPrec _ = \case
+    TC s -> (s++)
+    TV s -> (s++)
+    TAp (TAp (TC "->") a) b -> showParen True $ shows a . (" -> "++) . shows b
+    TAp a b -> showParen True $ shows a . (' ':) . shows b
+instance Show Pred where
+  showsPrec _ (Pred s t) = (s++) . (' ':) . shows t . (" => "++)
+instance Show Qual where
+  showsPrec _ (Qual ps t) = foldr (.) id (map shows ps) . shows t
 instance Show Extra where
   showsPrec _ = \case
     Basic s -> (s++)
@@ -91,19 +89,22 @@ instance Show Extra where
     ChrCon c -> shows c
     StrCon s -> shows s
     Link im s _ -> (im++) . ('.':) . (s++)
+instance Show Pat where
+  showsPrec _ = \case
+    PatLit e -> shows e
+    PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
+    PatCon s ps -> (s++) . foldr (.) id (((' ':) .) . shows <$> ps)
 
-showPat = \case
-  PatLit e -> shows e
-  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
-  PatCon s ps -> (s++) . ("TODO"++)
+showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showAst prec t = case t of
-  E e -> shows e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Proof p -> ("{Proof "++) . showPred p . ("}"++)
+instance Show Ast where
+  showsPrec prec = \case
+    E e -> shows e
+    V s -> showVar s
+    A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
+    L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
+    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 typedAsts (Neat _ _ tas _ _ _ _) = tas
 typeclasses (Neat tcs _ _ _ _ _ _) = tcs
