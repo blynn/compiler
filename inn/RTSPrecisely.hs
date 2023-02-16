@@ -110,10 +110,11 @@ ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
-VMSCRATCH = "*scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
+VMSCRATCH = "*scratchpadend++ = num(1); lazy3(3, arg(3), _K, arg(2));"
 VMSCRATCHROOT = "*scratchpadend++ = _UNDEFINED; *scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
 VMRUN = "vmrun();"
 VMGCROOT = "vmgcroot();"
+VMPTR = "lazy3(3, arg(3), app(_NUM, arg(1)), arg(2));"
 |]
 
 argList t = case t of
@@ -126,6 +127,7 @@ argList t = case t of
 cTypeName = \case
   TC "()" -> "void"
   TC "Word64" -> "uu"
+  TC "Word" -> "u"
   _ -> "int"
 
 ffiDeclare opts (name, t) = (concat
@@ -139,7 +141,7 @@ ffiDeclare opts (name, t) = (concat
 
 ffiArgs n t = case t of
   TAp (TC "IO") u -> ("", ((False, u), n))
-  TAp (TAp (TC "->") _) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") _) y -> first ((if 3 <= n then (", "++) else id) . ("num("++) . shows n . (')':)) $ ffiArgs (n + 1) y
   _ -> ("", ((True, t), n))
 
 ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . case ret of
@@ -329,7 +331,7 @@ void vmgcroot() {
   }
   vmheap(p);
   scratchpadend = scratchpad;
-  lazy2(3, app(arg(3), _K), arg(2));
+  lazy3(3, arg(3), _K, arg(2));
 }
 |]++)
     . foldr (.) id (ffiDeclare opts <$> ffis)

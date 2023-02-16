@@ -211,7 +211,7 @@ mkAdtDefs t cs = foldr (.) id $ scottConstr t cs <$> cs
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
+  TAp (TAp (TC "->") _) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs t cs dcs = foldr (\(Constr s _) m -> insert s (q, cs) m) dcs cs where
   q = Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs

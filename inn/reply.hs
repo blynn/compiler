@@ -14,7 +14,7 @@ initObjs = do
   tab <- insert "#" neatPrim <$> singleFile source
   topo <- topoModules tab
   objs <- foldM compileModule Tip topo
-  pure (topo, objs)
+  pure (fst <$> topo, objs)
 
 genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
   where syms = _syms $ objs ! name
@@ -28,8 +28,8 @@ initialState = do
   let
     libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
     Right (topo, objs) = initObjs
-    (libStart, lib) = foldl (genIndex objs) (0, libFFI) $ fst <$> topo
-  mapM (scratchObj lib) $ (objs !) . fst <$> topo
+    (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
+  mapM (scratchObj lib) $ (objs !) <$> topo
   pure (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
 
 mergeFragment neat frag = neat
@@ -85,5 +85,3 @@ readInput mos s = do
 scratch lib = mapM \case
   Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ lib ! moduleName ! sym
   Right x -> vmPutScratchpad x
-
-source = [r|

@@ -511,6 +511,7 @@ prims = let
     , ("vmPutScratchpadRoot", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMSCRATCHROOT"))
     , ("vmRunScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMRUN"))
     , ("vmGCRootScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMGCROOT"))
+    , ("vmPtr", (arr (TV "a") $ TAp (TC "IO") (TC "Word"), ro "VMPTR"))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
