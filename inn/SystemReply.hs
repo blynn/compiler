@@ -6,6 +6,10 @@ hide_prelude_here = hide_prelude_here
 foreign import ccall "espy" espyWord :: Word -> IO ()
 foreign import ccall "vmdump" vmDumpWord :: Word -> IO ()
 
+foreign import ccall "vmscratch" vmPutScratchpad :: Word -> IO ()
+foreign import ccall "vmscratchroot" vmPutScratchpadRoot :: Word -> IO ()
+foreign import ccall "vmgcroot" vmGCRootScratchpad :: Word -> IO ()
+
 foreign import ccall "putchar_shim" putChar :: Char -> IO ()
 foreign import ccall "getchar_shim" getChar :: IO Char
 foreign import ccall "eof_shim" isEOFInt :: IO Int

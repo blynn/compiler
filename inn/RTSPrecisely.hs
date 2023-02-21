@@ -110,10 +110,7 @@ ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
 ERREND = "errexit(); return;"
-VMSCRATCH = "*scratchpadend++ = num(1); lazy3(3, arg(3), _K, arg(2));"
-VMSCRATCHROOT = "*scratchpadend++ = _UNDEFINED; *scratchpadend++ = num(1); lazy2(3, app(arg(3), _K), arg(2));"
 VMRUN = "vmrun();"
-VMGCROOT = "vmgcroot();"
 VMPTR = "lazy3(3, arg(3), app(_NUM, arg(1)), arg(2));"
 |]
 
@@ -322,8 +319,7 @@ void vmrun() {
   scratchpadend = scratchpad;
   lazy2(2, x, arg(2));
 }
-void vmgcroot() {
-  u lim = num(1);
+void vmgcroot(u lim) {
   u *p = scratchpad;
   while (lim--) {
     u x = *p++;
@@ -331,8 +327,9 @@ void vmgcroot() {
   }
   vmheap(p);
   scratchpadend = scratchpad;
-  lazy3(3, arg(3), _K, arg(2));
 }
+void vmscratch(u n) { *scratchpadend++ = n; }
+void vmscratchroot(u n) { *scratchpadend++ = _UNDEFINED; *scratchpadend++ = n; }
 |]++)
     . foldr (.) id (ffiDeclare opts <$> ffis)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)

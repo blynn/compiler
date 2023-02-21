@@ -22,7 +22,7 @@ genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip
 scratchObj lib ob = do
   scratch lib $ elems $ _syms ob
   scratch lib $ _mem ob
-  vmGCRootScratchpad $ size $ _syms ob
+  vmGCRootScratchpad $ fromIntegral $ size $ _syms ob
 
 initialState = do
   let
@@ -83,5 +83,5 @@ readInput mos s = do
   searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
 
 scratch lib = mapM \case
-  Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ lib ! moduleName ! sym
-  Right x -> vmPutScratchpad x
+  Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ fromIntegral $ lib ! moduleName ! sym
+  Right x -> vmPutScratchpad $ fromIntegral x

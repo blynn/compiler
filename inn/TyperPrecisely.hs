@@ -507,10 +507,7 @@ prims = let
     , ("word64Mod", (wordy, A (ro "QQ") (ro "DMOD")))
     , ("word64Shl", (wordy, A (ro "QQ") (ro "DSHL")))
     , ("word64Shr", (wordy, A (ro "QQ") (ro "DSHR")))
-    , ("vmPutScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMSCRATCH"))
-    , ("vmPutScratchpadRoot", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMSCRATCHROOT"))
     , ("vmRunScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMRUN"))
-    , ("vmGCRootScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMGCROOT"))
     , ("vmPtr", (arr (TV "a") $ TAp (TC "IO") (TC "Word"), ro "VMPTR"))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
