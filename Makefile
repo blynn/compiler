@@ -23,9 +23,12 @@ $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
 REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/Kiselyov.hs inn/Map1.hs inn/ParserPrecisely.hs inn/RTSPrecisely.hs inn/TyperPrecisely.hs inn/Unify1.hs inn/reply.hs
-reply.c: precisely inn/SystemReply.hs $(REPLYHS) inn/reply-native.hs; ((cat inn/SystemReply.hs $(REPLYHS); echo 'source=[r|'; cat inn/BasePrecisely.hs inn/SystemReply.hs; echo '|]'; echo -n "ffiList = "; cat inn/SystemReply.hs | ./precisely ffis; cat inn/reply-native.hs) | ./precisely ; cat inn/introspect.c) > $@
 
-doh.c: precisely $(REPLYHS) inn/reply-wasm.hs inn/SystemWasm.hs; (cat inn/SystemWasm.hs $(REPLYHS); echo 'source=[r|'; cat inn/BasePrecisely.hs inn/SystemWasm.hs ; echo '|]'; echo -n "ffiList = "; ./precisely ffis < inn/SystemWasm.hs; cat inn/reply-wasm.hs) | ./precisely wasm > $@
+reply.c: reply-precompile inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-native.hs; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS); echo -n "ffiList = "; cat inn/System.hs inn/ReplyImports.hs | ./precisely ffis; cat inn/reply-native.hs) | ./precisely ; echo 'u precompiled_bytecode[] = {'; cat inn/BasePrecisely.hs inn/System.hs inn/ReplyImports.hs | ./reply-precompile | fold -s | tr ' ' ,; echo '};'; cat inn/introspect.c) > $@
+
+reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; echo 'u precompiled_bytecode[] = {};' ; cat inn/introspect.c) > $@
+
+doh.c: reply-precompile inn/SystemWasm.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat inn/SystemWasm.hs inn/ReplyImports.hs $(REPLYHS); echo -n "ffiList = "; cat inn/SystemWasm.hs inn/ReplyImports.hs | ./precisely ffis; cat inn/reply-wasm.hs) | ./precisely wasm ; echo 'u precompiled_bytecode[] = {'; cat inn/BasePrecisely.hs inn/SystemWasm.hs inn/ReplyImports.hs | ./reply-precompile | fold -s | tr ' ' ,; echo '};'; cat inn/introspect.c) > $@
 
 doh.o:doh.c;$(WCC) $^ -c -o $@
 doh.wasm:doh.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@

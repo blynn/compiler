@@ -10,12 +10,6 @@ import RTS
 
 neatPrompt = neatEmpty {moduleImports = singleton "" $ (, const True) <$> [">", "#", "Base", "System"]}
 
-initObjs = do
-  tab <- insert "#" neatPrim <$> singleFile source
-  topo <- topoModules tab
-  objs <- foldM compileModule Tip topo
-  pure (fst <$> topo, objs)
-
 genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
   where syms = _syms $ objs ! name
 
@@ -23,14 +17,6 @@ scratchObj lib ob = do
   scratch lib $ elems $ _syms ob
   scratch lib $ _mem ob
   vmGCRootScratchpad $ fromIntegral $ size $ _syms ob
-
-initialState = do
-  let
-    libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
-    Right (topo, objs) = initObjs
-    (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
-  mapM (scratchObj lib) $ (objs !) <$> topo
-  pure (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
 
 mergeFragment neat frag = neat
   { typeclasses = foldr (uncurry insert) (typeclasses neat) $ toAscList $ typeclasses frag

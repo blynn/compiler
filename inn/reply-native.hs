@@ -1,5 +1,12 @@
 main :: IO ()
-main = loop =<< initialState
+main = do
+  (topo, objs) <- precompiled
+  let
+    libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
+    (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
+  mapM (scratchObj lib) $ (objs !) <$> topo
+  loop (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
+
 loop st@(mos, (libStart, lib)) = do
   putStr "> "
   getLine >>= maybe (putChar '\n') repl
