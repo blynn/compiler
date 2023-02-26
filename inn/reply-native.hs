@@ -1,11 +1,5 @@
 main :: IO ()
-main = do
-  (topo, objs) <- precompiled
-  let
-    libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
-    (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
-  mapM (scratchObj lib) $ (objs !) <$> topo
-  loop (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
+main = loop =<< initialState
 
 loop st@(mos, (libStart, lib)) = do
   putStr "> "

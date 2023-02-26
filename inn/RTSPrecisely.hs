@@ -315,12 +315,10 @@ void vmrun() {
   scratchpadend = scratchpad;
   lazy2(2, x, arg(2));
 }
-void vmgcroot(u lim) {
+void vmgcroot() {
   u *p = scratchpad;
-  while (lim--) {
-    u x = *p++;
-    *rootend++ = tagcheck(x);
-  }
+  u sym_count = *p++;
+  while (sym_count--) *rootend++ = tagcheck(*p++);
   vmheap(p);
   scratchpadend = scratchpad;
 }
@@ -358,6 +356,7 @@ rtsInit opts
 }
 |]++)
   | otherwise = ([r|void rts_init() {
+  static u done; if (done) return; done = 1;
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
   for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
@@ -372,8 +371,7 @@ rtsReduce opts =
 |]++) else id)
   . ([r|
 void rts_reduce(u n) {
-  static u ready;if (!ready){ready=1;rts_init();}
-  *(sp = spTop) = app(app(n, _UNDEFINED), _END);
+  rts_init(), *(sp = spTop) = app(app(n, _UNDEFINED), _END);
 |]++)
   . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
   . ("\n}\n"++)

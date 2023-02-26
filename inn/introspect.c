@@ -59,13 +59,13 @@ static void unmark(u n) {
   u x = mem[n];
   if (!(x & (1 << 31))) return;
   x -= 1 << 31;
-  putu(isAddr(x) ? altmem[x] : x), putchar(' ');
+  putu(isAddr(x) ? altmem[x] : x), putchar(','), putchar(' ');
   u y = mem[n+1];
   if (x == _NUM64) {
-    putu(y), putchar(' ');
-    putu(mem[n+2]), putchar(' ');
-    putu(mem[n+3]), putchar(' ');
-  } else putu(x != _NUM && isAddr(y) ? altmem[y] : y), putchar(' ');
+    putu(y), putchar(',');
+    putu(mem[n+2]), putchar(',');
+    putu(mem[n+3]), putchar(',');
+  } else putu(x != _NUM && isAddr(y) ? altmem[y] : y), putchar(',');
   unmark(mem[n] = x);
   if (x != _NUM && x != _NUM64) unmark(y);
 }
@@ -76,13 +76,23 @@ void vmdump(u n) {
   putchar('\n');
 }
 int precompiled() {
+  u *p = precompiled_bytecode;
+  for (u lim = *p++; lim; lim--) {
+    u sym_count = *p++;
+    while (sym_count--) *rootend++ = tagcheck(*p++);
+    u mem_count = *p++;
+    scratchpadend = p + mem_count;
+    vmheap(p);
+    p = scratchpadend;
+  }
+  scratchpadend = scratchpad;
   u hp0 = hp;
-  u i = 0;
-  while (i<sizeof(precompiled_bytecode)/sizeof(*precompiled_bytecode)) {
-    u x = precompiled_bytecode[i++];
+  u *pend = p + sizeof(precompiled_bytecode)/sizeof(*precompiled_bytecode);
+  while (p < pend) {
+    u x = *p++;
     if (isAddr(x)) x = x - 128 + hp0;
     mem[hp++] = x;
-    u y = precompiled_bytecode[i++];
+    u y = *p++;
     // TODO: NUM64
     if (isAddr(y) && x != _NUM) y = y - 128 + hp0;
     mem[hp++] = y;

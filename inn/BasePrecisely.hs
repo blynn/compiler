@@ -558,3 +558,4 @@ instance Show Double where
     norm = if d >= one then d / last as else d / head bs
     dig = intFromDouble norm
     go = shows dig . ('.':) . shows (intFromDouble $ (tens!!6) * (norm - doubleFromInt dig)) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)
+readInteger = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)

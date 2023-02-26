@@ -139,7 +139,7 @@ hexit = sat \x -> (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
   || (x <= 'f') && ('a' <= x)
 digit = sat \x -> (x <= '9') && ('0' <= x)
-decimal = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0) <$> some digit
+decimal = readInteger <$> some digit
 hexadecimal = foldl (\n d -> toInteger 16*n + toInteger (hexValue d)) (toInteger 0) <$> some hexit
 nameTailChar = small <|> large <|> digit <|> char '\''
 nameTailed p = liftA2 (:) p $ many nameTailChar
