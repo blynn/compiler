@@ -296,20 +296,16 @@ static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)
 static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
-static inline u tagcheck(u x) { return isAddr(x) ? x - 128 + hp : x; }
+static inline u tagcheck(u x) { return isAddr(x) ? x&1 ? vmroot[(x - 128 - 1)/2] : x - 128 + hp : x; }
 void vmheap(u *start) {
   // TODO: What if there is insufficient heap?
   u *heapptr = mem + hp;
   u *p = start;
   while (p != scratchpadend) {
     u x = *p++;
-    *heapptr++ = x == _UNDEFINED ? vmroot[*p++] : tagcheck(x);
+    *heapptr++ = tagcheck(x);
     u y = *p++;
-    if (x == _NUM) {
-      *heapptr++ = y;
-    } else {
-      *heapptr++ = y == _UNDEFINED ? vmroot[*p++] : tagcheck(y);
-    }
+    *heapptr++ = x == _NUM ? y : tagcheck(y);
   }
   hp = heapptr - mem;
 }
@@ -323,13 +319,13 @@ void vmgcroot(u lim) {
   u *p = scratchpad;
   while (lim--) {
     u x = *p++;
-    *rootend++ = x == _UNDEFINED ? vmroot[*p++] : tagcheck(x);
+    *rootend++ = tagcheck(x);
   }
   vmheap(p);
   scratchpadend = scratchpad;
 }
 void vmscratch(u n) { *scratchpadend++ = n; }
-void vmscratchroot(u n) { *scratchpadend++ = _UNDEFINED; *scratchpadend++ = n; }
+void vmscratchroot(u n) { *scratchpadend++ = 2*n + 128 + 1; }
 |]++)
     . foldr (.) id (ffiDeclare opts <$> ffis)
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
