@@ -359,7 +359,7 @@ rtsInit opts
   static u done; if (done) return; done = 1;
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
-  for (u i = 0; i < sizeof(prog)/sizeof(*prog); i++) mem[hp++] = prog[i];
+  for (u *p = rootend; p < rootend + sizeof(root)/sizeof(*root); p++) mem[hp++] = *p;
   spTop = mem + TOP - 1;
   vmroot = rootend;
 }
@@ -586,10 +586,9 @@ compile topSize libc opts s = do
   pure
     $ ("typedef unsigned u;\n"++)
     . ("enum{TOP="++) . (topSize++) . ("};\n"++)
-    . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> shows n . (',':)) mem)
-    . ("};\nstatic u root[1<<16]={" ++)
+    . ("static u root[]={" ++)
     . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
     . ("}, *rootend = root + " ++) . shows (size ffes) . (", *vmroot;\n" ++)
     . ("u scratchpad[1<<20], *scratchpadend = scratchpad;\n" ++)
     . (libc++)
