@@ -359,7 +359,17 @@ rtsInit opts
   static u done; if (done) return; done = 1;
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   hp = 128;
-  for (u *p = rootend; p < rootend + sizeof(root)/sizeof(*root); p++) mem[hp++] = *p;
+  unsigned char *p = (void *)rootend;
+  do {
+    u n = 0, b = 0;
+    for(;;) {
+      u m = *p++;
+      n += (m & ~128) << b;
+      if (m < 128) break;
+      b += 7;
+    }
+    mem[hp++] = n;
+  } while (hp - 128 < PROGSZ);
   spTop = mem + TOP - 1;
   vmroot = rootend;
 }
@@ -563,6 +573,13 @@ agglomerate ffiMap objs lout name = lout
     _ -> (adj l:) . (adj r:) . resolve rest
   resolve [] = id
 
+leShows n = foldr (.) id $ map go $ take 4 $ iterate (`div` 256) n where
+  go b = shows (mod b 256) . (", "++)
+
+leb128Shows n
+  | n < 128 = shows n . (", "++)
+  | otherwise, (q, r) <- divMod n 128 = shows (128 + r) . (',':) . leb128Shows q
+
 compile topSize libc opts s = do
   tab <- insert "#" neatPrim <$> singleFile s
   ms <- topoModules tab
@@ -586,10 +603,12 @@ compile topSize libc opts s = do
   pure
     $ ("typedef unsigned u;\n"++)
     . ("enum{TOP="++) . (topSize++) . ("};\n"++)
-    . ("static u root[]={" ++)
-    . foldr (.) id (map (\(addr, _) -> shows addr . (',':)) $ elems ffes)
-    . foldr (.) id (map (\n -> shows n . (',':)) mem)
-    . ("}, *rootend = root + " ++) . shows (size ffes) . (", *vmroot;\n" ++)
+    . ("enum{PROGSZ="++) . shows (length mem) . ("};\n"++)
+    . ("static unsigned char root8[]={" ++)
+    . foldr (.) id (leShows . fst <$> elems ffes)
+    . foldr (.) id (leb128Shows <$> mem)
+    . ("};\n"++)
+    . ("static u *root = (u*)root8, *rootend = ((u*)root8) + " ++) . shows (size ffes) . (", *vmroot;\n" ++)
     . ("u scratchpad[1<<20], *scratchpadend = scratchpad;\n" ++)
     . (libc++)
     . runFun opts (toAscList ffis)
