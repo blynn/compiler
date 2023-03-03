@@ -257,10 +257,9 @@ addAdt t cs ders neat = foldr derive neat' ders where
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
       , ([PatVar "_" Nothing], V "False")])
 
-addClass classId v (sigs, defs) neat = if not $ member classId $ typeclasses neat then neat
+addClass classId v (sigs, defs) neat = if not $ member classId $ typeclasses neat then addDefs defaults neat
   { typeclasses = insert classId (keys sigs) $ typeclasses neat
   , typedAsts = selectors $ typedAsts neat
-  , topDefs = defaults ++ topDefs neat
   } else error $ "duplicate class: " ++ classId
   where
   vars = take (size sigs) $ show <$> [0..]
@@ -280,7 +279,7 @@ addForeignImport foreignname ourname t neat = neat
   , ffiImports = insertWith (error $ "duplicate import: " ++ foreignname) foreignname t $ ffiImports neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
-addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
+addDefs ds neat = neat { topDefs = foldr (uncurry insert) (topDefs neat) ds }
 addImport isQual im mayAs f neat = neat { moduleImports = insertWith (++) (maybe im id mayAs) imf
   $ (if isQual then id else insertWith (++) "" imf) $ moduleImports neat }
   where imf = [(im, f)]

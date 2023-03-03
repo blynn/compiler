@@ -63,7 +63,7 @@ main = getArgs >>= \case
   "lamb":_ -> interact $ dumpWith dumpLambs
   "parse":_ -> interact \s -> either id show $ do
     tab <- singleFile s
-    pure $ second topDefs <$> toAscList tab
+    pure $ second (toAscList . topDefs) <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
   "ffis":opts -> interact $ either id (($ "\n") . shows . keys) . allFFIs
   "warts":opts -> interact $ either id (warts $ "warts":opts) . allFFIs

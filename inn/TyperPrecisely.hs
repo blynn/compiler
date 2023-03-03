@@ -560,7 +560,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
     mes <- Just . concat <$> mapM (processExport neat) exs
     pure neat { moduleExports = mes }
   processExport neat = \case
-    ExportVar v -> case lookup v $ topDefs neat of
+    ExportVar v -> case mlookup v $ topDefs neat of
       Nothing -> Left $ "bad export " ++ v
       Just _ -> Right [v]
     ExportCon c ns -> case mlookup c $ type2Cons neat of
@@ -648,12 +648,11 @@ searcherNew thisModule tab neat = Searcher
     [] -> error $ "no such field: " ++ f
     h:_ -> h
   imps = moduleImports neat ! ""
-  defs = fromList $ topDefs neat
   astLink' ast = runDep $ go [] ast where
     go bound ast = case ast of
       V s
         | elem s bound -> pure ast
-        | member s defs -> unlessAmbiguous s $ addDep s *> pure ast
+        | member s $ topDefs neat -> unlessAmbiguous s $ addDep s *> pure ast
         | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
         | True -> case findImportSym s of
           [] -> badDep $ "missing: " ++ s

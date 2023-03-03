@@ -623,7 +623,7 @@ compileModule objs (name, neat) = do
   let
     searcher = searcherNew name (_neat <$> objs) neat
     typed = typedAsts neat
-  depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ topDefs neat
+  depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ toAscList $ topDefs neat
   typed <- inferDefs searcher depdefs (topDecls neat) typed
   typed <- inferTypeclasses searcher (instances neat) typed
   let
