@@ -14,67 +14,55 @@ static void putu(u n) {
   }
 }
 
-static void espy_traverse(u n) {
-  if (!isAddr(n)) return (void) putu(n);
-  u x = mem[n];
-  if (x & (1 << 31)) return (void) putchar('*');
-  mem[n] |= 1 << 31;
-  putchar('(');
-  espy_traverse(x);
-  putchar(' ');
-  u y = mem[n + 1];
-  if (x == _NUM64) {
-    putu(y), putchar(' ');
-    putu(mem[n+2]), putchar(' ');
-    putu(mem[n+3]), putchar(' ');
-  }
-  else if (x == _NUM) putu(y);
-  else espy_traverse(y);
-  putchar(')');
-}
-static void espy_unmark(u n) {
-  if (!isAddr(n)) return;
-  u x = mem[n];
-  if (!(x & (1 << 31))) return;
-  x -= 1 << 31;
-  espy_unmark(mem[n] = x);
-  u y = mem[n+1];
-  if (x != _NUM && x != _NUM64) espy_unmark(y);
-}
 static u pdump;
-static void vmdump_mark(u n) {
+static void traverse(u n) {
   if (!isAddr(n)) return;
   u x = mem[n];
   if (x & (1 << 31)) return;
   mem[n] |= 1 << 31;
   altmem[n] = pdump;
+  u *p = scratchpad + pdump - 128;
   pdump += 2;
-  vmdump_mark(x);
+  traverse(x);
+  *p++ = isAddr(x) ? altmem[x] : x;
   if (x == _NUM64) pdump += 2;
   u y = mem[n + 1];
-  if (x != _NUM && x != _NUM64) vmdump_mark(y);
+  if (x != _NUM && x != _NUM64) traverse(y);
+  *p++ = x != _NUM && isAddr(y) ? altmem[y] : y;
+}
+static void espy_unmark(u n) {
+  if (!isAddr(n)) return (void)putu(n);
+  u x = mem[n];
+  if (!(x & (1 << 31))) return (void)putchar('*');
+  putchar('(');
+  x -= 1 << 31;
+  espy_unmark(mem[n] = x);
+  putchar(' ');
+  u y = mem[n+1];
+  if (x == _NUM) putu(y);
+  else if (x == _NUM64) putu(y), putchar(' '), putu(mem[n+2]), putchar(' '), putu(mem[n+3]), putchar(' ');
+  else espy_unmark(y);
+  putchar(')');
 }
 static void unmark(u n) {
   if (!isAddr(n)) return;
   u x = mem[n];
   if (!(x & (1 << 31))) return;
   x -= 1 << 31;
-  putu(isAddr(x) ? altmem[x] : x), putchar(','), putchar(' ');
   u y = mem[n+1];
-  if (x == _NUM64) {
-    putu(y), putchar(',');
-    putu(mem[n+2]), putchar(',');
-    putu(mem[n+3]), putchar(',');
-  } else putu(x != _NUM && isAddr(y) ? altmem[y] : y), putchar(',');
   unmark(mem[n] = x);
   if (x != _NUM && x != _NUM64) unmark(y);
 }
 
-void espy(u n) { espy_traverse(n); putchar('\n'); espy_unmark(n); }
-void vmdump(u n) {
-  if (!isAddr(n)) putu(n); else pdump = 128, vmdump_mark(n), unmark(n);
-  putchar('\n');
+void espy(u n) { pdump = 128; traverse(n); espy_unmark(n); putchar('\n');
 }
+u vmdump(u n) {
+  if (!isAddr(n)) return n;
+  pdump = 128, traverse(n), unmark(n);
+  return pdump;
+}
+u scratch_at(u n) { return scratchpad[n]; }
+void scratch_reset() { scratchpadend = scratchpad; }
 int precompiled() {
   u *p = precompiled_bytecode;
   for (u lim = *p++; lim; lim--) {

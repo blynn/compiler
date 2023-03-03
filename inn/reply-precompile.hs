@@ -19,7 +19,12 @@ main = do
   putStrLn "u precompiled_bytecode[] = {"
   dat $ fromIntegral $ length topo
   mapM (bytecodeDump lib) $ (objs !) <$> topo
-  vmdump (topo, (\m -> m { _mem = [] }) <$> objs, ffiList)
+  -- No longer need `_mem`. Crudely force through the changes.
+  let objs' = (\m -> m { _mem = [] }) <$> objs
+  objs' <- case sum $ length . _mem <$> elems objs' of
+    0 -> pure objs'
+    _ -> error "BUG!"
+  vmdump (topo, objs', ffiList)
   putStrLn "};"
 
 bytecodeDump lib ob = do
