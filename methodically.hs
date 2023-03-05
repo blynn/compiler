@@ -1161,20 +1161,8 @@ untangle s = case program s of
   Right (prog, ParseState s _) -> case s of
     Ell [] [] -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
       Neat tycl defs typed dcs ffis exs -> do
-        let
-          genDefaultMethod (qs, lambF) (classId, s) = case mlookup defName qs of
-            Nothing -> Right (insert defName q qs, lambF . ((defName, V "fail#"):))
-            Just (Qual ps t) -> case match t t0 of
-              Nothing -> Left $ "bad default method type: " ++ s
-              _ -> case ps of
-                [Pred cl _] | cl == classId -> Right (qs, lambF)
-                _ -> Left $ "bad default method constraints: " ++ showQual (Qual ps0 t0) ""
-            where
-            defName = "{default}" ++ s
-            Just q@(Qual ps0 t0) = fst <$> lookup s typed
         (qs, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
         mets <- inferTypeclasses tycl qs dcs
-        (qs, lambF) <- foldM genDefaultMethod (qs, lambF) $ concatMap (\(classId, Tycl sigs _) -> map (classId,) sigs) $ toAscList tycl
         pure ((qs, lambF mets), (ffis, exs))
     _ -> Left $ "parse error: " ++ case ell s of
       Left e -> e

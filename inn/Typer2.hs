@@ -339,22 +339,11 @@ inferModule tab acc name = case mlookup name acc of
       tycl classId = maybe [] id $ mlookup classId mergedInstances
       dcs = adtTab : map (dataCons . (tab !)) imps
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
-      genDefaultMethod qcs (classId, s) = case mlookup defName qcs of
-        Nothing -> Right $ insert defName (q, E $ Link "#" "fail#" undefined) qcs
-        Just (Qual ps t, _) -> case match t t0 of
-          Nothing -> Left $ "bad default method type: " ++ s
-          _ -> case ps of
-            [Pred cl _] | cl == classId -> Right qcs
-            _ -> Left $ "bad default method constraints: " ++ show (Qual ps0 t0)
-        where
-        defName = "{default}" ++ s
-        (q@(Qual ps0 t0), _) = qcs ! s
     acc' <- foldM (inferModule tab) acc imps
     let linker = astLink typed locals imps acc'
     depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
     typed <- inferDefs tycl depdefs typed
     typed <- inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs
-    typed <- foldM genDefaultMethod typed [(classId, sig) | (classId, sigs) <- toAscList mySigs, sig <- sigs]
     Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
