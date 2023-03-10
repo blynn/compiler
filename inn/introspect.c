@@ -63,27 +63,41 @@ u vmdump(u n) {
 }
 u scratch_at(u n) { return scratchpad[n]; }
 void scratch_reset() { scratchpadend = scratchpad; }
+u unleb128(unsigned char **pp) {
+  u n = 0, b = 0;
+  for (;;) {
+    unsigned char *p = *pp;
+    *pp = p + 1;
+    if (*p < 128) return n + (*p << b);
+    n += (*p - 128) << b;
+    b += 7;
+  }
+}
+#ifdef PRECOMPILED
 int precompiled() {
-  u *p = precompiled_bytecode;
-  for (u lim = *p++; lim; lim--) {
-    u sym_count = *p++;
-    while (sym_count--) *rootend++ = tagcheck(*p++);
-    u mem_count = *p++;
-    scratchpadend = p + mem_count;
-    vmheap(p);
-    p = scratchpadend;
+  unsigned char *p = precompiled_bytecode;
+  for (u lim = unleb128(&p); lim; lim--) {
+    u sym_count = unleb128(&p);
+    while (sym_count--) *rootend++ = tagcheck(unleb128(&p));
+    u mem_count = unleb128(&p);
+    scratchpadend = scratchpad;
+    while (mem_count--) *scratchpadend++ = unleb128(&p);
+    vmheap(scratchpad);
   }
   scratchpadend = scratchpad;
   u hp0 = hp;
-  u *pend = p + sizeof(precompiled_bytecode)/sizeof(*precompiled_bytecode);
+  unsigned char *pend = p + sizeof(precompiled_bytecode)/sizeof(*precompiled_bytecode);
   while (p < pend) {
-    u x = *p++;
+    u x = unleb128(&p);
     if (isAddr(x)) x = x - 128 + hp0;
     mem[hp++] = x;
-    u y = *p++;
+    u y = unleb128(&p);
     // TODO: NUM64
     if (isAddr(y) && x != _NUM) y = y - 128 + hp0;
     mem[hp++] = y;
   }
   return hp0;
 }
+#else
+int precompiled() { return 0; }
+#endif

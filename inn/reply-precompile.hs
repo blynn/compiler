@@ -7,7 +7,8 @@ objectify source = do
   objs <- foldM compileModule Tip topo
   pure (fst <$> topo, objs)
 
-dat n = putStr (show n) >> putChar ',' >> putChar ' '
+-- dat n = putStr (show n) >> putChar ',' >> putChar ' '
+dat n = putStr $ leb128Shows n ""
 
 main :: IO ()
 main = do
@@ -16,7 +17,8 @@ main = do
     ffiList = sort $ concatMap (keys . ffiImports . _neat) $ elems objs
     libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
     (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
-  putStrLn "u precompiled_bytecode[] = {"
+  putStrLn "#define PRECOMPILED"
+  putStrLn "unsigned char precompiled_bytecode[] = {"
   dat $ fromIntegral $ length topo
   mapM (bytecodeDump lib) $ (objs !) <$> topo
   -- No longer need `_mem`. Crudely force through the changes.
@@ -24,12 +26,13 @@ main = do
   objs' <- case sum $ length . _mem <$> elems objs' of
     0 -> pure objs'
     _ -> error "BUG!"
-  vmdump (topo, objs', ffiList)
+  vmdump dat (topo, objs', ffiList)
   putStrLn "};"
 
 bytecodeDump lib ob = do
   dat $ fromIntegral $ size $ _syms ob
   go lib $ elems $ _syms ob
+  putChar '\n'
   dat $ fromIntegral $ length $ _mem ob
   go lib $ _mem ob
   putChar '\n'

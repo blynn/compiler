@@ -26,7 +26,7 @@ REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/Kiselyov.hs inn/Map1.hs inn
 
 reply.c: reply-precompile inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-native.hs | ./precisely ; cat inn/BasePrecisely.hs inn/System.hs inn/ReplyImports.hs | ./reply-precompile | fold -s; cat inn/introspect.c) > $@
 
-reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; echo 'u precompiled_bytecode[] = {};' ; cat inn/introspect.c) > $@
+reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; cat inn/introspect.c) > $@
 
 doh.c: reply-precompile inn/SystemWasm.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; (cat inn/SystemWasm.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs | ./precisely wasm ; cat inn/BasePrecisely.hs inn/SystemWasm.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
 
