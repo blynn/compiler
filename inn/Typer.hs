@@ -217,7 +217,7 @@ inferTypeclasses tycl typeOfMethod typed dcs linker ienv = foldM perClass typed 
       let
         dvs = map snd $ fst $ dictVars ps 0
         perMethod s = do
-          let Just rawExpr = mlookup s idefs <|> pure (V $ "{default}" ++ s)
+          let rawExpr = maybe (V $ "{default}" ++ s) id $ mlookup s idefs
           expr <- snd <$> linker (patternCompile dcs rawExpr)
           (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
             $ infer typed [] expr ([], 0)

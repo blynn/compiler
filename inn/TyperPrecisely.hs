@@ -425,12 +425,8 @@ dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
   inferInstance typed (classId, Instance ty name ps idefs) = let
     dvs = map snd $ fst $ dictVars ps 0
-    perMethod s = case mlookup s idefs of
-      Just e -> inferMethod s e
-      Nothing -> let defname = "{default}" ++ s in case mlookup defname typed of
-        Nothing -> pure $ E $ Link "#" "fail#"
-        Just _ -> inferMethod s $ V defname
-    inferMethod s rawExpr = do
+    perMethod s = do
+      let rawExpr = maybe (V $ "{default}" ++ s) id $ mlookup s idefs
       expr <- snd <$> patternCompile searcher rawExpr
       (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
         $ infer s typed [] expr (Tip, 0)
