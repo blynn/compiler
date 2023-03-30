@@ -105,13 +105,14 @@ REF x y = y "sp[1]"
 NEWREF x y z = z ("_REF" x) y
 READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
-END = "return;"
+END = "return 1;"
 ERR = "sp[1]=app(app(arg(1),_ERREND),_ERR2);sp++;"
 ERR2 = "lazy3(2, arg(1), _ERROUT, arg(2));"
 ERROUT = "errchar(num(1)); lazy2(2, _ERR, arg(2));"
-ERREND = "errexit(); return;"
+ERREND = "errexit(); return 2;"
 VMRUN = "vmrun();"
 VMPTR = "lazy3(3, arg(3), app(_NUM, arg(1)), arg(2));"
+SUSPEND = "*(sp = spTop) = app(app(arg(1), _UNDEFINED), _END); suspend_status = 0; return 1;"
 |]
 
 argList t = case t of
@@ -273,6 +274,7 @@ static u gc() {
   }
 }
 
+static u suspend_status;
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
 static inline int num(u n) { return mem[arg(n) + 1]; }
@@ -329,17 +331,18 @@ void vmscratchroot(u n) { *scratchpadend++ = 2*n + 128 + 1; }
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
     . foldr (.) id (zipWith ffiDefine [0..] ffis)
     . ("\n  }\n}\n" ++)
-    . ([r|static void run() {
-  for(;;) {
-    if (mem + hp > sp - 8 && gc()) return;
-    u x = *sp;
-    if (isAddr(x)) *--sp = mem[x]; else switch(x) {
+    . ([r|static u step() {
+  if (mem + hp > sp - 8 && gc()) return 3;
+  u x = *sp;
+  if (isAddr(x)) *--sp = mem[x]; else switch(x) {
 |]++)
   . foldr (.) id (genComb <$> comdefs)
   . ([r|
-    }
   }
+  return 0;
 }
+static void run() { while(!step()); }
+void run_gas(u gas) { while(!suspend_status && gas--) suspend_status = step(); }
 |]++)
   . rtsInit opts
   . rtsReduce opts

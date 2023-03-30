@@ -509,6 +509,7 @@ prims = let
     , ("word64Shr", (wordy, A (ro "QQ") (ro "DSHR")))
     , ("vmRunScratchpad", (arr (TC "Int") $ TAp (TC "IO") (TV "()"), A (ro "T") $ ro "VMRUN"))
     , ("vmPtr", (arr (TV "a") $ TAp (TC "IO") (TC "Word"), ro "VMPTR"))
+    , ("vmSuspend", (arr (TAp (TC "IO") (TV "a")) $ TAp (TC "IO") (TC "()"), ro "SUSPEND"))
     ]
     ++ map (\(s, v) -> (s, (dyad "Int", bin v)))
       [ ("intAdd", "ADD")
