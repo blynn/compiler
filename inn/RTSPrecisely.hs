@@ -579,9 +579,11 @@ agglomerate ffiMap objs lout name = lout
 leShows n = foldr (.) id $ map go $ take 4 $ iterate (`div` 256) n where
   go b = shows (mod b 256) . (", "++)
 
+leb128Shows :: Word -> String -> String
 leb128Shows n
-  | n < 128 = shows n . (", "++)
-  | otherwise, (q, r) <- divMod n 128 = shows (128 + r) . (',':) . leb128Shows q
+  | n < w128 = shows n . (", "++)
+  | otherwise, (q, r) <- divMod n w128 = shows (w128 + r) . (',':) . leb128Shows q
+  where w128 = wordFromInt 128
 
 compile topSize libc opts s = do
   tab <- insert "#" neatPrim <$> singleFile s
@@ -609,7 +611,7 @@ compile topSize libc opts s = do
     . ("enum{PROGSZ="++) . shows (length mem) . ("};\n"++)
     . ("static unsigned char root8[]={" ++)
     . foldr (.) id (leShows . fst <$> elems ffes)
-    . foldr (.) id (leb128Shows <$> mem)
+    . foldr (.) id (leb128Shows . wordFromInt <$> mem)
     . ("};\n"++)
     . ("static u *root = (u*)root8, *rootend = ((u*)root8) + " ++) . shows (size ffes) . (", *vmroot;\n" ++)
     . ("u scratchpad[1<<20], *scratchpadend = scratchpad;\n" ++)
