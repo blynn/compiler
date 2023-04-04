@@ -473,6 +473,7 @@ prims = let
     , ("doubleDiv", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FDIV")))
     , ("doubleEq", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FEQ"))
     , ("doubleLE", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FLE"))
+    , ("sqrt", (arr (TC "Double") (TC "Double"), A (ro "T") (ro "FSQRT")))
     , ("rawDouble", (arr (TC "Double") (TC "Word64"), A (ro "T") (ro "PAIR64")))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))

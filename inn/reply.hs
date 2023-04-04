@@ -8,14 +8,14 @@ import Parser
 import Typer
 import RTS
 
-neatPrompt = neatEmpty {moduleImports = singleton "" $ (, const True) <$> [">", "#", "Base", "System"]}
+neatInit = neatEmpty {moduleImports = singleton "" $ (, const True) <$> [">", "#", "Base", "System"]}
 
 initialState = do
   (topo, objs, ffiList) <- precompiled
   let
     libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
     (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
-  pure (insert ">" (Module neatPrompt Tip []) objs, (libStart, lib))
+  pure (insert ">" (Module neatInit Tip []) objs, (libStart, lib))
 
 genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
   where syms = _syms $ objs ! name
@@ -32,7 +32,9 @@ mergeFragment neat frag = neat
   , typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
   , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
   , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
+  , moduleImports = foldr (uncurry insert) (moduleImports neat) $ toAscList $ moduleImports frag
   , opFixity = foldr (uncurry insert) (opFixity neat) $ toAscList $ opFixity frag
+  , typeAliases = foldr (uncurry insert) (typeAliases neat) $ toAscList $ typeAliases frag
   }
 
 exec lib (addr, mem) = do
@@ -57,11 +59,12 @@ addTyped (mos, (libStart, lib)) mos' = let
 readInput mos s = do
   fragOrExpr <- fst <$> parse fmt s
   case fragOrExpr of
-    Left frag -> Left <$> tryAddDefs frag
+    Left frag -> Left <$> tryAddDefs frag{moduleImports = moduleImports orig}
     Right expr -> Right <$> tryExpr expr
   where
+  orig = _neat $ mos!">"
   fmt = Left <$> fragment <|> Right <$> single
-  fragment = ($ neatEmpty{moduleImports = moduleImports neatPrompt}) <$> (lexemePrelude *> topdecls <* eof)
+  fragment = ($ neatEmpty) <$> (lexemePrelude *> topdecls <* eof)
   single = many (char ' ') *> expr <* eof
 
   tryAddDefs frag = compileModule mos (">", frag)
@@ -74,7 +77,8 @@ readInput mos s = do
         (addr, (_, (hp', memF))) = runState (enc combs) (Tip, (128, id))
         in pure (hp', memF [Right $ comEnum "I", addr])
       _ -> tryExpr $ A (V "print") sugary
-  searcherPrompt = searcherNew ">" (_neat <$> mos) neatPrompt
+  searcherPrompt = searcherNew ">" (_neat <$> mos) $ neatEmpty {moduleImports = moduleImports orig}
+
 
 scratch lib = mapM \case
   Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ fromIntegral $ lib ! moduleName ! sym

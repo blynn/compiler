@@ -548,7 +548,7 @@ instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 (/) = doubleDiv
 instance Show Double where
-  showsPrec _ d = go where
+  showsPrec _ d = if d == doubleFromInt 0 then ('0':) else go where
     one = doubleFromInt 1
     ten = doubleFromInt 10
     tens = iterate (ten*) one
