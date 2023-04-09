@@ -155,9 +155,9 @@ f = \1# 2# 3# -> (\join# -> case 1# of
 We treat case expressions as applying a special case of the above to the
 scrutinee, namely the case when there is exactly one pattern per alternative.
 This is horribly inefficient, and indeed, I originally insisted on coding a
-jump table. My position has evolved: better to put up with a few seconds extra
-of compilation, and postpone faster case expressions to our next compiler, so
-our our code is less incomprensible.
+jump table. My position has evolved: for the sake of less incomprehensible
+code, better to put up with a few seconds extra of compilation, and postpone
+faster case expressions to our next compiler.
 
 We try to avoid dead code with the `optiApp` helper which beta-reduces
 applications of lambdas where the bound variable appears at most once in the
@@ -184,8 +184,8 @@ include::patty.hs[]
 
 == Guardedly ==
 
-Now that the syntax lets us breathe easier, we immediately work on restoring
-the speed of case expressions with jump tables. Suppose we have:
+Now that the syntax lets us breathe easier, we immediately work on speedier
+case expressions via jump tables. Suppose we have:
 
 \begin{code}
 case scrutinee of

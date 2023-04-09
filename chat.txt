@@ -48,12 +48,12 @@ const errmsg = document.getElementById("errmsg");
 
 const repl = {};
 
-function doLine(s) {
+function run(f, s) {
   repl.buf = [];
   repl.out = [];
   repl.inp = teen(s);
   repl.cursor = 0;
-  repl.instance.exports.go();
+  repl.instance.exports[f]();
   return {
     buf : repl.buf.map(tedea),
     out : tedea(repl.out),
@@ -79,7 +79,7 @@ async function loadRepl() {
 
 function interpret() {
   errmsg.innerText = "";
-  const r = doLine(inbox.value);
+  const r = run("chat", inbox.value);
   if (r.buf[0] == "error") {
     errmsg.innerText = r.out;
   } else {
@@ -96,6 +96,15 @@ function interpret() {
       oe.classList.add('output');
       oe.innerText = r.out;
       convo.appendChild(oe);
+      if (r.buf[1] == "svg") {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        const as = r.buf[2].split('\n');
+        for (let i = 0; i < as.length - 1; i += 2) {
+          svg.setAttribute(as[i], as[i+1]);
+        }
+        svg.innerHTML = r.out;
+        convo.appendChild(svg);
+      }
     }
     inbox.value = "";
   }

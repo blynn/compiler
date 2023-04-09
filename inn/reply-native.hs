@@ -1,14 +1,14 @@
 main :: IO ()
-main = loop =<< initialState
+main = loop . moduleNew ">" =<< initialState
 
 loop st@(mos, (libStart, lib)) = do
   putStr "> "
   getLine >>= maybe (putChar '\n') repl
   where
-  repl s = case readInput mos s of
+  repl s = case readInput mos ">" s of
     Left err -> putStrLn err >> loop st
     Right good -> case good of
-      Left frag -> loop =<< addTyped st frag
+      Left frag -> loop =<< addTyped st ">" frag
       Right expr -> exec lib expr >> loop st
 
 getLine = go id where

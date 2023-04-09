@@ -48,7 +48,7 @@ function doLine(s) {
   repl.out = [];
   repl.inp = teen(s);
   repl.cursor = 0;
-  repl.instance.exports.go();
+  repl.instance.exports.chat();
   return tede(Uint8Array.from(repl.out));
 }
 

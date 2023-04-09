@@ -15,12 +15,11 @@ function hideshow(s) {
 
 What features would make our compiler friendlier? My biggest gripes are that
 symbols must be defined before use, a finicky parser that lacks support for
-indentation rules, and pathetic error handling. We work on the first two
-problems, and make a tiny dent on the third, while taking care of a few other
-issues.
+indentation rules, and pathetic error handling.
 
-This leads to a compiler that I found surprisingly usable, at least when I could
-spot mistakes on my own.
+We work on the first two problems, and make a tiny dent on the third, while
+taking care of a few other issues. This leads to a compiler that I found
+surprisingly usable, at least when I could spot mistakes on my own.
 
 == Mutually ==
 

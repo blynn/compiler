@@ -90,7 +90,7 @@ the Haskell syntax we support:
   * Primitives for IO monad methods.
   * The RTS reduces `fail#` on failed case matches.
 
-Then each module implicitly imports this special "#" module, so these built-in
+Each module implicitly imports this special "#" module, so these built-in
 primitives are accessible to all.
 
 This is a good time to mention that rewriting means:
@@ -103,8 +103,8 @@ This is a good time to mention that rewriting means:
 
 None of these are built-in; they must be explicitly defined at the top level if
 these language features are used. The last of these implies we must define an
-`Applicative` instance for lists if `pure` has its standard meaning. To remove
-these gotchas, we could define low-level primitives as we do for the others.
+`Applicative` instance for lists. To remove these gotchas, we could define
+low-level primitives as we do for the others.
 
 Code generation now has two phases. The first corresponds to GHC incrementally
 compiling a module: it resolves all locally defined symbols, and leaves `Link`

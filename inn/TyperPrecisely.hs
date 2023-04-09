@@ -658,7 +658,7 @@ searcherNew thisModule tab neat = Searcher
       _ -> pure ast
     unlessAmbiguous s f = case findImportSym s of
       [] -> f
-      [(im, _)] -> if im == ">" then f else badDep $ "ambiguous: " ++ s
+      [(im, _)] -> if im == thisModule then f else badDep $ "ambiguous: " ++ s
 
 neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
 

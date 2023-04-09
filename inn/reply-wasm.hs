@@ -1,9 +1,9 @@
-foreign export ccall "go" main
-main :: IO ()
-main = do
+foreign export ccall "chat" chat
+chat :: IO ()
+chat = do
   st@(mos, (libStart, lib)) <- readIORef ref
   s <- getContents
-  case readInput mos s of
+  case readInput mos "Main" s of
     Left err -> do
       putStr "error"
       nextOut
@@ -12,8 +12,9 @@ main = do
       Left frag -> do
         putStr "ok"
         nextOut
-        addTyped st frag >>= writeIORef ref
+        addTyped st "Main" frag >>= writeIORef ref
       Right expr -> do
         nextOut
         exec lib expr
-  where ref = unsafePerformIO $ newIORef =<< initialState
+
+ref = unsafePerformIO $ newIORef . moduleNew "Main" =<< initialState

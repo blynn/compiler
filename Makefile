@@ -12,6 +12,7 @@ menu.html: menu; cobble menu menu
 
 %.html: %.lhs menu.html; cobble mathbook menu $<
 %:%.c;clang -O3 $^ -o $@
+webby:webby.c;clang -O3 $^ -o $@ -lm
 precisely:precisely.c;clang -O3 $^ -o $@ -lm
 reply:reply.c;clang -O3 $^ -o $@ -lm
 reply-precompile:reply-precompile.c;clang -O3 $^ -o $@ -lm
