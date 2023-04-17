@@ -32,7 +32,8 @@ reply.c: reply-precompile inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply
 
 reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; cat inn/introspect.c) > $@
 
-doh.c: reply-precompile inn/SystemWasm.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat inn/SystemWasm.hs inn/NextOut.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs inn/SystemWasm.hs inn/NextOut.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
+DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs
+doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
 
 doh.o:doh.c;$(WCC) $^ -c -o $@
 doh.wasm:doh.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@

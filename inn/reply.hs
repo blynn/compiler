@@ -17,7 +17,8 @@ initialState = do
     (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
   pure (objs, (libStart, lib))
 
-moduleNew name = first $ insert name $ Module neatInit Tip []
+moduleNew name (objs, (libStart, lib)) =
+  (insert name (Module neatInit Tip []) objs, (libStart, insert name mempty lib))
 
 genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
   where syms = _syms $ objs ! name
@@ -61,12 +62,12 @@ addTyped (mos, (libStart, lib)) name mos' = let
 readInput mos name s = do
   fragOrExpr <- fst <$> parse fmt s
   case fragOrExpr of
-    Left frag -> Left <$> tryAddDefs frag{moduleImports = moduleImports orig}
+    Left frag -> Left <$> tryAddDefs frag
     Right expr -> Right <$> tryExpr expr
   where
   orig = _neat $ mos!name
   fmt = Left <$> fragment <|> Right <$> single
-  fragment = ($ neatEmpty) <$> (lexemePrelude *> topdecls <* eof)
+  fragment = ($ neatEmpty{moduleImports = moduleImports orig}) <$> (lexemePrelude *> topdecls <* eof)
   single = many (char ' ') *> expr <* eof
 
   importSelf neat = neat{moduleImports = insertWith (++) "" [(name, const True)] $ moduleImports neat}

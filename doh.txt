@@ -78,6 +78,9 @@ async function loadRepl() {
       , eof    : () => repl.cursor == repl.inp.length
       , getchar: () => repl.inp[repl.cursor++]
       , nextout: () => { repl.buf.push(repl.out); repl.out = []; }
+      , argc   : () => 0
+      , argvlen: i => 0
+      , argvat : (i, j) => 0
       }})).instance;
     doLine("");
     term.clear();

@@ -548,7 +548,10 @@ instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 (/) = doubleDiv
 instance Show Double where
-  showsPrec _ d = if d == doubleFromInt 0 then ('0':) else go where
+  showsPrec _ d = case compare d $ doubleFromInt 0 of
+   EQ -> ('0':)
+   LT -> ('-':) . shows (doubleFromInt 0 - d)
+   GT -> go where
     one = doubleFromInt 1
     ten = doubleFromInt 10
     tens = iterate (ten*) one
