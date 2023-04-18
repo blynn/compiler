@@ -22,7 +22,7 @@ rewritePats searcher = \case
 
 scottCase q x = A (assertType (E $ Basic "I") q) x
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") lit) b)) x) $ V "join#") y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
@@ -48,13 +48,12 @@ rewriteCase searcher caseVar tab = \case
 
 resolveFieldBinds searcher t = go t where
   go t = case t of
-    E (Const _) -> A (V "fromInteger") t
     E _ -> t
     V _ -> t
     A (E (Basic "{=")) (A rawExpr fbsAst) -> let
       expr = go rawExpr
       fromAst t = case t of
-        A (A (E (StrCon f)) body) rest -> (f, go body):fromAst rest
+        A (A (V f) body) rest -> (f, go body):fromAst rest
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
       (con, fields) = findField searcher firstField

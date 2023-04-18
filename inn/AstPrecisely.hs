@@ -6,7 +6,7 @@ import Map
 data Type = TC String | TV String | TAp Type Type deriving Eq
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | Const Integer | ChrCon Char | StrCon String | Link String String | XQual Qual
-data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
+data Pat = PatLit Ast | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [(String, Type)]
 data ModExport = ExportVar String | ExportCon String [String]
