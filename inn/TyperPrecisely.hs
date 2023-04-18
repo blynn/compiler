@@ -248,10 +248,7 @@ decodeLets x = ((vts, bods), expr) where
 
 infer' msg typed loc ast = case ast of
   E x -> case x of
-    Const x -> pure (TC "Integer", ast)
-    ChrCon _ -> pure (TC "Char", ast)
-    StrCon _ -> pure (TAp (TC "[]") (TC "Char"), ast)
-    Link _ _ -> error "BUG: type should have been found in earlier phase"
+    Lit (t, _) -> pure (t, ast)
     bug -> error $ show bug
   V s -> case lookup s loc <|> Right . fst <$> mlookup s typed of
     Nothing -> Infer $ const $ Left $ "undefined: " ++ s
@@ -466,6 +463,7 @@ prims = let
   in map (second (first $ Qual [])) $
     [ ("doubleFromInt", (arr (TC "Int") (TC "Double"), A (ro "T") (ro "FLO")))
     , ("intFromDouble", (arr (TC "Double") (TC "Int"), A (ro "T") (ro "OLF")))
+    , ("doubleFromWord", (arr (TC "Word") (TC "Double"), A (ro "T") (ro "FLW")))
     , ("doubleAdd", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FADD")))
     , ("doubleSub", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FSUB")))
     , ("doubleMul", (arr (TC "Double") (arr (TC "Double") (TC "Double")), A (ro "Q") (ro "FMUL")))

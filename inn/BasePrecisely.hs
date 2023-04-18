@@ -543,7 +543,15 @@ instance Ring Double where
   (+) = doubleAdd
   (-) = doubleSub
   (*) = doubleMul
-  fromInteger = doubleFromInt . fromInteger
+  fromInteger n = integerSignList n \sgn ws -> case reverse ws of
+    [] -> doubleFromInt 0
+    x:xt -> (if sgn then id else (doubleFromInt 0-)) let
+      dx = doubleFromWord x
+      sh = foldr1 (*) $ replicate 32 $ doubleFromInt 2
+      in case xt of
+        [] -> dx
+        y:yt -> foldr (const (sh*)) (dx*sh + doubleFromWord y) yt
+
 instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 (/) = doubleDiv

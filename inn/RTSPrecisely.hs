@@ -1,6 +1,5 @@
 -- Separate fixity phase.
 -- Export lists.
--- Requires `Const` values to be already rewritten.
 module RTS where
 
 import Base
@@ -68,6 +67,7 @@ CONS x y z w = w x y
 NUM x y = y "sp[1]"
 NUM64 x y = y "sp[1]"
 FLO x = "lazy2(1, _I, app64d((double) num(1)));"
+FLW x = "lazy2(1, _I, app64d((double) (u) num(1)));"
 OLF x = "_NUM" "((int) flo(1))"
 FADD x y = "lazy2(2, _I, app64d(flo(1) + flo(2)));"
 FSUB x y = "lazy2(2, _I, app64d(flo(1) - flo(2)));"
@@ -176,7 +176,7 @@ heapify t x = case t of
 
 genArg m a = case a of
   V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
-  E (StrCon s) -> (s++)
+  E (Lit (_, s)) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
@@ -185,12 +185,12 @@ genComb (s, (args, body)) = let
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
     A x y -> ("lazy2"++) . argc . genArgs m [x, y] . (");"++)
-    E (StrCon s) -> (s++)
+    E (Lit (_, s)) -> (s++)
   ) . ("break;\n"++)
 
 comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
-  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
+  (V <$> varId <|> litstr <$> lexeme tokStr <|> paren combExpr)
 comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
   Left e -> error e
   Right (cs, _) -> cs
@@ -308,7 +308,13 @@ void vmheap(u *start) {
     u x = *p++;
     *heapptr++ = tagcheck(x);
     u y = *p++;
-    *heapptr++ = x == _NUM ? y : tagcheck(y);
+    if (x == _NUM64) {
+      *heapptr++ = y;
+      *heapptr++ = *p++;
+      *heapptr++ = *p++;
+    } else {
+      *heapptr++ = x == _NUM ? y : tagcheck(y);
+    }
   }
   hp = heapptr - mem;
 }
@@ -412,36 +418,52 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
   Just v -> pure v
 
 -- Parser only supports nonnegative integer literals, hence sign is always `True`.
-integerify x = integerSignList x \True xs ->
-  Nd (Nd (Lf $ Link "Base" "Integer") (Lf $ Link "#" "True")) $
-    foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon $ chr $ intFromWord h)) t) (lf "K") xs
+integerify s = integerSignList x \True xs ->
+  Nd (Nd (LfExtra $ Link "Base" "Integer") (LfExtra $ Link "#" "True")) $
+    foldr (\h t -> Nd (Nd (Lf "CONS") (LfExtra $ Basic [chr $ intFromWord h])) t) (Lf "K") xs
+  where
+  x = case s of
+    'x':t -> unhex t
+    _ -> readInteger s
+  unhex = foldl (\n d -> toInteger 16*n + toInteger (hexValue d)) (toInteger 0)
 
 enc t = case t of
-  Lf n -> case n of
-    Basic c -> pure $ Right $ comEnum c
-    Const x -> enc $ integerify x
-    ChrCon c -> Right <$> memget (Right $ comEnum "NUM", Right $ ord c)
-    StrCon s -> enc $ foldr (\h t -> Nd (Nd (lf "CONS") (Lf $ ChrCon h)) t) (lf "K") s
-    Link m s -> pure $ Left (m, s)
-    _ -> error $ "BUG! " ++ show t
-  LfVar s -> pure $ Left ("", s)
+  Lf c -> pure $ Right $ comEnum c
   Nd x y -> enc x >>= \hx -> enc y >>= \hy -> Right <$> memget (hx, hy)
+  LfExtra x -> case x of
+    Basic [h] -> Right <$> memget (Right $ comEnum "NUM", Right $ ord h)
+    Lit (t, s) -> case t of
+      TC "Integer" -> enc $ integerify s
+      TC "Char" -> enc $ LfExtra $ Basic s
+      TAp (TC "[]") (TC "Char") -> enc $ foldr (\h t -> Nd (Nd (Lf "CONS") (LfExtra $ Basic [h])) t) (Lf "K") s
+      TC "Double" -> let
+        (as, _:bs) = break (== '.') s
+        Word64 lo hi = rawDouble $ (fromInteger $ readInteger $ as ++ bs)
+          / foldr (\_ n -> doubleFromInt 10*n) (doubleFromInt 1) bs
+        in do
+          (tab, (hp, f)) <- get
+          put (tab, (hp + 4, f . (Right (comEnum "NUM64"):) . (Right 0:) . (Right (fromIntegral lo):) . (Right (fromIntegral hi):)))
+          pure $ Right hp
+    Link m s -> pure $ Left (m, s)
+    _ -> error $ "BUG! " ++ show x
+  _ -> error $ "BUG! " ++ show t
 
 asm combs = foldM
   (\symtab (s, t) -> (flip (insert s) symtab) <$> enc t)
   Tip combs
 
 rewriteCombs tab = optim . go where
-  go = \case
-    LfVar v -> let t = follow [v] v in case t of
-      Lf (Basic _) -> t
-      LfVar w -> if v == w then Nd (lf "Y") (lf "I") else t
-      _ -> LfVar v
+  go x = case x of
+    LfExtra (Link "" v) -> let t = follow [v] v in case t of
+      Lf _ -> t
+      LfExtra (Link "" w) -> if v == w then Nd (Lf "Y") (Lf "I") else t
+      _ -> x
     Nd a b -> Nd (go a) (go b)
     t -> t
   follow seen v = case tab ! v of
-    LfVar w | w `elem` seen -> LfVar $ last seen
-            | True -> follow (w:seen) w
+    LfExtra (Link "" w)
+      | w `elem` seen -> LfExtra $ Link "" $ last seen
+      | True -> follow (w:seen) w
     t -> t
 
 app01 s x y = maybe (A (L s x) y) snd $ go x where

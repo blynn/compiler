@@ -139,12 +139,12 @@ hexit = sat \x -> (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
   || (x <= 'f') && ('a' <= x)
 digit = sat \x -> (x <= '9') && ('0' <= x)
-decimal = readInteger <$> some digit
-hexadecimal = foldl (\n d -> toInteger 16*n + toInteger (hexValue d)) (toInteger 0) <$> some hexit
 nameTailChar = small <|> large <|> digit <|> char '\''
 nameTailed p = liftA2 (:) p $ many nameTailChar
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> decimal) <|> char 'x' *> (chr . fromInteger <$> hexadecimal))
+nat = readInteger <$> some digit
+hexInt = foldl (\n d -> 16*n + (hexValue d)) 0 <$> some hexit
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> nat) <|> char 'x' *> (chr <$> hexInt))
 tokOne delim = escape <|> rawSat (delim /=)
 
 charSeq = try . mapM char
@@ -153,8 +153,15 @@ quoteStr = between (char '"') (char '"') $ many $ many (charSeq "\\&") *> tokOne
 quasiquoteStr = charSeq "[r|" *> quasiquoteBody
 quasiquoteBody = charSeq "|]" *> pure [] <|> (:) <$> rawSat (const True) <*> quasiquoteBody
 tokStr = quoteStr <|> quasiquoteStr
-integer = try (char '0' *> (char 'x' <|> char 'X') *> hexadecimal) <|> decimal
-literal = lexeme $ A (V "fromInteger") . E . Const <$> integer <|> E . ChrCon <$> tokChar <|> E . StrCon <$> tokStr
+hexconstant = litinteger . ('x':) <$> (try (char '0' *> (char 'x' <|> char 'X')) *> some hexit)
+decimal = do
+  ds <- some digit
+  litdouble . (ds++) . ('.':) <$> (try $ char '.' *> some digit) <|> pure (litinteger ds)
+litdouble s = E $ Lit (TC "Double", s)
+litchar c = E $ Lit (TC "Char", [c])
+litstr s = E $ Lit (TAp (TC "[]") $ TC "Char", s)
+litinteger s = A (V "fromInteger") $ E $ Lit (TC "Integer", s)
+literal = lexeme $ hexconstant <|> decimal <|> litchar <$> tokChar <|> litstr <$> tokStr
 varish = lexeme $ nameTailed small
 bad s = Parser \pasta -> Left (s, pasta)
 
@@ -233,21 +240,21 @@ addAdt t cs ders neat = foldr derive neat' ders where
     [("showsPrec", L "prec" $ Pa $ map showCase cs
     )]
   derive der = error $ "bad deriving: " ++ der
-  prec0 = A (V "ord") (E $ ChrCon '\0')
+  prec0 = A (V "ord") (litchar '\0')
   showCase (Constr con args) = let as = show <$> [1..length args]
     in ([PatCon con $ mkPatVar "" <$> as], case args of
-      [] -> A (V "++") (E $ StrCon con)
+      [] -> A (V "++") (litstr con)
       _ -> case con of
         ':':_ -> A (A (V "showParen") $ V "True") $ foldr1
           (\f g -> A (A (V ".") f) g)
           [ A (A (V "showsPrec") prec0) (V "1")
-          , A (V "++") (E $ StrCon $ ' ':con++" ")
+          , A (V "++") (litstr $ ' ':con++" ")
           , A (A (V "showsPrec") prec0) (V "2")
           ]
         _ -> A (A (V "showParen") $ A (A (V "<=") prec0) $ V "prec")
-          $ A (A (V ".") $ A (V "++") (E $ StrCon con))
+          $ A (A (V ".") $ A (V "++") (litstr con))
           $ foldr (\f g -> A (A (V ".") f) g) (L "x" $ V "x")
-          $ map (\a -> A (A (V ".") (A (V ":") (E $ ChrCon ' '))) $ A (A (V "showsPrec") prec0) (V a)) as
+          $ map (\a -> A (A (V ".") (A (V ":") (litchar ' '))) $ A (A (V "showsPrec") prec0) (V a)) as
       )
   mkPreds classId = Pred classId . TV <$> typeVars t
   mkPatVar pre s = PatVar (pre ++ s) Nothing
@@ -339,7 +346,7 @@ _type = foldr1 arr <$> sepBy bType (res "->")
 
 fixityDecl w a = do
   res w
-  n <- lexeme integer
+  n <- lexeme nat
   os <- sepBy op comma
   pure $ addFixities os (fromInteger n, a)
 

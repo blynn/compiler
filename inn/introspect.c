@@ -92,9 +92,14 @@ int precompiled() {
     if (isAddr(x)) x = x - 128 + hp0;
     mem[hp++] = x;
     u y = unleb128(&p);
-    // TODO: NUM64
-    if (isAddr(y) && x != _NUM) y = y - 128 + hp0;
-    mem[hp++] = y;
+    if (x == _NUM64) {
+      mem[hp++] = y;
+      mem[hp++] = unleb128(&p);
+      mem[hp++] = unleb128(&p);
+    } else {
+      if (isAddr(y) && x != _NUM) y = y - 128 + hp0;
+      mem[hp++] = y;
+    }
   }
   return hp0;
 }
