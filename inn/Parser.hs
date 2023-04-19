@@ -234,7 +234,7 @@ wantVarSym = want \case
   VarSym s -> Right s
   _ -> Left "want VarSym"
 wantLit = want \case
-  Lit x -> Right x
+  Lit x -> Right $ E x
   _ -> Left "want literal"
 
 paren = between (res "(") (res ")")
@@ -384,7 +384,7 @@ sqExpr = between (res "[") (res "]") $
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> fmap V (con <|> var) <|> E <$> wantLit
+  <|> fmap V (con <|> var) <|> wantLit
 
 aexp = foldl1 A <$> some atom
 

@@ -43,7 +43,7 @@ rewritePats searcher = \case
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase searcher v Tip [(p, b)]) x (zip at $ tail vs)
       flip (foldr L) vs <$> rewriteCase searcher (head vs) Tip cs
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") lit) b)) x) $ V "join#") y
 
 rewriteCase searcher caseVar tab = \case
   [] -> flush $ V "join#"
@@ -74,7 +74,7 @@ resolveFieldBinds searcher t = go t where
     A (E (Basic "{=")) (A rawExpr fbsAst) -> let
       expr = go rawExpr
       fromAst t = case t of
-        A (A (E (StrCon f)) body) rest -> (f, go body):fromAst rest
+        A (A (V f) body) rest -> (f, go body):fromAst rest
         E (Basic "=}") -> []
       fbs@((firstField, _):_) = fromAst fbsAst
       (con, fields) = findField searcher firstField
@@ -195,7 +195,7 @@ typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
-    Const n -> ((TC "Int", E $ ChrCon $ chr n), csn)
+    Const n -> ((TC "Int", ast), csn)
     ChrCon _ -> ((TC "Char", ast), csn)
     StrCon _ -> ((TAp (TC "[]") (TC "Char"), ast), csn)
     Link im s q -> insta q

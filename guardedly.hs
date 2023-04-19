@@ -198,7 +198,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) [];
 data Type = TC String | TV String | TAp Type Type;
 arr a b = TAp (TAp (TC "->") a) b;
 data Extra = Basic Int | Const Int | StrCon String | Proof Pred;
-data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat];
+data Pat = PatLit Ast | PatVar String (Maybe Pat) | PatCon String [Pat];
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)];
 data Parser a = Parser (String -> Maybe (a, String));
 data Constr = Constr String [Type];
@@ -326,7 +326,7 @@ litOne delim = escChar <|> sat (delim /=);
 litInt = Const . foldl (\n d -> 10*n + ord d - ord '0') 0 <$> spc (some digit);
 litChar = Const . ord <$> between (char '\'') (spch '\'') (litOne '\'');
 litStr = between (char '"') (spch '"') $ many (litOne '"');
-lit = StrCon <$> litStr <|> litChar <|> litInt;
+lit = E <$> (StrCon <$> litStr <|> litChar <|> litInt);
 sqLst r = between (spch '[') (spch ']') $ sepBy r (spch ',');
 want f s = wantWith (s ==) f;
 tok s = spc $ want (some (char '_' <|> symbo) <|> varLex) s;
@@ -403,7 +403,7 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]");
 anyChar = sat \_ -> True;
 rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> anyChar <*> rawBody;
 rawQQ = spc $ char '[' *> char 'r' *> char '|' *> (E . StrCon <$> rawBody);
-atom r = ifthenelse r <|> letin r <|> rawQQ <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> E <$> lit;
+atom r = ifthenelse r <|> letin r <|> rawQQ <|> listify <$> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (con <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
 
@@ -703,7 +703,7 @@ rewritePats rewriteCase dcs = \case
     }
   };
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y;
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") lit) b)) x) $ V "join#") y;
 
 rewriteCase dcs caseVar tab expr = let
   { rec = rewriteCase dcs caseVar

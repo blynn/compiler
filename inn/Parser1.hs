@@ -271,7 +271,7 @@ wantVarSym = want \case
   VarSym s -> Right s
   _ -> Left "want VarSym"
 wantLit = want \case
-  Lit x -> Right x
+  Lit x -> Right $ E x
   _ -> Left "want literal"
 
 paren = between (res "(") (res ")")
@@ -420,7 +420,7 @@ sqExpr = between (res "[") (res "]") $
   )
   <|> pure (V "[]")
 
-fbind = A <$> (E . StrCon <$> var) <*> (res "=" *> expr)
+fbind = A <$> (V <$> var) <*> (res "=" *> expr)
 
 fBinds v = (do
     fbs <- between (res "{") (res "}") $ sepBy1 fbind (res ",")
@@ -429,7 +429,7 @@ fBinds v = (do
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> V <$> (con <|> var) <|> E <$> wantLit
+  <|> V <$> (con <|> var) <|> wantLit
   >>= fBinds
 
 aexp = foldl1 A <$> some atom

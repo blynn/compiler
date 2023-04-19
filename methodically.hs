@@ -228,7 +228,7 @@ toAscList = foldrWithKey (\k x xs -> (k,x):xs) []
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | Const Int | ChrCon Char | StrCon String
-data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
+data Pat = PatLit Ast | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [Type]
 data Pred = Pred String Type
@@ -543,7 +543,7 @@ wantVarSym = want \case
   VarSym s -> Right s
   _ -> Left "want VarSym"
 wantLit = want \case
-  Lit x -> Right x
+  Lit x -> Right $ E x
   _ -> Left "want literal"
 
 paren = between (res "(") (res ")")
@@ -693,7 +693,7 @@ sqExpr = between (res "[") (res "]") $
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> fmap V (con <|> var) <|> E <$> wantLit
+  <|> fmap V (con <|> var) <|> wantLit
 
 aexp = foldl1 A <$> some atom
 
@@ -938,7 +938,7 @@ rewritePats dcs = \case
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase dcs v Tip [(p, b)]) x (zip at vt)
       flip (foldr L) vs <$> rewriteCase dcs vh Tip cs
 
-patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") (E lit)) b)) x) $ V "join#") y
+patEq lit b x y = A (L "join#" $ A (A (A (V "if") (A (A (V "==") lit) b)) x) $ V "join#") y
 
 rewriteCase dcs caseVar tab = \case
   [] -> flush $ V "join#"
@@ -1190,7 +1190,7 @@ showExtra = \case
   StrCon s -> ('"':) . (s++) . ('"':)
 
 showPat = \case
-  PatLit e -> showExtra e
+  PatLit t -> showAst False t
   PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
   PatCon s ps -> (s++) . ("TODO"++)
 

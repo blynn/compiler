@@ -124,7 +124,7 @@ quasiquoteStr = charSeq "[r|" *> quasiquoteBody
 quasiquoteBody = charSeq "|]" *> pure [] <|> (:) <$> rawSat (const True) <*> quasiquoteBody
 tokStr = quoteStr <|> quasiquoteStr
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
-literal = lexeme $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
+literal = lexeme . fmap E $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
 varish = lexeme $ nameTailed small
 bad s = Parser \pasta -> badpos pasta s
 badpos pasta s = Left $ loc $ ": " ++ s where
@@ -390,7 +390,7 @@ sqExpr = between lSquare rSquare $
   )
   <|> pure (V "[]")
 
-fbind = A <$> (E . StrCon <$> var) <*> (res "=" *> expr)
+fbind = A <$> (V <$> var) <*> (res "=" *> expr)
 
 fBinds v = (do
     fbs <- between lBrace rBrace $ sepBy1 fbind comma
@@ -399,7 +399,7 @@ fBinds v = (do
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
   <|> cas <|> lam <|> (paren comma *> pure (V ","))
-  <|> V <$> (con <|> var) <|> E <$> literal
+  <|> V <$> (con <|> var) <|> literal
   >>= fBinds
 
 aexp = foldl1 A <$> some atom

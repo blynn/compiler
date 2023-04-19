@@ -5,7 +5,7 @@ import Map
 data Type = TC String | TV String | TAp Type Type
 arr a b = TAp (TAp (TC "->") a) b
 data Extra = Basic String | Const Int | ChrCon Char | StrCon String | Link String String Qual
-data Pat = PatLit Extra | PatVar String (Maybe Pat) | PatCon String [Pat]
+data Pat = PatLit Ast | PatVar String (Maybe Pat) | PatCon String [Pat]
 data Ast = E Extra | V String | A Ast Ast | L String Ast | Pa [([Pat], Ast)] | Proof Pred
 data Constr = Constr String [Type]
 data Pred = Pred String Type

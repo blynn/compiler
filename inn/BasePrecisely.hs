@@ -222,8 +222,6 @@ takeWhile p xs@(x:xt)
   | p x  = x : takeWhile p xt
   | True = []
 
-divMod a b = (q, a - b*q) where q = div a b
-
 a ^ b = case b of
   0 -> 1
   1 -> a
@@ -289,7 +287,10 @@ class Integral a where
   quot :: a -> a -> a
   rem :: a -> a -> a
   toInteger :: a -> Integer
-  -- TODO: divMod, quotRem
+  divMod :: a -> a -> (a, a)
+  divMod a b = (q, a - b*q) where q = div a b
+  quotRem :: a -> a -> (a, a)
+  quotRem a b = (q, a - b*q) where q = quot a b
 
 instance Ring Int where
   (+) = intAdd
