@@ -90,6 +90,8 @@ find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
+head (h:_) = h
+tail (_:t) = t
 isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
@@ -105,6 +107,8 @@ intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
 intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
+and = foldr (&&) True
+or = foldr (||) False
 zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
 data State s a = State (s -> (a, s))

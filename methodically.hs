@@ -122,6 +122,9 @@ find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
 concat = foldr (++) []
 map = flip (foldr . ((:) .)) []
+head (h:_) = h
+tail (_:t) = t
+isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 instance Functor [] where fmap = map
 concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
@@ -134,6 +137,8 @@ intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
 intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
 all f = foldr (&&) True . map f
 any f = foldr (||) False . map f
+and = foldr (&&) True
+or = foldr (||) False
 upFrom n = n : upFrom (n + 1)
 zipWith f xs ys = case xs of [] -> []; x:xt -> case ys of [] -> []; y:yt -> f x y : zipWith f xt yt
 zip = zipWith (,)
@@ -313,52 +318,113 @@ showType t = case t of
   TAp a b -> par $ showType a . (' ':) . showType b
 showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
 
--- Lexer.
-data LexState = LexState String (Int, Int)
-data Lexer a = Lexer (LexState -> Either String (a, LexState))
-instance Functor Lexer where fmap f (Lexer x) = Lexer $ fmap (first f) . x
-instance Applicative Lexer where
-  pure x = Lexer \inp -> Right (x, inp)
-  f <*> x = Lexer \inp -> case lex f inp of
-    Left e -> Left e
-    Right (fun, t) -> case lex x t of
-      Left e -> Left e
-      Right (arg, u) -> Right (fun arg, u)
-instance Monad Lexer where
-  return = pure
-  x >>= f = Lexer \inp -> case lex x inp of
-    Left e -> Left e
-    Right (a, t) -> lex (f a) t
-instance Alternative Lexer where
-  empty = Lexer \_ -> Left ""
-  (<|>) x y = Lexer \inp -> either (const $ lex y inp) Right $ lex x inp
+-- Parser.
+data ParserState = ParserState
+  [(Char, (Int, Int))]
+  String
+  [Int]
+  (Map String (Int, Assoc))
 
-lex (Lexer f) inp = f inp
-advanceRC x (r, c)
-  | n `elem` [10, 11, 12, 13] = (r + 1, 1)
-  | n == 9 = (r, (c + 8)`mod`8)
-  | True = (r, c + 1)
-  where n = ord x
-pos = Lexer \inp@(LexState _ rc) -> Right (rc, inp)
-sat f = Lexer \(LexState inp rc) -> case inp of
-  [] -> Left "EOF"
-  h:t -> if f h then Right (h, LexState t $ advanceRC h rc) else Left "unsat"
+readme  (ParserState x _ _ _) = x
+landin  (ParserState _ x _ _) = x
+indents (ParserState _ _ x _) = x
+precs   (ParserState _ _ _ x) = x
+putReadme  x (ParserState _ a b c) = ParserState x a b c
+putLandin  x (ParserState a _ b c) = ParserState a x b c
+modIndents f (ParserState a b x c) = ParserState a b (f x) c
+data Parser a = Parser (ParserState -> Either String (a, ParserState))
+getParser (Parser p) = p
+instance Functor Parser where fmap f x = pure f <*> x
+instance Applicative Parser where
+  pure x = Parser \inp -> Right (x, inp)
+  (Parser f) <*> (Parser x) = Parser \inp -> do
+    (fun, t) <- f inp
+    (arg, u) <- x t
+    pure (fun arg, u)
+instance Monad Parser where
+  return = pure
+  (Parser x) >>= f = Parser \inp -> do
+    (a, t) <- x inp
+    getParser (f a) t
+instance Alternative Parser where
+  empty = bad ""
+  x <|> y = Parser \inp -> either (const $ getParser y inp) Right $ getParser x inp
+getPrecs = Parser \st -> Right (precs st, st)
+putPrecs ps = Parser \(ParserState a b c _) -> Right ((), ParserState a b c ps)
+
+notFollowedBy p = do
+  saved <- Parser \pasta -> Right (pasta, pasta)
+  ret <- p *> pure (bad "") <|> pure (pure ())
+  Parser \_ -> Right ((), saved)
+  ret
+
+parse f str = getParser f $ ParserState (rowcol str (1, 1)) [] [] $ singleton ":" (5, RAssoc) where
+  rowcol s rc = case s of
+    [] -> []
+    h:t -> (h, rc) : rowcol t (advanceRC (ord h) rc)
+  advanceRC n (r, c)
+    | n `elem` [10, 11, 12, 13] = (r + 1, 1)
+    | n == 9 = (r, (c + 8)`mod`8)
+    | True = (r, c + 1)
+
+indentOf pasta = case readme pasta of
+  [] -> 1
+  (_, (_, c)):_ -> c
+
+ins c pasta = putLandin (c:landin pasta) pasta
+
+angle n pasta = case indents pasta of
+  m:ms | m == n -> ins ';' pasta
+       | n + 1 <= m -> ins '}' $ angle n $ modIndents tail pasta
+  _ -> pasta
+
+curly n pasta = case indents pasta of
+  m:ms | m + 1 <= n -> ins '{' $ modIndents (n:) pasta
+  [] | 1 <= n -> ins '{' $ modIndents (n:) pasta
+  _ -> ins '{' . ins '}' $ angle n pasta
+
+sat f = Parser \pasta -> case landin pasta of
+  c:t -> if f c then Right (c, putLandin t pasta) else Left "unsat"
+  [] -> case readme pasta of
+    [] -> case indents pasta of
+      [] -> Left "EOF"
+      m:ms | m /= 0 && f '}' -> Right ('}', modIndents tail pasta)
+      _ -> Left "unsat"
+    (h, _):t | f h -> let
+      p' = putReadme t pasta
+      in case h of
+        '}' -> case indents pasta of
+          0:ms -> Right (h, modIndents tail p')
+          _ -> Left "unsat"
+        '{' -> Right (h, modIndents (0:) p')
+        _ -> Right (h, p')
+    _ -> Left "unsat"
+
 char c = sat (c ==)
 
-data Token = Reserved String
-  | VarId String | VarSym String | ConId String | ConSym String
-  | Lit Extra
+rawSat f = Parser \pasta -> case readme pasta of
+  [] -> Left "EOF"
+  (h, _):t -> if f h then Right (h, putReadme t pasta) else Left "unsat"
+
+eof = Parser \pasta -> case pasta of
+  ParserState [] [] _ _ -> Right ((), pasta)
+  _ -> badpos pasta "want eof"
+
+comment = rawSat ('-' ==) *> some (rawSat ('-' ==)) *>
+  (rawSat isNewline <|> rawSat (not . isSymbol) *> many (rawSat $ not . isNewline) *> rawSat isNewline) *> pure True
+spaces = isNewline <$> rawSat isSpace
+whitespace = do
+  offside <- or <$> many (spaces <|> comment)
+  Parser \pasta -> Right ((), if offside then angle (indentOf pasta) pasta else pasta)
 
 hexValue d
   | d <= '9' = ord d - ord '0'
   | d <= 'F' = 10 + ord d - ord 'A'
   | d <= 'f' = 10 + ord d - ord 'a'
-isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 isNewline c = ord c `elem` [10, 11, 12, 13]
 isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
-dashes = char '-' *> some (char '-')
-comment = dashes *> (sat isNewline <|> sat (not . isSymbol) *> many (sat $ not . isNewline) *> sat isNewline)
-small = sat \x -> ((x <= 'z') && ('a' <= x)) || (x == '_')
+isSmall c = c <= 'z' && 'a' <= c || c == '_'
+small = sat isSmall
 large = sat \x -> (x <= 'Z') && ('A' <= x)
 hexit = sat \x -> (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
@@ -366,109 +432,67 @@ hexit = sat \x -> (x <= '9') && ('0' <= x)
 digit = sat \x -> (x <= '9') && ('0' <= x)
 decimal = foldl (\n d -> 10*n + ord d - ord '0') 0 <$> some digit
 hexadecimal = foldl (\n d -> 16*n + hexValue d) 0 <$> some hexit
+nameTailChar = small <|> large <|> digit <|> char '\''
+nameTailed p = liftA2 (:) p $ many nameTailChar
 
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n')
-tokOne delim = escape <|> sat (delim /=)
+escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> char '0' *> pure (chr 0) <|> char 'x' *> (chr <$> hexadecimal))
+tokOne delim = escape <|> rawSat (delim /=)
 
+charSeq = mapM char
 tokChar = between (char '\'') (char '\'') (tokOne '\'')
-tokStr = between (char '"') (char '"') $ many (tokOne '"')
+quoteStr = between (char '"') (char '"') $ many $ many (charSeq "\\&") *> tokOne '"'
+quasiquoteStr = charSeq "[r|" *> quasiquoteBody
+quasiquoteBody = charSeq "|]" *> pure [] <|> (:) <$> rawSat (const True) <*> quasiquoteBody
+tokStr = quoteStr <|> quasiquoteStr
 integer = char '0' *> (char 'x' <|> char 'X') *> hexadecimal <|> decimal
-literal = Lit . Const <$> integer <|> Lit . ChrCon <$> tokChar <|> Lit . StrCon <$> tokStr
-varId = fmap ck $ liftA2 (:) small $ many (small <|> large <|> digit <|> char '\'') where
-  ck s = (if elem s
+literal = lexeme . fmap E $ Const <$> integer <|> ChrCon <$> tokChar <|> StrCon <$> tokStr
+varish = lexeme $ nameTailed small
+bad s = Parser \pasta -> badpos pasta s
+badpos pasta s = Left $ loc $ ": " ++ s where
+  loc = case readme pasta of
+    [] -> ("EOF"++)
+    (_, (r, c)):_ -> ("row "++) . showInt r . (" col "++) . showInt c
+varId = do
+  s <- varish
+  if elem s
     ["export", "case", "class", "data", "default", "deriving", "do", "else", "foreign", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "module", "newtype", "of", "then", "type", "where", "_"]
-    then Reserved else VarId) s
-varSym = fmap ck $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol) where
-  ck s = (if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then Reserved else VarSym) s
+    then bad $ "reserved: " ++ s else pure s
+varSymish = lexeme $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol)
+varSym = lexeme $ do
+  s <- varSymish
+  if elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"] then bad $ "reserved: " ++ s else pure s
 
-conId = fmap ConId $ liftA2 (:) large $ many (small <|> large <|> digit <|> char '\'')
-conSym = fmap ck $ liftA2 (:) (char ':') $ many $ sat isSymbol where
-  ck s = (if elem s [":", "::"] then Reserved else ConSym) s
-special = Reserved . (:"") <$> asum (char <$> "(),;[]`{}")
+conId = lexeme $ nameTailed large
+conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
+conSym = do
+  s <- conSymish
+  if elem s [":", "::"] then bad $ "reserved: " ++ s else pure s
+special c = lexeme $ sat (c ==)
+comma = special ','
+semicolon = special ';'
+lParen = special '('
+rParen = special ')'
+lBrace = special '{'
+rBrace = special '}'
+lSquare = special '['
+rSquare = special ']'
+backquote = special '`'
 
-rawBody = (char '|' *> char ']' *> pure []) <|> (:) <$> sat (const True) <*> rawBody
-rawQQ = char '[' *> char 'r' *> char '|' *> (Lit . StrCon <$> rawBody)
-lexeme = rawQQ <|> varId <|> varSym <|> conId <|> conSym
-  <|> special <|> literal
+lexeme f = f <* whitespace
 
-whitespace = many (sat isSpace <|> comment)
-lexemes = whitespace *> many (lexeme <* whitespace)
+lexemePrelude = whitespace *>
+  Parser \pasta -> case getParser (res "module" <|> (:[]) <$> char '{') pasta of
+    Left _ -> Right ((), curly (indentOf pasta) pasta)
+    Right _ -> Right ((), pasta)
 
-getPos = Lexer \st@(LexState _ rc) -> Right (rc, st)
-posLexemes = whitespace *> many (liftA2 (,) getPos lexeme <* whitespace)
-
--- Layout.
-data Landin = Curly Int | Angle Int | PL ((Int, Int), Token)
-beginLayout xs = case xs of
-  [] -> [Curly 0]
-  ((r', _), Reserved "{"):_ -> margin r' xs
-  ((r', c'), _):_ -> Curly c' : margin r' xs
-
-landin ls@(((r, _), Reserved "{"):_) = margin r ls
-landin ls@(((r, c), _):_) = Curly c : margin r ls
-landin [] = []
-
-margin r ls@(((r', c), _):_) | r /= r' = Angle c : embrace ls
-margin r ls = embrace ls
-
-embrace ls@(x@(_, Reserved w):rest) | elem w ["let", "where", "do", "of"] =
-  PL x : beginLayout rest
-embrace ls@(x@(_, Reserved "\\"):y@(_, Reserved "case"):rest) =
-  PL x : PL y : beginLayout rest
-embrace (x@((r,_),_):xt) = PL x : margin r xt
-embrace [] = []
-
-data Ell = Ell [Landin] [Int]
-insPos x ts ms = Right (x, Ell ts ms)
-ins w = insPos ((0, 0), Reserved w)
-
-ell (Ell toks cols) = case toks of
-  t:ts -> case t of
-    Angle n -> case cols of
-      m:ms | m == n -> ins ";" ts (m:ms)
-           | n + 1 <= m -> ins "}" (Angle n:ts) ms
-      _ -> ell $ Ell ts cols
-    Curly n -> case cols of
-      m:ms | m + 1 <= n -> ins "{" ts (n:m:ms)
-      [] | 1 <= n -> ins "{" ts [n]
-      _ -> ell $ Ell (PL ((0,0),Reserved "{"): PL ((0,0),Reserved "}"):Angle n:ts) cols
-    PL x -> case snd x of
-      Reserved "}" -> case cols of
-        0:ms -> ins "}" ts ms
-        _ -> Left "unmatched }"
-      Reserved "{" -> insPos x ts (0:cols)
-      _ -> insPos x ts cols
-  [] -> case cols of
-    [] -> Left "EOF"
-    m:ms | m /= 0 -> ins "}" [] ms
-    _ -> Left "missing }"
-
-parseErrorRule (Ell toks cols) = case cols of
-  m:ms | m /= 0 -> Right $ Ell toks ms
-  _ -> Left "missing }"
-
--- Parser.
-data ParseState = ParseState Ell (Map String (Int, Assoc))
-data Parser a = Parser (ParseState -> Either String (a, ParseState))
-getPrecs = Parser \st@(ParseState _ precs) -> Right (precs, st)
-putPrecs precs = Parser \(ParseState s _) -> Right ((), ParseState s precs)
-parse (Parser f) inp = f inp
-instance Functor Parser where fmap f x = pure f <*> x
-instance Applicative Parser where
-  pure x = Parser \inp -> Right (x, inp)
-  x <*> y = Parser \inp -> case parse x inp of
-    Left e -> Left e
-    Right (fun, t) -> case parse y t of
-      Left e -> Left e
-      Right (arg, u) -> Right (fun arg, u)
-instance Monad Parser where
-  return = pure
-  (>>=) x f = Parser \inp -> case parse x inp of
-    Left e -> Left e
-    Right (a, t) -> parse (f a) t
-instance Alternative Parser where
-  empty = Parser \_ -> Left ""
-  x <|> y = Parser \inp -> either (const $ parse y inp) Right $ parse x inp
+curlyCheck f = do
+  Parser \pasta -> Right ((), modIndents (0:) pasta)
+  r <- f
+  Parser \pasta -> let pasta' = modIndents tail pasta in case readme pasta of
+    []              -> Right ((), curly 0 pasta')
+    ('{', _):_      -> Right ((), pasta')
+    (_, (_, col)):_ -> Right ((), curly col pasta')
+  pure r
 
 ro = E . Basic
 conOf (Constr s _) = s
@@ -514,40 +538,17 @@ addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) = let
 addDefs ds (Neat tycl fs typed dcs ffis exs) = Neat tycl (ds ++ fs) typed dcs ffis exs
 addExport e f (Neat tycl fs typed dcs ffis exs) = Neat tycl fs typed dcs ffis ((e, f):exs)
 
-want f = Parser \(ParseState inp precs) -> case ell inp of
-  Right ((_, x), inp') -> (, ParseState inp' precs) <$> f x
-  Left e -> Left e
+parseErrorRule = Parser \pasta -> case indents pasta of
+  m:ms | m /= 0 -> Right ('}', modIndents tail pasta)
+  _ -> badpos pasta "missing }"
 
-braceYourself = Parser \(ParseState inp precs) -> case ell inp of
-  Right ((_, Reserved "}"), inp') -> Right ((), ParseState inp' precs)
-  _ -> case parseErrorRule inp of
-    Left e -> Left e
-    Right inp' -> Right ((), ParseState inp' precs)
+res w@(h:_) = reservedSeq *> pure w <|> bad ("want \"" ++ w ++ "\"") where
+  reservedSeq = if elem w ["let", "where", "do", "of"]
+    then curlyCheck $ lexeme $ charSeq w *> notFollowedBy nameTailChar
+    else lexeme $ charSeq w *> notFollowedBy (if isSmall h then nameTailChar else sat isSymbol)
 
-res w = want \case
-  Reserved s | s == w -> Right s
-  _ -> Left $ "want \"" ++ w ++ "\""
-wantInt = want \case
-  Lit (Const i) -> Right i
-  _ -> Left "want integer"
-wantString = want \case
-  Lit (StrCon s) -> Right s
-  _ -> Left "want string"
-wantConId = want \case
-  ConId s -> Right s
-  _ -> Left "want conid"
-wantVarId = want \case
-  VarId s -> Right s
-  _ -> Left "want varid"
-wantVarSym = want \case
-  VarSym s -> Right s
-  _ -> Left "want VarSym"
-wantLit = want \case
-  Lit x -> Right $ E x
-  _ -> Left "want literal"
-
-paren = between (res "(") (res ")")
-braceSep f = between (res "{") braceYourself $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) (res ";")
+paren = between lParen rParen
+braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
 
 maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
 
@@ -577,59 +578,43 @@ instance Eq Assoc where
 precOf s precTab = maybe 9 fst $ mlookup s precTab
 assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
 
-parseErr s = Parser $ const $ Left s
-
 opFold precTab f x xs = case xs of
   [] -> pure x
   (op, y):xt -> case find (\(op', _) -> assocOf op precTab /= assocOf op' precTab) xt of
     Nothing -> case assocOf op precTab of
       NAssoc -> case xt of
         [] -> pure $ f op x y
-        y:yt -> parseErr "NAssoc repeat"
+        y:yt -> bad "NAssoc repeat"
       LAssoc -> pure $ foldl (\a (op, y) -> f op a y) x xs
       RAssoc -> pure $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
-    Just y -> parseErr "Assoc clash"
+    Just y -> bad "Assoc clash"
 
-qconop = want f <|> between (res "`") (res "`") (want g) where
-  f (ConSym s) = Right s
-  f (Reserved ":") = Right ":"
-  f _ = Left ""
-  g (ConId s) = Right s
-  g _ = Left "want qconop"
+qconop = conSym <|> res ":" <|> between backquote backquote conId
 
-wantqconsym = want \case
-  ConSym s -> Right s
-  Reserved ":" -> Right ":"
-  _ -> Left "want qconsym"
+qconsym = conSym <|> res ":"
 
-op = wantqconsym <|> want f <|> between (res "`") (res "`") (want g) where
-  f (VarSym s) = Right s
-  f _ = Left ""
-  g (VarId s) = Right s
-  g (ConId s) = Right s
-  g _ = Left "want op"
+op = qconsym <|> varSym <|> between backquote backquote (conId <|> varId)
+con = conId <|> paren qconsym
+var = varId <|> paren varSym
 
-con = wantConId <|> paren wantqconsym
-var = wantVarId <|> paren wantVarSym
-
-tycon = want \case
-  ConId s -> Right $ if s == "String" then TAp (TC "[]") (TC "Char") else TC s
-  _ -> Left "want type constructor"
+tycon = do
+  s <- conId
+  pure $ if s == "String" then TAp (TC "[]") (TC "Char") else TC s
 
 aType =
-  res "(" *>
-    (   res ")" *> pure (TC "()")
-    <|> (foldr1 (TAp . TAp (TC ",")) <$> sepBy1 _type (res ",")) <* res ")")
+  lParen *>
+    (   rParen *> pure (TC "()")
+    <|> (foldr1 (TAp . TAp (TC ",")) <$> sepBy1 _type comma) <* rParen)
   <|> tycon
-  <|> TV <$> wantVarId
-  <|> (res "[" *> (res "]" *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* res "]")))
+  <|> TV <$> varId
+  <|> (lSquare *> (rSquare *> pure (TC "[]") <|> TAp (TC "[]") <$> (_type <* rSquare)))
 bType = foldl1 TAp <$> some aType
 _type = foldr1 arr <$> sepBy bType (res "->")
 
 fixityDecl w a = do
   res w
-  n <- wantInt
-  os <- sepBy op (res ",")
+  n <- lexeme integer
+  os <- sepBy op comma
   precs <- getPrecs
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
@@ -639,15 +624,15 @@ cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
 
 genDecl = (,) <$> var <*> (res "::" *> _type)
 
-classDecl = res "class" *> (addClass <$> wantConId <*> (TV <$> wantVarId) <*> (res "where" *> cDecls))
+classDecl = res "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (res "where" *> cDecls))
 
-simpleClass = Pred <$> wantConId <*> _type
-scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass $ res ",")
+simpleClass = Pred <$> conId <*> _type
+scontext = (:[]) <$> simpleClass <|> paren (sepBy simpleClass comma)
 
 instDecl = res "instance" *>
   ((\ps cl ty defs -> addInstance cl ps ty defs) <$>
   (scontext <* res "=>" <|> pure [])
-    <*> wantConId <*> _type <*> (res "where" *> braceDef))
+    <*> conId <*> _type <*> (res "where" *> braceDef))
 
 letin = addLets <$> between (res "let") (res "in") braceDef <*> expr
 ifthenelse = (\a b c -> A (A (A (V "if") a) b) c) <$>
@@ -656,15 +641,15 @@ listify = foldr (\h t -> A (A (V ":") h) t) (V "[]")
 
 alts = joinIsFail . Pa <$> braceSep ((\x y -> ([x], y)) <$> pat <*> guards "->")
 cas = flip A <$> between (res "case") (res "of") expr <*> alts
-lamCase = res "case" *> alts
+lamCase = curlyCheck (res "case") *> alts
 lam = res "\\" *> (lamCase <|> liftA2 onePat (some apat) (res "->" *> expr))
 
 flipPairize y x = A (A (V ",") x) y
-moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr (res ",")
-thenComma = res "," *> ((flipPairize <$> moreCommas) <|> pure (A (V ",")))
+moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr comma
+thenComma = comma *> ((flipPairize <$> moreCommas) <|> pure (A (V ",")))
 parenExpr = (&) <$> expr <*> (((\v a -> A (V v) a) <$> op) <|> thenComma <|> pure id)
-rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> res ",")) <*> expr
-section = res "(" *> (parenExpr <* res ")" <|> rightSect <* res ")" <|> res ")" *> pure (V "()"))
+rightSect = ((\v a -> L "@" $ A (A (V v) $ V "@") a) <$> (op <|> (:"") <$> comma)) <*> expr
+section = lParen *> (parenExpr <* rParen <|> rightSect <* rParen <|> rParen *> pure (V "()"))
 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = (\p x -> Just . A (V ">>=" `A` x) . onePat [p] . maybePureUnit) <$> pat <*> (res "<-" *> expr)
@@ -678,22 +663,22 @@ compQual =
   <|> (\b e -> A (A (A (V "if") b) e) $ V "[]") <$> expr
   <|> addLets <$> (res "let" *> braceDef)
 
-sqExpr = between (res "[") (res "]") $
+sqExpr = between lSquare rSquare $
   ((&) <$> expr <*>
     (   res ".." *>
       (   (\hi lo -> (A (A (V "enumFromTo") lo) hi)) <$> expr
       <|> pure (A (V "enumFrom"))
       )
     <|> res "|" *>
-      ((. A (V "pure")) . foldr (.) id <$> sepBy1 compQual (res ","))
-    <|> (\t h -> listify (h:t)) <$> many (res "," *> expr)
+      ((. A (V "pure")) . foldr (.) id <$> sepBy1 compQual comma)
+    <|> (\t h -> listify (h:t)) <$> many (comma *> expr)
     )
   )
   <|> pure (V "[]")
 
 atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
-  <|> cas <|> lam <|> (paren (res ",") *> pure (V ","))
-  <|> fmap V (con <|> var) <|> wantLit
+  <|> cas <|> lam <|> (paren comma *> pure (V ","))
+  <|> V <$> (con <|> var) <|> literal
 
 aexp = foldl1 A <$> some atom
 
@@ -708,15 +693,15 @@ exprP n = if n <= 9
   else aexp
 expr = exprP 0
 
-gcon = wantConId <|> paren (wantqconsym <|> res ",") <|> ((++) <$> res "[" <*> (res "]"))
+gcon = conId <|> paren (qconsym <|> (:"") <$> comma) <|> (lSquare *> rSquare *> pure "[]")
 
 apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatVar Nothing <$> (res "_" *> pure "_")
   <|> flip PatCon [] <$> gcon
-  <|> PatLit <$> wantLit
+  <|> PatLit <$> literal
   <|> foldr (\h t -> PatCon ":" [h, t]) (PatCon "[]" [])
-    <$> between (res "[") (res "]") (sepBy pat $ res ",")
-  <|> paren (foldr1 pairPat <$> sepBy1 pat (res ",") <|> pure (PatCon "()" []))
+    <$> between lSquare rSquare (sepBy pat comma)
+  <|> paren (foldr1 pairPat <$> sepBy1 pat comma <|> pure (PatCon "()" []))
   where pairPat x y = PatCon "," [x, y]
 
 binPat f x y = PatCon f [x, y]
@@ -745,7 +730,7 @@ leftyPat p expr = case pvars of
   where
   pvars = filter (/= "_") $ patVars p
 def = liftA2 (\l r -> [(l, r)]) var (liftA2 defOnePat (many apat) $ guards "=")
-  <|> (pat >>= \x -> opDef x <$> wantVarSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
+  <|> (pat >>= \x -> opDef x <$> varSym <*> pat <*> guards "=" <|> leftyPat x <$> guards "=")
 coalesce = \case
   [] -> []
   h@(s, x):t -> case t of
@@ -754,36 +739,27 @@ coalesce = \case
       f (Pa vsts) (Pa vsts') = Pa $ vsts ++ vsts'
       f _ _ = error "bad multidef"
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
-defSemi = coalesce . concat <$> sepBy1 def (some $ res ";")
+defSemi = coalesce . concat <$> sepBy1 def (some semicolon)
 braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
-conop = want f <|> between (res "`") (res "`") (want g) where
-  f (ConSym s) = Right s
-  f _ = Left ""
-  g (ConId s) = Right s
-  g _ = Left "want conop"
+conop = conSym <|> between backquote backquote conId
 constr = (\x c y -> Constr c [x, y]) <$> aType <*> conop <*> aType
-  <|> Constr <$> wantConId <*> many aType
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> wantConId <*> many wantVarId) <*> sepBy constr (res "|")
+  <|> Constr <$> conId <*> many aType
+adt = addAdt <$> between (res "data") (res "=") (simpleType <$> conId <*> many varId) <*> sepBy constr (res "|")
 
 topdecls = braceSep
-  (   adt
+  $   adt
   <|> classDecl
   <|> instDecl
   <|> res "foreign" *>
-    (   res "import" *> var *> (addFFI <$> wantString <*> var <*> (res "::" *> _type))
-    <|> res "export" *> var *> (addExport <$> wantString <*> var)
+    (   res "import" *> var *> (addFFI <$> lexeme tokStr <*> var <*> (res "::" *> _type))
+    <|> res "export" *> var *> (addExport <$> lexeme tokStr <*> var)
     )
   <|> addDefs <$> defSemi
   <|> fixity *> pure id
-  )
 
-offside xs = Ell (landin xs) []
-program s = case lex posLexemes $ LexState s (1, 1) of
-  Left e -> Left e
-  Right (xs, LexState [] _) -> parse topdecls $ ParseState (offside xs) $ insert ":" (5, RAssoc) Tip
-  Right (_, st) -> Left "unlexable"
+program s = parse (between lexemePrelude eof topdecls) s
 
 -- Primitives.
 primAdts =
@@ -1156,17 +1132,13 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
     mapM perInstance insts
 
-untangle s = case program s of
+untangle s = case fst <$> program s of
   Left e -> Left $ "parse error: " ++ e
-  Right (prog, ParseState s _) -> case s of
-    Ell [] [] -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
-      Neat tycl defs typed dcs ffis exs -> do
-        (qs, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
-        mets <- inferTypeclasses tycl qs dcs
-        pure ((qs, lambF mets), (ffis, exs))
-    _ -> Left $ "parse error: " ++ case ell s of
-      Left e -> e
-      Right (((r, c), _), _) -> ("row "++) . showInt r . (" col "++) . showInt c $ ""
+  Right prog -> case foldr ($) (Neat Tip [] prims Tip [] []) $ primAdts ++ prog of
+    Neat tycl defs typed dcs ffis exs -> do
+      (qs, lambF) <- inferDefs tycl (second (patternCompile dcs) <$> defs) typed
+      mets <- inferTypeclasses tycl qs dcs
+      pure ((qs, lambF mets), (ffis, exs))
 
 optiComb' (subs, combs) (s, lamb) = let
   gosub t = case t of
@@ -1327,14 +1299,12 @@ READREF x y z = z "num(1)" y
 WRITEREF x y z w = w "((mem[arg(2) + 1] = arg(1)), _K)" z
 END = "return;"
 |]
-comb = (,) <$> wantConId <*> ((,) <$> many wantVarId <*> (res "=" *> combExpr))
+comb = (,) <$> conId <*> ((,) <$> many varId <*> (res "=" *> combExpr))
 combExpr = foldl1 A <$> some
-  (V <$> wantVarId <|> E . StrCon <$> wantString <|> paren combExpr)
-comdefs = case lex posLexemes $ LexState comdefsrc (1, 1) of
+  (V <$> varId <|> E . StrCon <$> lexeme tokStr <|> paren combExpr)
+comdefs = case parse (lexemePrelude *> braceSep comb <* eof) comdefsrc of
   Left e -> error e
-  Right (xs, _) -> case parse (braceSep comb) $ ParseState (offside xs) Tip of
-    Left e -> error e
-    Right (cs, _) -> cs
+  Right (cs, _) -> cs
 comEnum s = maybe (error s) id $ lookup s $ zip (fst <$> comdefs) (upFrom 1)
 comName i = maybe undefined id $ lookup i $ zip (upFrom 1) (fst <$> comdefs)
 

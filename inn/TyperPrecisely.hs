@@ -243,7 +243,7 @@ decodeLets x = ((vts, bods), expr) where
   stripVars acc (A (E (Basic "in")) t) = (acc [], t)
   stripVars acc e = error $ show e
   stripBods acc [] t = (acc [], t)
-  stripBods acc (vt:vtt) (A x y) = stripBods (acc . (x:)) vtt y
+  stripBods acc (_:t) (A x y) = stripBods (acc . (x:)) t y
   stripBods acc _ e = error $ "bods: " ++ show e
 
 infer' msg typed loc ast = case ast of
@@ -285,7 +285,6 @@ infer' msg typed loc ast = case ast of
             a1 = proofApply cs ax
             tab = zip pAnno $ ('*':) . show <$> [1..]
           pure $ foldr L (forProof (subProofVar tab) a1) $ snd <$> tab
-
     second (triangulate $ zip (fst <$> vartypes) axs) <$> rec loc' x
   A x y -> do
     (tx, ax) <- rec loc x

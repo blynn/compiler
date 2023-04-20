@@ -491,4 +491,4 @@ topdecls = braceSep
 
 haskell = between lexemePrelude eof $ some $ (,) <$> (res "module" *> conId <* res "where" <|> pure "Main") <*> topdecls
 
-parseProgram s = fmap fst $ parse haskell s
+parseProgram s = fst <$> parse haskell s

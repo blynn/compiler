@@ -33,4 +33,4 @@ div = Prelude.div
 mod = Prelude.mod
 succ :: Int -> Int
 succ = Prelude.succ
-#include "mutually.hs"
+#include "guardedly.hs"
