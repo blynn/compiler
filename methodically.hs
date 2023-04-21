@@ -109,6 +109,18 @@ foldM f z0 xs = foldr (\x k z -> f z x >>= k) pure xs z0
 instance Applicative IO where pure = ioPure ; (<*>) f x = ioBind f \g -> ioBind x \y -> ioPure (g y)
 instance Monad IO where return = ioPure ; (>>=) = ioBind
 instance Functor IO where fmap f x = ioPure f <*> x
+class Show a where showsPrec :: Int -> a -> String -> String
+shows = showsPrec 0
+show x = shows x ""
+showInt__ n
+  | 0 == n = id
+  | True = showInt__ (n`div`10) . (chr (48+n`mod`10):)
+instance Show Int where
+  showsPrec _ n
+    | 0 == n = ('0':)
+    | 1 <= n = showInt__ n
+    | 2 * n == 0 = ("-2147483648"++)
+    | True = ('-':) . showInt__ (0 - n)
 putStr = mapM_ $ putChar . ord
 getContents = getChar >>= \n -> if 0 <= n then (chr n:) <$> getContents else pure []
 interact f = getContents >>= putStr . f
@@ -308,15 +320,6 @@ overFreePro s f t = case t of
 beta s t x = overFree s (const t) x
 
 showParen b f = if b then ('(':) . f . (')':) else f
-showInt' n = if 0 == n then id else (showInt' $ n`div`10) . ((:) (chr $ 48+n`mod`10))
-showInt n = if 0 == n then ('0':) else showInt' n
-par = showParen True
-showType t = case t of
-  TC s -> (s++)
-  TV s -> (s++)
-  TAp (TAp (TC "->") a) b -> par $ showType a . (" -> "++) . showType b
-  TAp a b -> par $ showType a . (' ':) . showType b
-showPred (Pred s t) = (s++) . (' ':) . showType t . (" => "++)
 
 -- Parser.
 data ParserState = ParserState
@@ -451,7 +454,7 @@ bad s = Parser \pasta -> badpos pasta s
 badpos pasta s = Left $ loc $ ": " ++ s where
   loc = case readme pasta of
     [] -> ("EOF"++)
-    (_, (r, c)):_ -> ("row "++) . showInt r . (" col "++) . showInt c
+    (_, (r, c)):_ -> ("row "++) . shows r . (" col "++) . shows c
 varId = do
   s <- varish
   if elem s
@@ -510,7 +513,7 @@ mkAdtDefs t cs = mkCase t cs : map (scottConstr t cs) cs
 mkFFIHelper n t acc = case t of
   TC s -> acc
   TAp (TC "IO") _ -> acc
-  TAp (TAp (TC "->") x) y -> L (showInt n "") $ mkFFIHelper (n + 1) y $ A (V $ showInt n "") acc
+  TAp (TAp (TC "->") x) y -> L (show n) $ mkFFIHelper (n + 1) y $ A (V $ show n) acc
 
 updateDcs cs dcs = foldr (\(Constr s _) m -> insert s cs m) dcs cs
 addAdt t cs (Neat tycl fs typed dcs ffis exs) =
@@ -518,7 +521,7 @@ addAdt t cs (Neat tycl fs typed dcs ffis exs) =
 
 emptyTycl = Tycl [] []
 addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes) = let
-  vars = take (size sigs) $ (`showInt` "") <$> upFrom 0
+  vars = take (size sigs) $ show <$> upFrom 0
   selectors = zipWith (\var (s, t) -> (s, (Qual [Pred classId v] t,
     L "@" $ A (V "@") $ foldr L (V var) vars))) vars $ toAscList sigs
   defaults = map (\(s, t) -> if member s sigs then ("{default}" ++ s, t) else error $ "bad default method: " ++ s) $ toAscList defs
@@ -529,7 +532,7 @@ addClass classId v (sigs, defs) (Neat tycl fs typed dcs ffis ffes) = let
 addInstance classId ps ty ds (Neat tycl fs typed dcs ffis exs) = let
   Tycl ms is = maybe emptyTycl id $ mlookup classId tycl
   tycl' = insert classId (Tycl ms $ Instance ty name ps (fromList ds):is) tycl
-  name = '{':classId ++ (' ':showType ty "") ++ "}"
+  name = '{':classId ++ (' ':shows ty "}")
   in Neat tycl' fs typed dcs ffis exs
 
 addFFI foreignname ourname t (Neat tycl fs typed dcs ffis exs) = let
@@ -910,7 +913,7 @@ rewritePats dcs = \case
       let k = length as0
       n <- get
       put $ n + k
-      let vs@(vh:vt) = take k $ (`showInt` "#") <$> upFrom n
+      let vs@(vh:vt) = take k $ (`shows` "#") <$> upFrom n
       cs <- flip mapM vsxs \(a:at, x) -> (a,) <$> foldM (\b (p, v) -> rewriteCase dcs v Tip [(p, b)]) x (zip at vt)
       flip (foldr L) vs <$> rewriteCase dcs vh Tip cs
 
@@ -965,7 +968,7 @@ varBind s t = case t of
   TV v -> Right $ if v == s then [] else [(s, t)]
   TAp a b -> if occurs s t then Left "occurs check" else Right [(s, t)]
 
-ufail t u = Left $ ("unify fail: "++) . showType t . (" vs "++) . showType u $ ""
+ufail t u = Left $ ("unify fail: "++) . shows t . (" vs "++) . shows u $ ""
 
 mgu t u = case t of
   TC a -> case u of
@@ -1000,7 +1003,7 @@ match h t = case h of
 instantiate' t n tab = case t of
   TC s -> ((t, n), tab)
   TV s -> case lookup s tab of
-    Nothing -> let va = TV (showInt n "") in ((va, n + 1), (s, va):tab)
+    Nothing -> let va = TV $ show n in ((va, n + 1), (s, va):tab)
     Just v -> ((v, n), tab)
   TAp x y -> let
     ((t1, n1), tab1) = instantiate' x n tab
@@ -1034,12 +1037,12 @@ infer typed loc ast csn@(cs, n) = case ast of
     \cs -> Right ((va, A ax ay), (cs, n2))
   L s x -> first (\(t, a) -> (arr va t, L s a)) <$> infer typed ((s, va):loc) x (cs, n + 1)
   where
-  va = TV (showInt n "")
+  va = TV $ show n
   insta ty = ((ty1, foldl A ast (map Proof preds)), (cs, n1))
     where (Qual preds ty1, n1) = instantiate ty n
 
 findInstance tycl qn@(q, n) p@(Pred cl ty) insts = case insts of
-  [] -> let v = '*':showInt n "" in Right (((p, v):q, n + 1), V v)
+  [] -> let v = '*':show n in Right (((p, v):q, n + 1), V v)
   Instance h name ps _:rest -> case match h ty of
     Nothing -> findInstance tycl qn p rest
     Just subs -> foldM (\(qn1, t) (Pred cl1 ty1) -> second (A t)
@@ -1099,7 +1102,7 @@ inferDefs tycl defs typed = let
   outs k = maybe [] id $ mlookup k $ snd graph
   in foldM (inferDefs' tycl defmap) (typeTab, (lambs++)) $ scc ins outs $ map fst $ toAscList defmap
 
-dictVars ps n = (zip ps $ map (('*':) . flip showInt "") $ upFrom n, n + length ps)
+dictVars ps n = (zip ps $ map (('*':) . show) $ upFrom n, n + length ps)
 
 inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) where
   perClass (classId, Tycl sigs insts) = do
@@ -1126,7 +1129,7 @@ inferTypeclasses tycl typed dcs = concat <$> mapM perClass (toAscList tycl) wher
               Just subx -> do
                 ((ps3, _), tr) <- prove' tycl (dictVars ps2 0) (proofApply subx ax)
                 if length ps2 /= length ps3
-                  then Left $ ("want context: "++) . (foldr (.) id $ showPred . fst <$> ps3) $ name
+                  then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
                   else pure tr
         ms <- mapM perMethod sigs
         pure (name, flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms)
@@ -1153,32 +1156,46 @@ optiComb' (subs, combs) (s, lamb) = let
     _ -> (subs, combs')
 optiComb lambs = ($[]) . snd $ foldl optiComb' ([], id) lambs
 
+instance Show Type where
+  showsPrec _ = \case
+    TC s -> (s++)
+    TV s -> (s++)
+    TAp (TAp (TC "->") a) b -> showParen True $ shows a . (" -> "++) . shows b
+    TAp a b -> showParen True $ shows a . (' ':) . shows b
+instance Show Pred where
+  showsPrec _ (Pred s t) = (s++) . (' ':) . shows t . (" => "++)
+instance Show Qual where
+  showsPrec _ (Qual ps t) = foldr (.) id (map shows ps) . shows t
+instance Show Extra where
+  showsPrec _ = \case
+    Basic s -> (s++)
+    Const i -> shows i
+    ChrCon c -> ('\'':) . (c:) . ('\'':)
+    StrCon s -> ('"':) . (s++) . ('"':)
+instance Show Pat where
+  showsPrec _ = \case
+    PatLit e -> shows e
+    PatVar s mp -> (s++) . maybe id ((('@':) .) . shows) mp
+    PatCon s ps -> (s++) . foldr (.) id (((' ':) .) . shows <$> ps)
+
 showVar s@(h:_) = showParen (elem h ":!#$%&*+./<=>?@\\^|-~") (s++)
 
-showExtra = \case
-  Basic s -> (s++)
-  Const i -> showInt i
-  ChrCon c -> ('\'':) . (c:) . ('\'':)
-  StrCon s -> ('"':) . (s++) . ('"':)
+instance Show Ast where
+  showsPrec prec = \case
+    E e -> shows e
+    V s -> showVar s
+    A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
+    L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
+    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Proof p -> ("{Proof "++) . shows p . ("}"++)
 
-showPat = \case
-  PatLit t -> showAst False t
-  PatVar s mp -> (s++) . maybe id ((('@':) .) . showPat) mp
-  PatCon s ps -> (s++) . ("TODO"++)
+instance Show IntTree where
+  showsPrec prec = \case
+    LfVar s -> showVar s
+    Lf extra -> shows extra
+    Nd x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
 
-showAst prec t = case t of
-  E e -> showExtra e
-  V s -> showVar s
-  A x y -> showParen prec $ showAst False x . (' ':) . showAst True y
-  L s t -> par $ ('\\':) . (s++) . (" -> "++) . showAst prec t
-  Pa vsts -> ('\\':) . par (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (par . showPat) vs) . (" -> "++) . showAst False t) vsts)
-  Proof p -> ("{Proof "++) . showPred p . ("}"++)
-
-showTree prec t = case t of
-  LfVar s -> showVar s
-  Lf extra -> showExtra extra
-  Nd x y -> showParen prec $ showTree False x . (' ':) . showTree True y
-disasm (s, t) = (s++) . (" = "++) . showTree False t . (";\n"++)
+disasm (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 dumpCombs s = case untangle s of
   Left err -> err
@@ -1187,14 +1204,12 @@ dumpCombs s = case untangle s of
 dumpLambs s = case untangle s of
   Left err -> err
   Right ((_, lambs), _) -> foldr ($) [] $
-    (\(s, t) -> (s++) . (" = "++) . showAst False t . ('\n':)) <$> lambs
-
-showQual (Qual ps t) = foldr (.) id (map showPred ps) . showType t
+    (\(s, t) -> (s++) . (" = "++) . shows t . ('\n':)) <$> lambs
 
 dumpTypes s = case untangle s of
   Left err -> err
   Right ((typed, _), _) -> ($ "") $ foldr (.) id $
-    map (\(s, q) -> (s++) . (" :: "++) . showQual q . ('\n':)) $ toAscList typed
+    map (\(s, q) -> (s++) . (" :: "++) . shows q . ('\n':)) $ toAscList typed
 
 appCell (hp, bs) x y = (hp, (hp + 2, bs . (x:) . (y:)))
 
@@ -1231,20 +1246,20 @@ ffiDeclare (name, t) = let tys = argList t in concat
 ffiArgs n t = case t of
   TC s -> ("", ((True, s), n))
   TAp (TC "IO") (TC u) -> ("", ((False, u), n))
-  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ showInt n ")") ++) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") x) y -> first (((if 3 <= n then ", " else "") ++ "num(" ++ shows n ")") ++) $ ffiArgs (n + 1) y
 
 ffiDefine n ffis = case ffis of
   [] -> id
   (name, t):xt -> let
     (args, ((isPure, ret), count)) = ffiArgs 2 t
-    lazyn = ("lazy2(" ++) . showInt (if isPure then count - 1 else count + 1) . (", " ++)
-    cont tgt = if isPure then ("_I, "++) . tgt else ("app(arg("++) . showInt (count + 1) . ("), "++) . tgt . ("), arg("++) . showInt count . (")"++)
+    lazyn = ("lazy2(" ++) . shows (if isPure then count - 1 else count + 1) . (", " ++)
+    cont tgt = if isPure then ("_I, "++) . tgt else ("app(arg("++) . shows (count + 1) . ("), "++) . tgt . ("), arg("++) . shows count . (")"++)
     longDistanceCall = (name++) . ("("++) . (args++) . ("); "++) . lazyn
-    in ("case " ++) . showInt n . (": " ++) . if ret == "()"
+    in ("case " ++) . shows n . (": " ++) . if ret == "()"
       then longDistanceCall . cont ("_K"++) . ("); break;"++) . ffiDefine (n - 1) xt
       else ("{u r = "++) . longDistanceCall . cont ("app(_NUM, r)" ++) . ("); break;}\n"++) . ffiDefine (n - 1) xt
 
-genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ showInt n ");return 0;}\n"
+genMain n = "int main(int argc,char**argv){env_argc=argc;env_argv=argv;rts_init();rts_reduce(" ++ shows n ");return 0;}\n"
 
 compile s = case untangle s of
   Left err -> err
@@ -1256,10 +1271,10 @@ compile s = case untangle s of
     . foldr (.) id (map (\(s, _) -> ('_':) . (s++) . (',':)) comdefs)
     . ("};\n"++)
     . ("static const u prog[]={" ++)
-    . foldr (.) id (map (\n -> showInt n . (',':)) mem)
-    . ("};\nstatic const u prog_size="++) . showInt (length mem) . (";\n"++)
+    . foldr (.) id (map (\n -> shows n . (',':)) mem)
+    . ("};\nstatic const u prog_size="++) . shows (length mem) . (";\n"++)
     . ("static u root[]={" ++)
-    . foldr (\(x, y) f -> maybe undefined showInt (mlookup y tab) . (", " ++) . f) id exs
+    . foldr (\(x, y) f -> maybe undefined shows (mlookup y tab) . (", " ++) . f) id exs
     . ("0};\n" ++)
     . (preamble++)
     . (libc++)
@@ -1268,7 +1283,7 @@ compile s = case untangle s of
     . ffiDefine (length ffis - 1) ffis
     . ("\n  }\n}\n" ++)
     . runFun
-    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ showInt n ", \"" ++ fst p ++ "\", " ++ showInt n ")\n") ++)) exs (upFrom 0))
+    . (foldr (.) id $ zipWith (\p n -> (("EXPORT(f" ++ shows n ", \"" ++ fst p ++ "\", " ++ shows n ")\n") ++)) exs (upFrom 0))
     $ maybe "" genMain (mlookup "main" tab)
 
 -- Main VM loop.
@@ -1413,12 +1428,12 @@ void rts_reduce(u n) {
 |]++)
 
 genArg m a = case a of
-  V s -> ("arg("++) . (maybe undefined showInt $ lookup s m) . (')':)
+  V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)
   E (StrCon s) -> (s++)
   A x y -> ("app("++) . genArg m x . (',':) . genArg m y . (')':)
 genArgs m as = foldl1 (.) $ map (\a -> (","++) . genArg m a) as
 genComb (s, (args, body)) = let
-  argc = ('(':) . showInt (length args)
+  argc = ('(':) . shows (length args)
   m = zip args $ upFrom 1
   in ("case _"++) . (s++) . (':':) . (case body of
     A (A x y) z -> ("lazy3"++) . argc . genArgs m [x, y, z] . (");"++)
