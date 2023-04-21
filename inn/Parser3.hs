@@ -273,25 +273,10 @@ res w@(h:_) = reservedSeq *> pure w <|> bad ("want \"" ++ w ++ "\"") where
 paren = between lParen rParen
 braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy ((:) <$> f <|> pure id) semicolon
 
-maybeFix s x = if elem s $ fvPro [] x then A (V "fix") (L s x) else x
-
-nonemptyTails [] = []
-nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
-
 joinIsFail t = A (L "join#" t) (V "fail#")
 
-addLets ls x = foldr triangle x components where
-  vs = fst <$> ls
-  ios = foldr (\(s, dsts) (ins, outs) ->
-    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
-    (Tip, Tip) $ map (\(s, t) -> (s, intersect (fvPro [] t) vs)) ls
-  components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
-  triangle names expr = let
-    tnames = nonemptyTails names
-    appem vs = foldl1 A $ V <$> vs
-    suball expr = foldl A (foldr L expr $ init names) $ appem <$> init tnames
-    redef tns expr = foldr L (suball expr) tns
-    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined joinIsFail $ lookup x ls) (suball expr) tnames
+addLets ls x = L "let" $ foldr L (L "in" bodies) $ fst <$> ls where
+  bodies = foldr A x $ joinIsFail . snd <$> ls
 
 qconop = conSym <|> res ":" <|> between backquote backquote conId
 

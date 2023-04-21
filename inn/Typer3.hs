@@ -10,26 +10,6 @@ import Ast
 import Parser
 import Unify
 
-app01 s x y = maybe (A (L s x) y) snd $ go x where
-  go expr = case expr of
-    E _ -> Just (False, expr)
-    V v -> Just $ if s == v then (True, y) else (False, expr)
-    A l r -> do
-      (a, l') <- go l
-      (b, r') <- go r
-      if a && b then Nothing else pure (a || b, A l' r')
-    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
-
-optiApp t = case t of
-  A x y -> let
-    x' = optiApp x
-    y' = optiApp y
-    in case x' of
-      L s v -> app01 s v y'
-      _ -> A x' y'
-  L s x -> L s (optiApp x)
-  _ -> t
-
 -- Pattern compiler.
 rewritePats searcher = \case
   [] -> pure $ V "join#"
@@ -160,7 +140,7 @@ extendChain searcher stay down s s' =
   (prec', assoc') = either (const (9, LAssoc)) id $ findPrec searcher s'
 
 secondM f (a, b) = (a,) <$> f b
-patternCompile searcher t = astLink searcher $ optiApp $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
+patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
@@ -192,6 +172,44 @@ proofApply sub a = case a of
 
 typeAstSub sub (t, a) = (apply sub t, proofApply sub a)
 
+maybeFix s x = if go x then A (E $ Link "#" "fix" $ Qual [] $ arr (arr (TV "a") (TV "a")) (TV "a")) (L s x) else x where
+  go = \case
+    V v -> s == v
+    A x y -> go x || go y
+    L v x -> s /= v && go x
+    _ -> False
+
+nonemptyTails [] = []
+nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
+
+fv f bound = \case
+  V s | not (elem s bound) && f s -> [s]
+  A x y -> fv f bound x `union` fv f bound y
+  L s t -> fv f (s:bound) t
+  _ -> []
+
+triangulate vs defs x = foldr triangle x components where
+  tab = zip vs defs
+  ios = foldr (\(s, t) (ins, outs) -> let dsts = fv (`elem` vs) [] t in
+    (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
+    (Tip, Tip) tab
+  components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
+  triangle names expr = let
+    tnames = nonemptyTails names
+    appem vs = foldl1 A $ V <$> vs
+    suball x = foldl A (foldr L x $ init names) $ appem <$> init tnames
+    redef tns x = foldr L (suball x) tns
+    in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
+
+decodeLets x = decodeVars id x where
+  decodeVars f = \case
+    L "in" t -> decodeBodies id vs t
+    L v t -> decodeVars (f . (v:)) t
+    where
+    vs = f []
+    decodeBodies g [] x = ((vs, g []), x)
+    decodeBodies g (_:t) (A x y) = decodeBodies (g . (x:)) t y
+
 infer msg typed loc ast csn@(cs, n) = case ast of
   E x -> Right $ case x of
     Basic bug -> error bug
@@ -206,6 +224,9 @@ infer msg typed loc ast csn@(cs, n) = case ast of
     \((tx, ax), csn1) -> rec loc y csn1 >>=
     \((ty, ay), (cs2, n2)) -> unifyMsg msg tx (arr ty va) cs2 >>=
     \cs -> Right ((va, A ax ay), (cs, n2))
+  L "let" lets -> do
+    let ((vars, defs), x) = decodeLets lets
+    rec loc (triangulate vars defs x) csn
   L s x -> first (\(t, a) -> (arr va t, L s a)) <$> rec ((s, Left va):loc) x (cs, n + 1)
   where
   rec = infer msg typed

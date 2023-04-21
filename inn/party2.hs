@@ -25,7 +25,7 @@ dumpRawCombs neat = map go combs where
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
 dumpCombs neat = map go combs where
-  rawCombs = optim . nolam . snd <$> typedAsts neat
+  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 

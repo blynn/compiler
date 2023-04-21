@@ -45,7 +45,7 @@ instance Show Ast where
     V s -> showVar s
     A x y -> showParen (1 <= prec) $ shows x . (' ':) . showsPrec 1 y
     L s t -> showParen True $ ('\\':) . (s++) . (" -> "++) . shows t
-    Pa vsts -> ('\\':) . showParen True (foldr (.) id $ intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts)
+    Pa vsts -> ("\\cases{"++) . foldr (.) id (intersperse (';':) $ map (\(vs, t) -> foldr (.) id (intersperse (' ':) $ map (showParen True . shows) vs) . (" -> "++) . shows t) vsts) . ('}':)
     Proof p -> ("{Proof "++) . shows p . ("}"++)
 
 data Instance = Instance
@@ -83,13 +83,6 @@ patVars = \case
   PatLit _ -> []
   PatVar s m -> s : maybe [] patVars m
   PatCon _ args -> concat $ patVars <$> args
-
-fvPro bound expr = case expr of
-  V s | not (elem s bound) -> [s]
-  A x y -> fvPro bound x `union` fvPro bound y
-  L s t -> fvPro (s:bound) t
-  Pa vsts -> foldr union [] $ map (\(vs, t) -> fvPro (concatMap patVars vs ++ bound) t) vsts
-  _ -> []
 
 fill s a t = case t of
   E _ -> t
