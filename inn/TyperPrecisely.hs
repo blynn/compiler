@@ -208,23 +208,15 @@ maybeFix s x = if go x then A (E $ Basic "Y") (L s x) else x where
 nonemptyTails [] = []
 nonemptyTails xs@(x:xt) = xs : nonemptyTails xt
 
-del x = \case
-  [] -> []
-  h:t -> if h == x then t else h:del x t
-
-findFree vs t = case vs of
-  [] -> []
-  _ -> case t of
-    V v | v `elem` vs -> [v]
-    A x y -> case findFree vs x of
-      [] -> findFree vs y
-      xs -> findFree (vs \\ xs) y ++ xs
-    L s t -> findFree (del s vs) t
-    _ -> []
+fv f bound = \case
+  V s | not (elem s bound) && f s -> [s]
+  A x y -> fv f bound x `union` fv f bound y
+  L s t -> fv f (s:bound) t
+  _ -> []
 
 triangulate tab x = foldr triangle x components where
   vs = fst <$> tab
-  ios = foldr (\(s, t) (ins, outs) -> let dsts = findFree vs t in
+  ios = foldr (\(s, t) (ins, outs) -> let dsts = fv (`elem` vs) [] t in
     (foldr (\dst -> insertWith union dst [s]) ins dsts, insertWith union s dsts outs))
     (Tip, Tip) tab
   components = scc (\k -> maybe [] id $ mlookup k $ fst ios) (\k -> maybe [] id $ mlookup k $ snd ios) vs
@@ -353,12 +345,36 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
+del x = \case
+  [] -> []
+  h:t -> if h == x then t else h:del x t
+
 forFree syms f t = go syms t where
   go syms t = case t of
     E _ -> t
     V s -> if s `elem` syms then f t else t
     A x y -> A (go syms x) (go syms y)
     L s t' -> L s $ go (del s syms) t'
+
+app01 s x y = maybe (A (L s x) y) snd $ go x where
+  go expr = case expr of
+    V v -> Just $ if s == v then (True, y) else (False, expr)
+    A l r -> do
+      (a, l') <- go l
+      (b, r') <- go r
+      if a && b then Nothing else pure (a || b, A l' r')
+    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
+    _ -> Just (False, expr)
+
+optiApp t = case t of
+  A x y -> let
+    x' = optiApp x
+    y' = optiApp y
+    in case x' of
+      L s v -> app01 s v y'
+      _ -> A x' y'
+  L s x -> L s (optiApp x)
+  _ -> t
 
 inferno searcher decls typed defmap syms = let
   anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
@@ -375,7 +391,7 @@ inferno searcher decls typed defmap syms = let
         soln <- maybe (Left $ s ++ ": match failed: " ++ show qAnno ++ " vs " ++ show (apply ms t)) Right $ match (apply ms t) tAnno
         Right (((s, (tAnno, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
   gatherPreds (acc, psn) (s, (t, a)) = do
-    (psn, a) <- prove searcher psn a
+    (psn, a) <- prove searcher psn $ optiApp a
     pure ((s, (t, a)):acc, psn)
   in do
     ((stas, preds), (soln, _)) <- foldM principal (([], []), (Tip, 0)) syms
@@ -439,7 +455,7 @@ inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst
       case match tx t2 of
         Nothing -> Left "class/instance type conflict"
         Just subx -> do
-          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
+          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) $ optiApp $ proofApply subx ax
           if length ps2 /= length ps3
             then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
             else pure tr

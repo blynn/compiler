@@ -466,26 +466,6 @@ rewriteCombs tab = optim . go where
       | True -> follow (w:seen) w
     t -> t
 
-app01 s x y = maybe (A (L s x) y) snd $ go x where
-  go expr = case expr of
-    E _ -> Just (False, expr)
-    V v -> Just $ if s == v then (True, y) else (False, expr)
-    A l r -> do
-      (a, l') <- go l
-      (b, r') <- go r
-      if a && b then Nothing else pure (a || b, A l' r')
-    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
-
-optiApp t = case t of
-  A x y -> let
-    x' = optiApp x
-    y' = optiApp y
-    in case x' of
-      L s v -> app01 s v y'
-      _ -> A x' y'
-  L s x -> L s (optiApp x)
-  _ -> t
-
 slideY name orig = stripArgs id orig where
   stripArgs f = \case
     L s x | s /= name -> stripArgs (f . (s:)) x
@@ -644,7 +624,7 @@ compile topSize libc opts s = do
     $ mainStr
 
 combTyped objs typed = rewriteCombs rawCombs <$> rawCombs where
-  slid = mapWithKey (\k (_, t) -> slideY k $ optiApp t) typed
+  slid = mapWithKey (\k (_, t) -> slideY k t) typed
   rawCombs = optim . nolam . inlineLone objs <$> slid
 
 compileModule objs (name, neat) = do

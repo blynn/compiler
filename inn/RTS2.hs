@@ -349,30 +349,10 @@ rewriteCombs tab = optim . go where
             | True -> follow (w:seen) w
     t -> t
 
-app01 s x y = maybe (A (L s x) y) snd $ go x where
-  go expr = case expr of
-    E _ -> Just (False, expr)
-    V v -> Just $ if s == v then (True, y) else (False, expr)
-    A l r -> do
-      (a, l') <- go l
-      (b, r') <- go r
-      if a && b then Nothing else pure (a || b, A l' r')
-    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
-
-optiApp t = case t of
-  A x y -> let
-    x' = optiApp x
-    y' = optiApp y
-    in case x' of
-      L s v -> app01 s v y'
-      _ -> A x' y'
-  L s x -> L s (optiApp x)
-  _ -> t
-
 codegenLocal (name, neat) (bigmap, (hp, f)) =
   (insert name localmap bigmap, (hp', f . (mem++)))
   where
-  rawCombs = optim . nolam . optiApp . snd <$> typedAsts neat
+  rawCombs = optim . nolam . snd <$> typedAsts neat
   combs = toAscList $ rewriteCombs rawCombs <$> rawCombs
   (symtab, (_, (hp', memF))) = runState (asm combs) (Tip, (hp, id))
   localmap = resolveLocal <$> symtab

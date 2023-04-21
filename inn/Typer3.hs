@@ -278,6 +278,26 @@ forFree cond f bound t = case t of
   L s t' -> L s $ rec (s:bound) t'
   where rec = forFree cond f
 
+app01 s x y = maybe (A (L s x) y) snd $ go x where
+  go expr = case expr of
+    V v -> Just $ if s == v then (True, y) else (False, expr)
+    A l r -> do
+      (a, l') <- go l
+      (b, r') <- go r
+      if a && b then Nothing else pure (a || b, A l' r')
+    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
+    _ -> Just (False, expr)
+
+optiApp t = case t of
+  A x y -> let
+    x' = optiApp x
+    y' = optiApp y
+    in case x' of
+      L s v -> app01 s v y'
+      _ -> A x' y'
+  L s x -> L s (optiApp x)
+  _ -> t
+
 inferno searcher decls typed defmap syms = let
   anno s = maybe (Left $ TV $ ' ':s) Right $ mlookup s decls
   loc = zip syms $ anno <$> syms
@@ -293,7 +313,7 @@ inferno searcher decls typed defmap syms = let
         soln <- maybe (Left $ s ++ ": match failed: " ++ show qAnno ++ " vs " ++ show (apply ms t)) Right $ match (apply ms t) tAnno
         Right (((s, (t, a)):acc, pAnno ++ preds), (soln @@ ms, n1))
   gatherPreds (acc, psn) (s, (t, a)) = do
-    (psn, a) <- prove searcher psn a
+    (psn, a) <- prove searcher psn $ optiApp a
     pure ((s, (t, a)):acc, psn)
   in do
     ((stas, preds), (soln, _)) <- foldM principal (([], []), (Tip, 0)) syms
@@ -344,7 +364,7 @@ inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst
       case match tx t2 of
         Nothing -> Left "class/instance type conflict"
         Just subx -> do
-          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) (proofApply subx ax)
+          ((ps3, _), tr) <- prove searcher (dictVars ps2 0) $ optiApp $ proofApply subx ax
           if length ps2 /= length ps3
             then Left $ ("want context: "++) . (foldr (.) id $ shows . fst <$> ps3) $ name
             else pure tr
