@@ -4,7 +4,14 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
+
+BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
+
+para.c: para.lhs precisely $(BCS_HS); (./unlit < para.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
+
+%.wasm.o: %.c; clang --target=wasm32 -O2 -ffreestanding -c $^ -o $@
+%.wasm: %.wasm.o; wasm-ld --import-undefined --no-entry --initial-memory=41943040 $^ -o $@
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
@@ -35,8 +42,6 @@ reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/r
 DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs
 doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
 
-doh.o:doh.c;$(WCC) $^ -c -o $@
-doh.wasm:doh.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 doh.html:doh.txt menu.html;cobble mathbook menu $<
 
 chat.html:chat.txt menu.html;cobble mathbook menu $<
@@ -71,15 +76,11 @@ $(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map ParserPreci
 $(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
 
 $(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
-imp.o:imp.c;$(WCC) $^ -c -o $@
-imp.wasm:imp.o;$(WLD) --initial-memory=41943040 --global-base=0 $^ -o $@
 
 $(call cat,tmp.hs,BasePrecisely System AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
 #warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
-warts.o:warts.c;$(WCC) $^ -c -o $@
-warts.wasm:warts.o;$(WLD) --initial-memory=41943040 --global-base=0 --no-gc-sections $^ -o $@
 $(call party,warts2hs.c,crossly,Base1 System warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@
 $(call party,tabby.c,precisely,BasePrecisely System ../tabby)

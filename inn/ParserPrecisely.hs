@@ -531,7 +531,7 @@ braceDef = do
 simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = conSym <|> between backquote backquote conId
 fieldDecl = (\vs t -> map (, t) vs) <$> sepBy1 var comma <*> (res "::" *> _type)
-constr = try ((\x c y -> Constr c [("", x), ("", y)]) <$> aType <*> conop <*> aType)
+constr = try ((\x c y -> Constr c [("", x), ("", y)]) <$> bType <*> conop <*> bType)
   <|> Constr <$> conId <*>
     (   concat <$> between lBrace rBrace (fieldDecl `sepBy` comma)
     <|> map ("",) <$> many aType)

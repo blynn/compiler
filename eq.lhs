@@ -154,20 +154,19 @@ import Control.Arrow
 import Data.Foldable
 import Data.Function
 import Data.List (intersect, union, delete, elemIndex)
-import Data.Maybe
 #ifdef __HASTE__
 import Control.Monad
 import Haste.DOM
 import Haste.Events
 import Text.Parsec hiding (space)
 (<>) = (++)
-type Parser = Parsec String ()
+type Charser = Parsec String ()
 lowerChar = lower; upperChar = upper; alphaNumChar = alphaNum;
 digitChar = digit; space = spaces; some = many1
 #else
 import Text.Megaparsec hiding (match)
 import Text.Megaparsec.Char
-type Parser = Parsec () String
+type Charser = Parsec () String
 #endif
 
 #ifdef __HASTE__
@@ -263,7 +262,7 @@ instance Show (ExpF String) where
 
 instance Show Rule where show (Rule l r) = show l <> " = " <> show r
 
-expr :: Parser Exp
+expr :: Charser Exp
 expr = foldl (&) <$> apps <*> many ((\f b a -> C f :@ a :@ b) <$> op <*> apps) where
   op   = pure <$> sp (oneOf "+*")
   apps = foldl1 (:@) <$> some (con <|> var <|> between (spch '(') (spch ')') expr)
@@ -272,10 +271,10 @@ expr = foldl (&) <$> apps <*> many ((\f b a -> C f :@ a :@ b) <$> op <*> apps) w
   con  = C <$> sp (some digitChar <|> (:) <$> upperChar <*> many alphaNumChar)
   var  = V <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
 
-rule :: Parser Rule
+rule :: Charser Rule
 rule = Rule <$> expr <*> (char '=' *> space *> expr)
 
-mustParse :: Parser a -> String -> a
+mustParse :: Charser a -> String -> a
 mustParse p = either undefined id . parse p ""
 
 peano = mustParse rule <$>
@@ -606,7 +605,7 @@ complete cmp eqs todo crits = case crits of
       | otherwise -> rec (new:eqs) todo $ rest <> (concatMap (criticalPairs new) $ new:eqs)
     Nothing       -> rec eqs (eq:todo) rest
   [] | null todo  -> Just eqs
-     | otherwise  -> find (isJust . normalizeThenOrient cmp eqs) todo
+     | otherwise  -> asum (normalizeThenOrient cmp eqs <$> todo)
        >>= (\e -> rec eqs (delete e todo) [e])
   where rec = complete cmp
 

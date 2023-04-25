@@ -4,7 +4,6 @@ Want to see a magic trick? Pick a function, any function:
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script src='para.js'></script>
 <p>
 <button id='id'>id</button>
 <button id='const'>const</button>
@@ -139,26 +138,19 @@ function hideshow(s) {
 ++++++++++
 
 \begin{code}
-{-# LANGUAGE CPP #-}
+{- To compile with GHC, replace boilerplate with:
 {-# LANGUAGE FlexibleContexts, LambdaCase #-}
-#ifdef __HASTE__
-{-# LANGUAGE PackageImports #-}
-import Data.List
-import "mtl" Control.Monad.State
-import Text.Parsec hiding (space)
-import Control.Monad
-import Haste.DOM
-import Haste.Events
-type Parser = Parsec String ()
-lowerChar = lower; upperChar = upper; alphaNumChar = alphaNum; space = spaces
-(<>) = (++)
-#else
+import Text.Megaparsec hiding (State)
+import Text.Megaparsec.Char
 import Control.Monad.State
 import Data.List
-import Text.Megaparsec
-import Text.Megaparsec.Char
-type Parser = Parsec () String
-#endif
+type Charser = Parsec () String
+-}
+module Main where
+import Base
+import System
+import Charser
+foreign export ccall "main" main
 \end{code}
 
 Yuck!
@@ -172,7 +164,6 @@ infixr 5 :->
 data Type = TFunctor Type | TC String | TV String | Type :-> Type deriving Show
 data Expr = Var String | Expr :@ Expr | Lam String Expr
 data Theorem = Expr := Expr
-type ExprE = Expr -> Expr
 
 data Scratch = Scratch  -- Scratch space.
   { varCount :: Int
@@ -183,7 +174,7 @@ theorize :: String -> Type -> [Theorem]
 theorize fun t = evalState (theorize' (Var fun) (Var fun) t)
   $ Scratch 0 []
 
-theorize' :: MonadState Scratch m => Expr -> Expr -> Type -> m [Theorem]
+theorize' :: Expr -> Expr -> Type -> State Scratch [Theorem]
 theorize' lhs rhs t = case t of
   a :-> b -> do
     v <- genVar
@@ -194,7 +185,7 @@ theorize' lhs rhs t = case t of
     scr <- get
     pure $ (lhs := r) : conds scr
 
-relabel :: MonadState Scratch m => ExprE -> Type -> Expr -> m Expr
+relabel :: (Expr -> Expr) -> Type -> Expr -> State Scratch Expr
 relabel f t v = case t of
   TC _ -> pure v
   TV s -> pure $ f (Var $ s <> "R") :@ v
@@ -218,7 +209,7 @@ relabel f t v = case t of
       }
     pure v'
 
-genVar :: MonadState Scratch m => m Expr
+genVar :: State Scratch Expr
 genVar = do
   s <- get
   let n = varCount s
@@ -251,7 +242,7 @@ instance Show Expr where
 instance Show Theorem where
   show (l := r) = show l <> " = " <> show r
 
-decl :: Parser (String, Type)
+decl :: Charser (String, Type)
 decl = (,) <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
   <*> (sp (string "::") *> typ)
   where
@@ -263,6 +254,7 @@ decl = (,) <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
     <|> between (spch '(') (spch ')') typ
   typeCon = TC <$> sp ((:) <$> upperChar <*> many alphaNumChar)
   typeVar = TV <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
+  sp :: Charser a -> Charser a
   sp   = (<* space)
   spch = sp . char
 
@@ -289,33 +281,57 @@ go s = case parse (decl <* eof) "" s of
   Left err -> show err
   Right (s, t) -> pretty t $ theorize s t
 
-#ifdef __HASTE__
 main :: IO ()
-main = withElems ["in", "out", "magic"] $ \[iEl, oEl, magicB] -> do
-  let
-    setup text = do
-      let f = head $ words text
-      Just b <- elemById f
-      let
-        act = do
-          setProp iEl "value" text
-          setProp oEl "value" ""
-      void $ b `onEvent` Click $ const act
-      when (f == "concat") act
-  setup "id :: a -> a"
-  setup "const :: a -> b -> a"
-  setup "concat :: [[a]] -> a"
-  setup "sort :: (a -> a -> Bool) -> [a] -> [a]"
-  setup "fold :: (a -> b -> b) -> b -> [a] -> b"
-  let presto = setProp oEl "value" . go =<< getProp iEl "value"
-  void $ magicB `onEvent` Click $ const $ presto
-  void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)
-    $ presto >> preventDefault
-#endif
+main = interact go
 \end{code}
 
+[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 </div>
+<script>
+function setup(s) {
+  const name = s.substr(0, s.indexOf(" "));
+  function act() {
+    document.getElementById("in").value = s;
+    document.getElementById("out").value = "";
+  }
+  document.getElementById(name).addEventListener("click", act);
+  if (name == "concat") act();
+}
+
+setup("id :: a -> a");
+setup("const :: a -> b -> a");
+setup("concat :: [[a]] -> a");
+setup("sort :: (a -> a -> Bool) -> [a] -> [a]");
+setup("fold :: (a -> b -> b) -> b -> [a] -> b");
+
+const ctx = {};
+
+function presto() {
+  const s = document.getElementById("in").value;
+  ctx.out = [];
+  ctx.inp = (new TextEncoder()).encode(s);
+  ctx.cursor = 0;
+  ctx.instance.exports["main"]();
+  document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
+}
+
+async function loadWasm() {
+  try {
+    ctx.instance = (await WebAssembly.instantiateStreaming(fetch('para.wasm'), {env:
+      { putchar: c  => ctx.out.push(c)
+      , eof    : () => ctx.cursor == ctx.inp.length
+      , getchar: () => ctx.inp[ctx.cursor++]
+      }})).instance;
+
+    document.getElementById("in").addEventListener("keydown", (event) => { if (event.key == "Enter") { presto(); event.preventDefault(); }});
+    document.getElementById("magic").addEventListener("click", (event) => presto());
+  } catch(err) {
+    console.log(err);
+  }
+}
+loadWasm();
+</script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 == Already paid for ==
