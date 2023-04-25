@@ -301,7 +301,7 @@ function setup(s) {
 
 setup("id :: a -> a");
 setup("const :: a -> b -> a");
-setup("concat :: [[a]] -> a");
+setup("concat :: [[a]] -> [a]");
 setup("sort :: (a -> a -> Bool) -> [a] -> [a]");
 setup("fold :: (a -> b -> b) -> b -> [a] -> b");
 

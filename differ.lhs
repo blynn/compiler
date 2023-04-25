@@ -2,7 +2,6 @@
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script src='differ.js'></script>
 <p>
 <button id='example'>C to F</button>
 <button id='lambda'>clover</button>
@@ -39,13 +38,16 @@ function hideshow(s) {
 ++++++++++
 
 \begin{code}
-{-# LANGUAGE CPP #-}
-#ifdef __HASTE__
-import Control.Monad
-import Haste.DOM
-import Haste.Events
-#endif
-import Text.Parsec
+module Main where
+import Base
+import Charser
+import System
+foreign export ccall "main" main
+{- GHC edition:
+import Text.Megaparsec
+import Text.Megaparsec.Char
+type Charser = Parsec () String
+-}
 \end{code}
 
 ++++++++++
@@ -139,7 +141,7 @@ We repeatedly nudge our guesses according to our two test cases:
 \begin{code}
 rate = 0.0001
 step x y (p, q) = (p - oopsp p q x y * rate, q - oopsq p q x y * rate)
-learn = iterate (step 100 212 . step (-40) (-40)) (1.23, 4.56)
+learn = iterate (step 100 212 . step (0-40) (0-40)) (1.23, 4.56)
 \end{code}
 
 where we've defined the size of a nudge to be 0.0001 times the slope of the
@@ -220,15 +222,15 @@ d expr = case expr of
   Var v -> Var $ Dee v
   x :+ y -> d x :+ d y
   x :* y -> (x :* d y) :+ (d x :* y)
-  x :^ y -> (y :* (x :^ (y :+ Con (-1))):* d x)
+  x :^ y -> (y :* (x :^ (y :+ Con (0-1))):* d x)
     :+ ((Log :@ x) :* (x :^ y) :* d y)
   Lam v x -> Lam (Dee v) $ d x
   f :@ x | Lam (Dee v) y <- d f -> sub (Dee v) (d x) $ sub v x y
-  Inv -> lzdz $ Con (-1) :* (Inv :@ (z :* z))
+  Inv -> lzdz $ Con (0-1) :* (Inv :@ (z :* z))
   Log -> lzdz $ Inv :@ z
   Exp -> lzdz $ Exp :@ z
   Sin -> lzdz $ Cos :@ z
-  Cos -> lzdz $ Con (-1) :* (Sin :@ z)
+  Cos -> lzdz $ Con (0-1) :* (Sin :@ z)
   where
   z = Var $ S "z"
   lzdz x = Lam (Dee $ S "z") $ x :* Var (Dee $ S "z")
@@ -279,20 +281,26 @@ instance Show Expr where
 We supply a parser so it's less painful to play with our functions.
 
 \begin{code}
-line :: Parsec String () Expr
+chainl1 p op = foldl (\x (f, y) -> f x y) <$> p <*> (many $ (,) <$> op <*> p)
+chainr1 p op = go id where
+  go d = do
+    x <- p
+    (op >>= \f -> go (d . (f x:))) <|> pure (foldr ($) x $ d [])
+
+line :: Charser Expr
 line = expr <* eof where
   expr = pwr `chainl1` ((spch '+' *> pure (:+))
-    <|> (spch '-' *> pure (\x y -> x :+ (Con (-1) :* y))))
+    <|> (spch '-' *> pure (\x y -> x :+ (Con (0-1) :* y))))
   pwr = term `chainr1` (spch '^' *> pure (:^))
   term = apps  `chainl1` ((spch '*' >> pure (:*))
     <|> (spch '/' *> pure (\x y -> x :* (Inv :@ y))))
-  apps = dOrApply id <$> many1 atm
+  apps = dOrApply id <$> some atm
   dOrApply acc [Just one]     = acc one
   dOrApply acc (Nothing:rest) = acc (d $ dOrApply id rest)
   dOrApply acc (Just f:rest)  = dOrApply (acc . (f :@)) rest
 
   atm = Just <$> (lam <|> num <|> between (spch '(') (spch ')') expr)
-    <|> dWord <$> many1 letter <* spaces
+    <|> dWord <$> some letterChar <* space
 
   dWord s = if s == "d" then Nothing else Just $ word s
   word "sin" = Sin
@@ -302,10 +310,10 @@ line = expr <* eof where
   word s     = Var $ S s
   lam = spch '\\' *> do
     Var v <- apps
-    string "->" *> spaces *> (Lam v <$> expr)
-  num  = Con . fromDecimal <$> (many1 digit <* spaces)
-  spch :: Char -> Parsec String () Char
-  spch c = char c <* spaces
+    string "->" *> space *> (Lam v <$> expr)
+  num  = Con . fromDecimal <$> (some digitChar <* space)
+  spch :: Char -> Charser Char
+  spch c = char c <* space
   fromDecimal = foldl (\n d -> 10*n + fromEnum d - fromEnum '0') 0
 \end{code}
 
@@ -324,27 +332,7 @@ go s = case parse line "" s of
   Left err -> "parse error: " ++ show err
   Right expr -> show expr
 
-#ifdef __HASTE__
-main :: IO ()
-main = withElems ["in", "out", "go"] $ \[iEl, oEl, goB] -> do
-  let
-    setup button text = do
-      Just b <- elemById button
-      let
-        act = do
-          setProp iEl "value" text
-          setProp oEl "value" ""
-      void $ b `onEvent` Click $ const act
-      when (button == "example") act
-  setup "example" "d((\\z -> z*z)(p*100 + q - 212))"
-  setup "implicit" "d(\\x -> \\y -> sin(x + y) - cos(x*y) + 1)"
-  setup "lambda" "d ((\\z -> z^3) (x*x + y^2) - (\\z -> z*z) (x^2 - y*y))"
-  setup "second" "d (d y / d x) / d x"
-  let diff = setProp oEl "value" . go =<< getProp iEl "value"
-  void $ goB `onEvent` Click $ const $ diff
-  void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)
-    $ diff >> preventDefault
-#endif
+main = interact go
 \end{code}
 
 == A second opinion ==
@@ -559,3 +547,45 @@ algorithm].
 Automated theorem proving profits from turning this trick on its head. Early
 theorem provers exhaustively tried every possible value for every variable.
 Later provers improved on this by by computing with variables instead.
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script>
+function setup(name, t) {
+  function act() {
+    document.getElementById("in").value = t;
+    document.getElementById("out").value = "";
+  }
+  document.getElementById(name).addEventListener("click", act);
+  if (name == "example") act();
+}
+setup("example", "d((\\z -> z*z)(p*100 + q - 212))");
+setup("implicit", "d(\\x -> \\y -> sin(x + y) - cos(x*y) + 1)");
+setup("lambda", "d ((\\z -> z^3) (x*x + y^2) - (\\z -> z*z) (x^2 - y*y))");
+setup("second", "d (d y / d x) / d x");
+
+const ctx = {};
+
+function run() {
+  ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
+  ctx.out = [], ctx.cursor = 0;
+  ctx.instance.exports.main();
+  document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
+}
+
+async function loadWasm() {
+  try {
+    ctx.instance = (await WebAssembly.instantiateStreaming(fetch('differ.wasm'), {env:
+      { putchar: c  => ctx.out.push(c)
+      , eof    : () => ctx.cursor == ctx.inp.length
+      , getchar: () => ctx.inp[ctx.cursor++]
+      }})).instance;
+
+    document.getElementById("go").addEventListener("click", (event) => run());
+  } catch(err) {
+    console.log(err);
+  }
+}
+loadWasm();
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

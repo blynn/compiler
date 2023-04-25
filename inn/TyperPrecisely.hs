@@ -554,11 +554,12 @@ prims = let
       ]
 
 expandTypeAliases neat = pure $ if size als == 0 then neat else neat
-  { typedAsts = subTA <$> typedAsts neat
+  { typedAsts = first subQual <$> typedAsts neat
+  , topDecls = subQual <$> topDecls neat
   , dataCons = second (map subDataCons) <$> dataCons neat
   } where
   als = typeAliases neat
-  subTA (Qual ps ty, t) = (Qual ps $ go ty, t)
+  subQual (Qual ps ty) = (Qual ps $ go ty)
   go ty = case ty of
     TC s -> maybe ty id $ mlookup s als
     TAp x y -> TAp (go x) (go y)
