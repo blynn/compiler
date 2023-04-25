@@ -207,15 +207,7 @@ function genlink() {
     + encodeURIComponent(stdin.value);
   out.value = s;
 }
-
-const params = (new URL(window.location.href)).searchParams;
-function parm(k) { const r = params.get(k); if (r) return r; else return ""; }
-
 </script>
-<script src='index.js'></script>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <div style="display:none;">
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -592,64 +584,45 @@ another day.)
 https://github.com/chrisdone/duet[Duet is another tiny implementation of a
 subset of Haskell].
 
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<div id='ui' style='display:none;'>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-\begin{code}
-{-# LANGUAGE OverloadedStrings, LambdaCase #-}
-import Control.Monad (void)
-import Data.Char (isSpace)
-import Haste.DOM
-import Haste.Events
-import Haste.Foreign (ffi)
-import Haste.JSString
-
-main :: IO ()
-main = withElems ["prog", "inp", "out"] $ \[pEl, iEl, oEl] -> do
-  let
-    setup button inp = do
-      Just b <- elemById button
-      void $ b `onEvent` Click $ const $ go button inp
-    go button inp = do
-      Just grandparent <- elemById $ button ++ ".hs"
-      Just parent <- getFirstChild grandparent
-      Just p <- getFirstChild parent
-      prog <- dropWhile isSpace <$> getProp p "textContent"
-      inscribe prog inp
-    inscribe prog inp = do
-      setProp pEl "value" prog
-      setProp iEl "value" inp
-      setProp oEl "value" ""
-
-  setup "hello" ""
-  setup "edigits" ""
-  setup "primes" ""
-  setup "queens" ""
-  setup "lindon" "you can cage a swallow can't you"
-  setup "sort" "James while John had had had had had had had had had had had a better effect on the teacher"
-  setup "hexmaze" ""
-  setup "gray" ""
-  setup "hilbert" ""
-  setup "douady" ""
-  setup "enigma" "ATTACKATDAWN"
-  setup "sha256" ""
-  setup "keccak" ""
-  go "hello" ""
-
-  let parm = ffi "parm" :: JSString -> IO JSString
-  parm "a" >>= \case
-    "0" -> do
-      prog <- parm "p"
-      inp <- parm "i"
-      inscribe (unpack prog) (unpack inp)
-    "1" -> do
-      preset <- parm "p"
-      inp <- parm "i"
-      go (unpack preset) (unpack inp)
-    _ -> pure ()
-\end{code}
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-</div>
+<script>
+function inscribe(s, inp) {
+  document.getElementById("prog").value = s;
+  document.getElementById("inp").value = inp;
+  document.getElementById("out").value = "";
+}
+
+function setup(name, inp) {
+  document.getElementById(name).addEventListener("click", (event) =>
+    inscribe(document.getElementById(name + ".hs").textContent.trim(), inp));
+}
+
+setup("hello", "");
+setup("edigits", "");
+setup("primes", "");
+setup("queens", "");
+setup("lindon", "you can cage a swallow can't you");
+setup("sort", "James while John had had had had had had had had had had had a better effect on the teacher");
+setup("hexmaze", "");
+setup("gray", "");
+setup("hilbert", "");
+setup("douady", "");
+setup("enigma", "ATTACKATDAWN");
+setup("sha256", "");
+setup("keccak", "");
+
+const params = (new URL(window.location.href)).searchParams;
+const a = params.get("a");
+if (params.get("a")) {
+  if (a == "0") {
+    inscribe(params.get("p"), params.get("i"));
+  } else if (a == "1") {
+    document.getElementById(params.get("p")).click();
+    document.getElementById("inp").value = params.get("i");;
+  }
+} else {
+  document.getElementById("hello").click();
+}
+</script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

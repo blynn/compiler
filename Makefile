@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm index.js
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.js eq.js differ.js atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
 
 %.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
@@ -99,7 +99,7 @@ wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
 douady.html:douady.txt menu.html;cobble mathbook menu $<
 
-index.html:index.lhs index.js imp.wasm hilsys.inc menu;cobble mathbook menu $<
+index.html:index.lhs imp.wasm hilsys.inc menu;cobble mathbook menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)
