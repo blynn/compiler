@@ -12,6 +12,7 @@ import WartsBytes
 data StrLen = StrLen { _str :: String -> String, _len :: Int }
 instance Monoid StrLen where
   mempty = StrLen id 0
+instance Semigroup StrLen where
   (StrLen s1 n1) <> (StrLen s2 n2) = StrLen (s1 . s2) (n1 + n2)
 
 hexValue d

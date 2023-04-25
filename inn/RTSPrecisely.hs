@@ -660,6 +660,7 @@ matrixOpt = \case
   Su e -> first (False:) $ matrixOpt e
   La e -> sledL 1 e
   App e1 e2 -> matrixOpt e1 ## matrixOpt e2
+  Pass (Lf "I") -> ([], Mat [])
   Pass s -> ([], MatFree s)
   where
   sledL n = \case
@@ -669,6 +670,7 @@ matrixOpt = \case
       present = reverse $ take n (g ++ repeat False)
       in (if and present then id else (([], Mat [present]) ##)) (drop n g, d)
 
+  ([], Mat [True:rest]) ## ([], Mat []) = ([], Mat [rest])
   ([], d1) ## ([], d2) = ([], d1 :@ d2)
   (g1, d1) ## (g2, d2)
     | Mat [] <- d1, Mat [] <- d2 = \cases
@@ -678,12 +680,13 @@ matrixOpt = \case
     | Mat [] <- d1, not $ or p1 = go d2
     | otherwise = common
     where
-    x = Mat [p1, p2]
-    common = go $ x :@ d1 :@ d2
+    common = go $ etaRight $ Mat [p1, p2] :@ d1 :@ d2
     zs = zipWithDefault False (,) g1 g2
-    go = (uncurry (||) <$> zs,) . etaRight
+    go = (uncurry (||) <$> zs,)
     (p1, p2) = unzip $ reverse $ filter (uncurry (||)) zs
-    etaRight (Mat [False:t1, True:t2] :@ d :@ Mat []) = etaRight $ Mat [t1, t2] :@ d
+    etaRight (Mat [False:t1, True:t2] :@ d :@ Mat []) = case t1 of
+      [] -> d
+      _ -> Mat [t1, t2] :@ d
     etaRight d = d
 
 zipWithDefault d f     []     ys = f d <$> ys

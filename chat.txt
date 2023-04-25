@@ -85,15 +85,10 @@ function modlist_refresh() {
           modlist_refresh();
         }
         item.addEventListener("keydown", (event) => {
-          if (event.key == "Enter") {
-            mv_commit();
-          } else if (event.key == "Escape") {
-            item.innerHTML = bak;
-          }
+          if (event.key == "Enter") tb.blur();  // Triggers focusout.
+          else if (event.key == "Escape") item.innerHTML = bak;
         });
-        item.addEventListener("focusout", (event) => {
-          mv_commit();
-        });
+        item.addEventListener("focusout", (event) => { mv_commit(); });
       }, true);
       item.appendChild(mv);
     } else {

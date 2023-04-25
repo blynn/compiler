@@ -412,8 +412,8 @@ instance Ring Fixie where
 
 properFraction (Fixie f) = (q, Fixie $ f - q) where q = div f denom
 truncate (Fixie f) = div f denom
-recip (Fixie f) = Fixie $ denom^2 `div` f
-a / b = a * recip b
+instance Field Fixie where
+  recip (Fixie f) = Fixie $ denom*denom `div` f
 
 -- Square roots and cube roots via Newton-Raphson.
 -- In theory, the lowest bits may be wrong since we approach the root from one

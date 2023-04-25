@@ -13,6 +13,7 @@ instance Functor (Map k) where
     Bin sz k x l r -> Bin sz k (f x) (fmap f l) (fmap f r)
 instance Ord k => Monoid (Map k a) where
   mempty = Tip
+instance Ord k => Semigroup (Map k a) where
   x <> y = foldr (\(k, v) m -> insertWith const k v m) y $ assocs x
 size m = case m of Tip -> 0 ; Bin sz _ _ _ _ -> sz
 node k x l r = Bin (1 + size l + size r) k x l r

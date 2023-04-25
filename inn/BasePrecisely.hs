@@ -3,7 +3,7 @@ module Base where
 
 infixr 9 .
 infixr 8 ^
-infixl 7 * , `div` , `mod` , `quot`, `rem`
+infixl 7 * , /, `div` , `mod` , `quot`, `rem`
 infixr 6 <>
 infixl 6 + , -
 infixr 5 ++
@@ -15,13 +15,15 @@ infixl 1 >> , >>=
 infixr 1 =<<
 infixr 0 $
 
+class Semigroup  a where
+  (<>) :: a -> a -> a
 class Monoid a where
   mempty :: a
-  (<>) :: a -> a -> a
   mconcat :: [a] -> a
   mconcat = foldr (<>) mempty
 instance Monoid [a] where
   mempty = []
+instance Semigroup [a] where
   (<>) = (++)
 class Functor f where fmap :: (a -> b) -> f a -> f b
 class Applicative f where
@@ -555,7 +557,6 @@ instance Ring Double where
 
 instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
-(/) = doubleDiv
 instance Show Double where
   showsPrec _ d = case compare d $ doubleFromInt 0 of
    EQ -> ('0':)
@@ -571,3 +572,11 @@ instance Show Double where
     dig = intFromDouble norm
     go = shows dig . ('.':) . shows (intFromDouble $ (tens!!6) * (norm - doubleFromInt dig)) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)
 readInteger = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
+
+class Field a where
+  recip :: a -> a
+  recip = (fromIntegral 1 /)
+  (/) :: a -> a -> a
+  a / b = a * recip b
+
+instance Field Double where (/) = doubleDiv
