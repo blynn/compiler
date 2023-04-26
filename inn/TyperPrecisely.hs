@@ -31,7 +31,7 @@ rewriteCase searcher caseVar tab = \case
   rec = rewriteCase searcher caseVar
   go v x rest = case v of
     PatLit lit -> flush =<< patEq lit (V caseVar) x <$> rec Tip rest
-    PatVar s m -> let x' = fill s (V caseVar) x in case m of
+    PatVar s m -> let x' = fill [(s, V caseVar)] x in case m of
       Nothing -> flush =<< A (L "join#" x') <$> rec Tip rest
       Just v' -> go v' x' rest
     PatCon con args -> rec (insertWith (flip (.)) con ((args, x):) tab) rest
@@ -214,13 +214,7 @@ fv f bound = \case
   L s t -> fv f (s:bound) t
   _ -> []
 
-fill s a t = case t of
-  V v -> if s == v then a else t
-  A x y -> A (fill s a x) (fill s a y)
-  L v u -> if s == v then t else L v $ fill s a u
-  _ -> t
-
-simulFill tab = go m where
+fill tab = go m where
   m = fromList tab
   go m t = case t of
     V s | Just x <- mlookup s m -> x
@@ -237,7 +231,7 @@ triangulate tab x = foldr triangle x components where
   triangle names expr = let
     tnames = nonemptyTails names
     appem vs = foldl1 A $ V <$> vs
-    suball x = simulFill (zip (init names) $ appem <$> init tnames) x
+    suball x = fill (zip (init names) $ appem <$> init tnames) x
     redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
@@ -359,14 +353,17 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-app01 s x y = maybe (A (L s x) y) snd $ go x where
-  go expr = case expr of
-    V v -> Just $ if s == v then (True, y) else (False, expr)
+app01 s x y = maybe orig snd $ go [] x where
+  orig = A (L s x) y
+  go bnd expr = case expr of
+    V v | s == v -> case fv (`elem` bnd) [] y of
+      [] -> Just (True, y)
+      _ -> Nothing
     A l r -> do
-      (a, l') <- go l
-      (b, r') <- go r
+      (a, l') <- go bnd l
+      (b, r') <- go bnd r
       if a && b then Nothing else pure (a || b, A l' r')
-    L v t -> if v == s then Just (False, expr) else second (L v) <$> go t
+    L v t -> if v == s then Just (False, expr) else second (L v) <$> go (v:bnd) t
     _ -> Just (False, expr)
 
 optiApp t = case t of
@@ -402,7 +399,7 @@ inferno searcher decls typed defmap syms = let
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
     let
-      applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t, foldr L (simulFill (subs ++ tab) a) dicts))
+      applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t, foldr L (fill (subs ++ tab) a) dicts))
         where tab = map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
