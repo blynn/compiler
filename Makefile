@@ -15,7 +15,7 @@ atp.c: atp.lhs precisely $(BCS_HS); (./unlit < atp.lhs && cat $(BCS_HS)) | ./pre
 %.wasm.o: %.c; clang --target=wasm32 -O2 -ffreestanding -c $^ -o $@
 %.wasm: %.wasm.o; wasm-ld --import-undefined --no-entry --initial-memory=41943040 $^ -o $@
 
-%.js: %.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
+eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
 menu.html: menu; cobble menu menu
 

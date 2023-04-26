@@ -194,6 +194,13 @@ fill s a t = case t of
   A x y -> A (fill s a x) (fill s a y)
   L v u -> if s == v then t else L v $ fill s a u
 
+simulFill tab = go [] where
+  go bnd t = case t of
+    V s | not $ elem s bnd -> maybe t id $ lookup s tab
+    A x y -> A (go bnd x) (go bnd y)
+    L s t' -> L s $ go (s:bnd) t'
+    _ -> t
+
 triangulate vs defs x = foldr triangle x components where
   tab = zip vs defs
   ios = foldr (\(s, t) (ins, outs) -> let dsts = fv (`elem` vs) [] t in
@@ -203,7 +210,7 @@ triangulate vs defs x = foldr triangle x components where
   triangle names expr = let
     tnames = nonemptyTails names
     appem vs = foldl1 A $ V <$> vs
-    suball x = foldr id x (zipWith fill (init names) $ appem <$> init tnames)
+    suball x = simulFill (zip (init names) $ appem <$> init tnames) x
     redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
@@ -277,13 +284,6 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-forFree cond f bound t = case t of
-  E _ -> t
-  V s -> if (not $ s `elem` bound) && cond s then f t else t
-  A x y -> A (rec bound x) (rec bound y)
-  L s t' -> L s $ rec (s:bound) t'
-  where rec = forFree cond f
-
 app01 s x y = maybe (A (L s x) y) snd $ go x where
   go expr = case expr of
     V v -> Just $ if s == v then (True, y) else (False, expr)
@@ -328,8 +328,8 @@ inferno searcher decls typed defmap syms = let
     let
       preds = fst <$> ps
       dicts = snd <$> ps
-      applyDicts (s, (t, a)) = (s, (Qual preds t,
-        foldr L (forFree (`elem` syms) (\t -> foldl A t $ V <$> dicts) [] a) dicts))
+      tab = map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms
+      applyDicts (s, (t, a)) = (s, (Qual preds t, foldr L (simulFill tab a) dicts))
     pure $ map applyDicts stas
 
 inferDefs searcher defs decls typed = do
