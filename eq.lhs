@@ -605,7 +605,7 @@ complete cmp eqs todo crits = case crits of
       | otherwise -> rec (new:eqs) todo $ rest <> (concatMap (criticalPairs new) $ new:eqs)
     Nothing       -> rec eqs (eq:todo) rest
   [] | null todo  -> Just eqs
-     | otherwise  -> asum (normalizeThenOrient cmp eqs <$> todo)
+     | otherwise  -> find (maybe False (const True) . normalizeThenOrient cmp eqs) todo
        >>= (\e -> rec eqs (delete e todo) [e])
   where rec = complete cmp
 

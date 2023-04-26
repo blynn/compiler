@@ -157,6 +157,10 @@ isSpace c = elem (ord c) [32, 9, 10, 11, 12, 13, 160]
 words s = case dropWhile isSpace s of
   "" -> []
   s' -> w : words s'' where (w, s'') = break isSpace s'
+lines "" =  []
+lines s | (l, s') <- break (== '\n') s = l : case s' of
+  [] -> []
+  _:s'' -> lines s''
 instance Functor [] where fmap = map
 instance Applicative [] where pure = (:[]); f <*> x = concatMap (<$> x) f
 instance Monad [] where return = (:[]); (>>=) = flip concatMap

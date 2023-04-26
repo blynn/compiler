@@ -560,17 +560,21 @@ prims = let
       ]
 
 expandTypeAliases neat = pure $ if size als == 0 then neat else neat
-  { typedAsts = first subQual <$> typedAsts neat
+  { typedAsts = (\(q, a) -> (subQual q, subAst a)) <$> typedAsts neat
   , topDecls = subQual <$> topDecls neat
-  , dataCons = second (map subDataCons) <$> dataCons neat
+  , dataCons = (\(q, cs) -> (subQual q, subConstr <$> cs)) <$> dataCons neat
   } where
   als = typeAliases neat
-  subQual (Qual ps ty) = (Qual ps $ go ty)
+  subQual (Qual ps ty0) = (Qual ps $ go ty0)
   go ty = case ty of
     TC s -> maybe ty id $ mlookup s als
     TAp x y -> TAp (go x) (go y)
     _ -> ty
-  subDataCons (Constr s sts) = Constr s $ second go <$> sts
+  subConstr (Constr s sts) = Constr s $ second go <$> sts
+  subAst = \case
+    E (XQual q) -> E $ XQual $ subQual q
+    A x y -> A (subAst x) (subAst y)
+    t -> t
 
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
   go (name, (mexs, prog)) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]}))
