@@ -306,13 +306,11 @@ braceSep f = between lBrace (rBrace <|> parseErrorRule) $ foldr ($) [] <$> sepBy
 
 joinIsFail t = A (L "join#" t) (V "fail#")
 
-addLets ls x = A (E $ Basic "let") $ foldr encodeVar bodies vts where
-  encodeVar (v, m) rest = case m of
-    Nothing -> L v rest
-    Just q -> A (L v rest) (E $ XQual q)
-  vts = second snd <$> ls
-  xs = joinIsFail . fst . snd <$> ls
-  bodies = A (E $ Basic "in") $ foldr A x xs
+addLets ls x = L "let" $ foldr encodeVar (L "in" bodies) ls where
+  encodeVar (v, (_, m)) rest = L v case m of
+    Nothing -> rest
+    Just q -> A (E $ XQual q) rest
+  bodies = foldr A x $ joinIsFail . fst . snd <$> ls
 
 op = conSym <|> varSym <|> between backquote backquote (conId <|> varId)
 
@@ -454,7 +452,7 @@ expr = do
   res "::" *> annotate x <|> pure x
 annotate x = do
   q <- Qual <$> fatArrows <*> _type
-  pure $ A (E $ Basic "::") $ A x $ E $ XQual q
+  pure $ L "::" $ A x $ E $ XQual q
 
 gcon = conId <|> try (paren $ conSym <|> res ":" <|> (:"") <$> comma)
 qconop = conSym <|> res ":" <|> between backquote backquote conId

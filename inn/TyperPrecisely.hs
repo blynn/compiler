@@ -235,16 +235,16 @@ triangulate tab x = foldr triangle x components where
     redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
-decodeLets x = ((vts, bods), expr) where
-  (vts, rest) = stripVars id x
-  (bods, expr) = stripBods id vts rest
-  stripVars acc (L v t) = stripVars (acc . ((v, Nothing):)) t
-  stripVars acc (A (L v t) (E (XQual q))) = stripVars (acc . ((v, Just q):)) t
-  stripVars acc (A (E (Basic "in")) t) = (acc [], t)
-  stripVars acc e = error $ show e
-  stripBods acc [] t = (acc [], t)
-  stripBods acc (_:t) (A x y) = stripBods (acc . (x:)) t y
-  stripBods acc _ e = error $ "bods: " ++ show e
+decodeLets x = decodeVars id x where
+  decodeVars f = \case
+    L "in" t -> decodeBodies id vts t
+    L v t -> case t of
+      A (E (XQual q)) t' -> decodeVars (f . ((v, Just q):)) t'
+      _ -> decodeVars (f . ((v, Nothing):)) t
+    where
+    vts = f []
+    decodeBodies g [] x = ((vts, g []), x)
+    decodeBodies g (_:t) (A x y) = decodeBodies (g . (x:)) t y
 
 infer' msg typed loc ast = case ast of
   E x -> case x of
@@ -253,8 +253,14 @@ infer' msg typed loc ast = case ast of
   V s -> case lookup s loc <|> Right . fst <$> mlookup s typed of
     Nothing -> Infer $ const $ Left $ "undefined: " ++ s
     Just t -> either (pure . (, ast)) (insta ast) t
-  A (E (Basic "@")) (A raw (E (XQual q))) -> insta raw q
-  A (E (Basic "::")) (A x (E (XQual q))) -> do
+  A x y -> do
+    (tx, ax) <- rec loc x
+    (ty, ay) <- rec loc y
+    va <- getFreshVar
+    inferUnify msg tx (arr ty va)
+    pure (va, A ax ay)
+  L "=" (A raw (E (XQual q))) -> insta raw q
+  L "::" (A x (E (XQual q))) -> do
     (tx, ax) <- rec loc x
     (tAnno, aAnno) <- insta ax q
     cs <- getConstraints
@@ -263,7 +269,7 @@ infer' msg typed loc ast = case ast of
       Just ms -> do
         putConstraints $ ms @@ cs
         pure (tAnno, aAnno)
-  A (E (Basic "let")) lets -> do
+  L "let" lets -> do
     let ((vartypes, defs), x) = decodeLets lets
     newloc <- forM vartypes $ secondM \case
       Nothing -> Left <$> getFreshVar
@@ -286,12 +292,6 @@ infer' msg typed loc ast = case ast of
             tab = zip pAnno $ ('*':) . show <$> [1..]
           pure $ foldr L (forProof (subProofVar tab) a1) $ snd <$> tab
     second (triangulate $ zip (fst <$> vartypes) axs) <$> rec loc' x
-  A x y -> do
-    (tx, ax) <- rec loc x
-    (ty, ay) <- rec loc y
-    va <- getFreshVar
-    inferUnify msg tx (arr ty va)
-    pure (va, A ax ay)
   L s x -> do
     va <- getFreshVar
     (tx, ax) <- rec ((s, Left va):loc) x
@@ -614,7 +614,7 @@ findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s o
   [unique] -> Right unique
   _ -> Left $ "ambiguous: " ++ s
 
-assertType x t = A (E $ Basic "@") $ A x (E $ XQual t)
+assertType x t = L "=" $ A x (E $ XQual t)
 
 slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
 
