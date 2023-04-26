@@ -69,17 +69,17 @@ $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS T
 $(call party,party1.c,multiparty,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer1 party)
 $(call party,party2.c,party1,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS1 Typer2 party1)
 $(call party,crossly.c,party2,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2 Typer3 party2)
-$(call party,slowprecisely.c,crossly,BasePrecisely System AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
-$(call party,precisely.c,slowprecisely,BasePrecisely System AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,slowprecisely.c,crossly,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,precisely.c,slowprecisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,check.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,check.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
-$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
+$(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
+$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
 
-$(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
+$(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
 
-$(call cat,tmp.hs,BasePrecisely System AstPrecisely Map ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call cat,tmp.hs,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
 #warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@

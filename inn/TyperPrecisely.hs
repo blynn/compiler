@@ -220,6 +220,14 @@ fill s a t = case t of
   L v u -> if s == v then t else L v $ fill s a u
   _ -> t
 
+simulFill tab = go m where
+  m = fromList tab
+  go m t = case t of
+    V s | Just x <- mlookup s m -> x
+    A x y -> A (go m x) (go m y)
+    L s t' -> L s $ go (delete s m) t'
+    _ -> t
+
 triangulate tab x = foldr triangle x components where
   vs = fst <$> tab
   ios = foldr (\(s, t) (ins, outs) -> let dsts = fv (`elem` vs) [] t in
@@ -229,7 +237,7 @@ triangulate tab x = foldr triangle x components where
   triangle names expr = let
     tnames = nonemptyTails names
     appem vs = foldl1 A $ V <$> vs
-    suball x = foldr id x $ zipWith fill (init names) $ appem <$> init tnames
+    suball x = simulFill (zip (init names) $ appem <$> init tnames) x
     redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 
@@ -351,17 +359,6 @@ runDep (Dep f) = f []
 
 unifyMsg s a b c = either (Left . (s++) . (": "++)) Right $ unify a b c
 
-del x = \case
-  [] -> []
-  h:t -> if h == x then t else h:del x t
-
-forFree syms f t = go syms t where
-  go syms t = case t of
-    E _ -> t
-    V s -> if s `elem` syms then f t else t
-    A x y -> A (go syms x) (go syms y)
-    L s t' -> L s $ go (del s syms) t'
-
 app01 s x y = maybe (A (L s x) y) snd $ go x where
   go expr = case expr of
     V v -> Just $ if s == v then (True, y) else (False, expr)
@@ -405,9 +402,8 @@ inferno searcher decls typed defmap syms = let
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
     let
-      applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t,
-        foldr L (forFree syms (\t -> foldl A t $ V <$> dicts)
-          $ foldr (uncurry fill) a subs) dicts))
+      applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t, foldr L (simulFill (subs ++ tab) a) dicts))
+        where tab = map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
 defaultRing searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where
