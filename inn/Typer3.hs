@@ -188,6 +188,12 @@ fv f bound = \case
   L s t -> fv f (s:bound) t
   _ -> []
 
+fill s a t = case t of
+  E _ -> t
+  V v -> if s == v then a else t
+  A x y -> A (fill s a x) (fill s a y)
+  L v u -> if s == v then t else L v $ fill s a u
+
 triangulate vs defs x = foldr triangle x components where
   tab = zip vs defs
   ios = foldr (\(s, t) (ins, outs) -> let dsts = fv (`elem` vs) [] t in
@@ -197,7 +203,7 @@ triangulate vs defs x = foldr triangle x components where
   triangle names expr = let
     tnames = nonemptyTails names
     appem vs = foldl1 A $ V <$> vs
-    suball x = foldl A (foldr L x $ init names) $ appem <$> init tnames
+    suball x = foldr id x (zipWith fill (init names) $ appem <$> init tnames)
     redef tns x = foldr L (suball x) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe (error $ "oops: " ++ x) id $ lookup x tab) (suball expr) tnames
 

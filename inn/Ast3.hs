@@ -84,12 +84,6 @@ patVars = \case
   PatVar s m -> s : maybe [] patVars m
   PatCon _ args -> concat $ patVars <$> args
 
-fill s a t = case t of
-  E _ -> t
-  V v -> if s == v then a else t
-  A x y -> A (fill s a x) (fill s a y)
-  L v u -> if s == v then t else L v $ fill s a u
-
 typeVars = \case
   TC _ -> []
   TV v -> [v]

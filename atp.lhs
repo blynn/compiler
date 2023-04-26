@@ -2,7 +2,6 @@
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script src='atp.js'></script>
 <p>
 <button id='swap'>swap</button>
 <button id='implies'>implies</button>
@@ -276,24 +275,20 @@ function hideshow(s) {
 ++++++++++
 
 \begin{code}
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
+module Main where
+import Base
+import Charser
+import System
+foreign export ccall "main" main
+{- GHC edition:
 import Control.Applicative ((<**>))
 import Control.Arrow
 import Data.List
-#ifdef __HASTE__
-import Control.Monad
-import Haste.DOM
-import Haste.Events
-import Text.Parsec hiding (space)
-type Parser = Parsec String ()
-lowerChar = lower; alphaNumChar = alphaNum; space = spaces
-(<>) = (++)
-#else
+import Data.Function ((&))
 import Text.Megaparsec hiding (match)
 import Text.Megaparsec.Char
-type Parser = Parsec () String
-#endif
+type Charser = Parsec () String
+-}
 \end{code}
 
 ++++++++++
@@ -327,7 +322,7 @@ incompleteOracle = rAsyn [] [] where
       _ -> False
     implyCases p = case p of
       a :-> b -> lAsyn pas' [b] rhs && rAsyn pas' [] a
-        where pas' = delete p pas
+        where pas' = filter (/= p) pas
       _ -> False
 \end{code}
 
@@ -340,14 +335,15 @@ We use Haskell notation:
   * The proposition $\bot$ is written `Void` (from the `Data.Void` package).
 
 \begin{code}
-propo :: Parser Prop
+propo :: Charser Prop
 propo = space *> aps <* eof where
   aps = foldr1 (:->) <$> sepBy1 arg (spstr "->")
   arg = Var <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
     <|> between (spch '(') (spch ')') prodOrProp
     <|> const Falso <$> spstr "Void"
     <|> spstr "Either" *> ((:|) <$> arg <*> arg)
-  prodOrProp = aps <**> (option id $ spch ',' *> (flip (:&) <$> aps))
+  prodOrProp = (&) <$> aps <*> (spch ',' *> (flip (:&) <$> aps) <|> pure id)
+  sp :: Charser a -> Charser a
   sp = (<* space)
   spch = sp . char
   spstr = sp . string
@@ -442,7 +438,7 @@ superfluous.
       lAsyn n pas ((prf :@ prfA, b):ps) rhs
     a@(Var _) -> lAsyn n (pp:pas') (take 1 act' <> ps) rhs
       where
-      (pas', act') = foldl' partitionMatch ([], []) pas
+      (pas', act') = foldl partitionMatch ([], []) pas
       partitionMatch (ps, as) x
         | (prfImp, a'@(Var _) :-> b) <- x, a == a' = (ps, (prfImp :@ prf, b):as)
         | otherwise = (x:ps, as)
@@ -583,44 +579,17 @@ showLogic p = case p of
   Falso -> "&perp;"
   Var s -> s
 
-#ifdef __HASTE__
-main :: IO ()
-main = withElems ["in", "out", "mathy", "go"] $ \[iEl, oEl, mEl, goB] -> do
-  let
-    setup button text = do
-      Just b <- elemById button
-      let
-        act = do
-          setProp iEl "value" text
-          setProp oEl "value" ""
-          setProp mEl "innerHTML" ""
-      void $ b `onEvent` Click $ const act
-      when (button == "implies") act
-    go = do
-      s <- getProp iEl "value"
-      case parse propo "" s of
-        Left _ -> do
-          setProp mEl "innerHTML" ""
-          setProp oEl "value" "parse error"
-        Right p -> do
-          setProp mEl "innerHTML" $ showLogic p
-          setProp oEl "value" $ case prove p of
-            [] -> "no proof found"
-            prfs -> unlines $ show <$> prfs
-  setup "swap" "(a, b) -> (b, a)"
-  setup "demorgan" "(a -> Void, b -> Void) -> Either a b -> Void"
-  setup "implies" "Either (p -> Void) q -> p -> q"
-  setup "lem" "(p, p -> Void) -> Void"
-  setup "nnlem" "(Either p (p -> Void) -> Void) -> Void"
-  setup "uncurry" "(a -> b -> c) -> (a, b) -> c"
-  setup "vorobev" "(((a -> b) -> c) -> (a -> b)) -> ((b -> c) -> (a -> b))"
-  setup "jonk" "(a -> b) -> ((a -> i) -> i) -> ((b -> i) -> i)"
-  void $ goB `onEvent` Click $ const $ go
-  void $ iEl `onEvent` KeyDown $ \key -> when (key == mkKeyData 13)
-    $ go >> preventDefault
-#endif
+main = do
+  s <- getContents
+  case parse propo "" s of
+    Left e -> putStr ":" >> putStr "parse error" >> putStr s
+    Right p -> do
+      putStr (showLogic p)
+      putStr ":"
+      putStr $ case prove p of
+        [] -> "no proof found"
+        prfs -> unlines $ show <$> prfs
 \end{code}
-
 ++++++++++
 </div>
 ++++++++++
@@ -660,3 +629,51 @@ built, though has considerably more features.
 
 https://arxiv.org/abs/1805.07518[Michael Shulman describes an intimate
 connection between linear logic and constructive mathematics].
+
+[pass]
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<script>
+function setup(name, t) {
+  function act() {
+    document.getElementById("in").value = t;
+    document.getElementById("out").value = "";
+    document.getElementById("mathy").innerHTML = "";
+  }
+  document.getElementById(name).addEventListener("click", act);
+  if (name == "implies") act();
+}
+setup("swap", "(a, b) -> (b, a)");
+setup("demorgan", "(a -> Void, b -> Void) -> Either a b -> Void");
+setup("implies", "Either (p -> Void) q -> p -> q");
+setup("lem", "(p, p -> Void) -> Void");
+setup("nnlem", "(Either p (p -> Void) -> Void) -> Void");
+setup("uncurry", "(a -> b -> c) -> (a, b) -> c");
+setup("vorobev", "(((a -> b) -> c) -> (a -> b)) -> ((b -> c) -> (a -> b))");
+setup("jonk", "(a -> b) -> ((a -> i) -> i) -> ((b -> i) -> i)");
+
+const ctx = {};
+function run() {
+  ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
+  ctx.out = [], ctx.cursor = 0;
+  ctx.instance.exports.main();
+  const out = (new TextDecoder()).decode(Uint8Array.from(ctx.out)).split(':');
+  document.getElementById("mathy").innerHTML = out[0];
+  document.getElementById("out").value = out[1];
+}
+async function loadWasm() {
+  try {
+    ctx.instance = (await WebAssembly.instantiateStreaming(fetch('atp.wasm'), {env:
+      { putchar: c  => ctx.out.push(c)
+      , eof    : () => ctx.cursor == ctx.inp.length
+      , getchar: () => ctx.inp[ctx.cursor++]
+      }})).instance;
+
+    document.getElementById("in").addEventListener("keydown", (event) => { if (event.key == "Enter") { run(); event.preventDefault(); }});
+    document.getElementById("go").addEventListener("click", (event) => run());
+  } catch(err) {
+    console.log(err);
+  }
+}
+loadWasm();
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

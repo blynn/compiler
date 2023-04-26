@@ -4,12 +4,13 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.js douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
 para.c: para.lhs precisely $(BCS_HS); (./unlit < para.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 differ.c: differ.lhs precisely $(BCS_HS); (./unlit < differ.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
+atp.c: atp.lhs precisely $(BCS_HS); (./unlit < atp.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 
 %.wasm.o: %.c; clang --target=wasm32 -O2 -ffreestanding -c $^ -o $@
 %.wasm: %.wasm.o; wasm-ld --import-undefined --no-entry --initial-memory=41943040 $^ -o $@

@@ -308,11 +308,9 @@ setup("fold :: (a -> b -> b) -> b -> [a] -> b");
 const ctx = {};
 
 function presto() {
-  const s = document.getElementById("in").value;
-  ctx.out = [];
-  ctx.inp = (new TextEncoder()).encode(s);
-  ctx.cursor = 0;
-  ctx.instance.exports["main"]();
+  ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
+  ctx.out = []; ctx.cursor = 0;
+  ctx.instance.exports.main();
   document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
 }
 

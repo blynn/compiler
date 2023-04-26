@@ -565,14 +565,12 @@ setup("lambda", "d ((\\z -> z^3) (x*x + y^2) - (\\z -> z*z) (x^2 - y*y))");
 setup("second", "d (d y / d x) / d x");
 
 const ctx = {};
-
 function run() {
   ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
   ctx.out = [], ctx.cursor = 0;
   ctx.instance.exports.main();
   document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
 }
-
 async function loadWasm() {
   try {
     ctx.instance = (await WebAssembly.instantiateStreaming(fetch('differ.wasm'), {env:

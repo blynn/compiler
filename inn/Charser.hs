@@ -51,9 +51,6 @@ letterChar = lowerChar <|> upperChar
 newline :: Charser Char
 newline = char '\n'
 
-decimal :: Integral x => Charser x
-decimal = foldl (\acc c -> 10*acc + fromIntegral (ord c - ord '0')) 0 <$> some digitChar
-
 alphaNumChar :: Charser Char
 alphaNumChar = letterChar <|> digitChar
 
