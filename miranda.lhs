@@ -83,8 +83,7 @@ And surely its runtime system must be expertly tuned.
 Our program, on the other hand, compiles to a handful of basic combinators,
 uses the Scott encoding for all data types except unsigned ints, and the source
 to its hastily designed virtual machine prizes brevity over efficiency: it
-began life as link:ioccc.html[an IOCCC entry] after all. Indeed, simple
-changes boost its speed by 10%, which we shall examine in depth another day.
+began life as link:ioccc.html[an IOCCC entry] after all.
 
 But really its performance has little to do with my prowess. The credit goes to
 Oleg Kiselyov's bracket abstraction algorithm (with minor tweaks from a few

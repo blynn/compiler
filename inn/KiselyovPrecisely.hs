@@ -66,9 +66,7 @@ optim t = case t of
   where
   go (Lf "I") q = q
   go p q@(Lf c) = case c of
-    "K" -> case p of
-      Lf "B" -> Lf "BK"
-      _ -> Nd p q
+    "K" | Lf "B" <- p -> Lf "BK"
     "I" -> case p of
       Lf r -> case r of
         "C" -> Lf "T"
@@ -78,16 +76,12 @@ optim t = case t of
       Nd p1 p2 -> case p1 of
         Lf "B" -> p2
         Lf "R" -> Nd (Lf "T") p2
-        _ -> Nd (Nd p1 p2) q
-      _ -> Nd p q
-    "T" -> case p of
-      Nd (Lf "B") (Lf r) -> case r of
-        "C" -> Lf "V"
-        "BK" -> Lf "LEFT"
         _ -> Nd p q
       _ -> Nd p q
-    "V" -> case p of
-      Nd (Lf "B") (Lf "BK") -> Lf "CONS"
+    "T" | Nd (Lf "B") (Lf r) <- p -> case r of
+      "C" -> Lf "V"
+      "BK" -> Lf "LEFT"
       _ -> Nd p q
+    "V" | Nd (Lf "B") (Lf "BK") <- p -> Lf "CONS"
     _ -> Nd p q
   go p q = Nd p q

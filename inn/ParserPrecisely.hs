@@ -287,9 +287,16 @@ addForeignImport foreignname ourname t neat = neat
   }
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
 addDefs ds neat = neat { topDefs = foldr (uncurry insert) (topDefs neat) ds }
-addImport isQual im mayAs f neat = neat { moduleImports = insertWith (++) (maybe im id mayAs) imf
-  $ (if isQual then id else insertWith (++) "" imf) $ moduleImports neat }
-  where imf = [(im, f)]
+addImport isQual im mayAs f neat = neat { moduleImports = mergeImport (maybe im id mayAs)
+  $ (if isQual then id else mergeImport "") $ moduleImports neat }
+  where
+  mergeImport k m = insert k post m
+    where
+    post = case lookup im pre of
+      Nothing -> (im, f):pre
+      Just _ -> pre  -- TODO: Merge rather than drop new imports.
+    pre = maybe [] id $ mlookup k m
+
 addFixities os prec neat = neat { opFixity = foldr (\o tab -> insert o prec tab) (opFixity neat) os }
 
 parseErrorRule = Parser \pasta -> case indents pasta of
@@ -554,7 +561,7 @@ typeDecl = addTypeAlias <$> between (res "type") (res "=") conId <*> _type
 
 addTypeAlias s t neat = neat { typeAliases = insertWith (error $ "duplicate: " ++ s) s t $ typeAliases neat }
 
-topdecls = fmap (foldr (.) id) $ braceSep
+tops = fmap (foldr (.) id) $ braceSep
   $   adt
   <|> classDecl
   <|> instDecl
@@ -575,9 +582,7 @@ export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
 exports = Just <$> paren (export_ `sepBy` comma)
   <|> pure Nothing
 
-haskell = between lexemePrelude eof $ some do
-  (moduleName, exs) <- mayModule
-  (moduleName,) . (exs,) <$> topdecls
+haskell = between lexemePrelude eof $ some $ liftA2 (,) mayModule tops
 
 mayModule = res "module" *> ((,) <$> conId <*> exports <* res "where")
   <|> pure ("Main", Nothing)

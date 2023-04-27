@@ -35,7 +35,7 @@ mergeFragment neat frag = neat
   , typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
   , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
   , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
-  , moduleImports = foldr (uncurry insert) (moduleImports neat) $ toAscList $ moduleImports frag
+  , moduleImports = moduleImports frag
   , opFixity = foldr (uncurry insert) (opFixity neat) $ toAscList $ opFixity frag
   , typeAliases = foldr (uncurry insert) (typeAliases neat) $ toAscList $ typeAliases frag
   }
@@ -67,9 +67,8 @@ readInput mos name s = do
   where
   orig = _neat $ mos!name
   fmt = Left <$> fragment <|> Right <$> single
-  fragment = ($ neatEmpty{moduleImports = moduleImports orig}) <$> (lexemePrelude *> topdecls <* eof)
+  fragment = foldr id neatEmpty{moduleImports = moduleImports orig} . map snd <$> haskell
   single = many (char ' ') *> expr <* eof
-
   importSelf neat = neat{moduleImports = insertWith (++) "" [(name, const True)] $ moduleImports neat}
   tryAddDefs frag = do
     mos1 <- compileModule mos (name, importSelf frag)

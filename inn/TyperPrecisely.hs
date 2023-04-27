@@ -570,7 +570,7 @@ expandTypeAliases neat = pure $ if size als == 0 then neat else neat
     t -> t
 
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]}))
+  go ((name, mexs), prog) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]}))
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k

@@ -455,7 +455,7 @@ prims = let
       ]
 
 tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go (name, (mexs, prog)) = (name,) <$> maybe Right processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog)
+  go ((name, mexs), prog) = (name,) <$> maybe Right processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog)
   ins tab (k, v) = case mlookup k tab of
     Nothing -> Right $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k

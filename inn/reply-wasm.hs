@@ -18,7 +18,7 @@ chat = do
         nextOut
         exec lib expr
 
-ref = unsafePerformIO $ newIORef . moduleNew "Main" =<< initialState
+ref = unsafePerformIO $ newIORef =<< initialState
 
 foreign export ccall "chat_mv" chat_mv
 chat_mv = do

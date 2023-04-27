@@ -2,6 +2,10 @@
 
 [pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div style="display:none;" id="Map.hs">
+include::inn/Map1.hs[]
+</div>
+
 <style>
 .input{
 font-family:monospace;
@@ -59,8 +63,7 @@ const inbox = document.getElementById("inbox");
 const errmsg = document.getElementById("errmsg");
 
 const module_saved = new Map();
-let module_name = "Main";
-module_save();
+let module_name;
 
 const modlist = document.getElementById("modlist");
 function modlist_refresh() {
@@ -106,7 +109,6 @@ function modlist_refresh() {
     });
   }
 }
-modlist_refresh();
 function newclick() {
   const pre = "NameMe";
   for(let i = 1;; i++) {
@@ -149,6 +151,18 @@ async function loadRepl() {
       , argvlen: i => repl.args[i].length
       , argvat : (i, j) => repl.args[i][j]
       }})).instance;
+
+module_name = "Map";
+console.log(run("chat_new", [teen("Map")], ""));;
+const maphs = document.getElementById("Map.hs").textContent;
+const r = run("chat", [teen("Map")], maphs);
+const ie = document.createElement("pre");
+if (r.buf[0] == "ok") ie.classList.add('ok'); else console.log("error!", r);
+ie.innerText = maphs;
+convo.appendChild(ie);
+module_saved.set("Map", convo.innerHTML);
+module_new("Main");
+modlist_refresh();
   } catch(err) {
     console.log(err);
   }

@@ -458,7 +458,7 @@ adt = addAdt <$> between (res "data") (res "=") (simpleType <$> conId <*> many v
 
 impDecl = addImport <$> (res "import" *> conId)
 
-topdecls = braceSep
+tops = braceSep
   $   adt
   <|> classDecl
   <|> addTopDecl <$> genDecl
@@ -478,9 +478,7 @@ export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
 exports = Just <$> paren (export_ `sepBy` comma)
   <|> pure Nothing
 
-haskell = between lexemePrelude eof $ some do
-  (moduleName, exs) <- mayModule
-  (moduleName,) . (exs,) <$> topdecls
+haskell = between lexemePrelude eof $ some $ liftA2 (,) mayModule tops
 
 mayModule = res "module" *> ((,) <$> conId <*> exports <* res "where")
   <|> pure ("Main", Nothing)

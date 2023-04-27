@@ -339,6 +339,7 @@ void vmscratchroot(u n) { *scratchpadend++ = 2*n + 128 + 1; }
     . foldr (.) id (zipWith ffiDefine [0..] ffis)
     . ("\n  }\n}\n" ++)
     . ([r|static u step() {
+ u kibi=1<<10;do{
   if (mem + hp > sp - 8 && gc()) return 3;
   u x = *sp;
   if (isAddr(x)) *--sp = mem[x]; else switch(x) {
@@ -347,6 +348,7 @@ void vmscratchroot(u n) { *scratchpadend++ = 2*n + 128 + 1; }
   . ([r|
   }
   return 0;
+ }while(--kibi);
 }
 static void run() { while(!step()); }
 void run_gas(u gas) { while(!suspend_status && gas--) suspend_status = step(); }
