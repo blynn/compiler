@@ -338,23 +338,25 @@ void vmscratchroot(u n) { *scratchpadend++ = 2*n + 128 + 1; }
     . ("static void foreign(u n) {\n  switch(n) {\n" ++)
     . foldr (.) id (zipWith ffiDefine [0..] ffis)
     . ("\n  }\n}\n" ++)
-    . ([r|static u step() {
- u kibi=1<<10;do{
+    . ("static u step(){u kibi=1<<10;do{" ++)
+    . giantSwitch
+    . ("}while(--kibi);return 0;}\n" ++)
+    . ("static u run(){for(;;){" ++)
+    . giantSwitch
+    . ("}return 0;}\n" ++)
+    . ([r|
+void run_gas(u gas) { while(!suspend_status && gas--) suspend_status = step(); }
+|]++)
+  . rtsInit opts
+  . rtsReduce opts
+
+giantSwitch = ([r|
   if (mem + hp > sp - 8 && gc()) return 3;
   u x = *sp;
   if (isAddr(x)) *--sp = mem[x]; else switch(x) {
 |]++)
   . foldr (.) id (genComb <$> comdefs)
-  . ([r|
-  }
-  return 0;
- }while(--kibi);
-}
-static void run() { while(!step()); }
-void run_gas(u gas) { while(!suspend_status && gas--) suspend_status = step(); }
-|]++)
-  . rtsInit opts
-  . rtsReduce opts
+  . ("  }\n"++)
 
 rtsInit opts
   | "warts" `elem` opts = ([r|void rts_init() {

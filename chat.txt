@@ -153,7 +153,7 @@ async function loadRepl() {
       }})).instance;
 
 module_name = "Map";
-console.log(run("chat_new", [teen("Map")], ""));;
+run("chat_new", [teen("Map")], "");
 const maphs = document.getElementById("Map.hs").textContent;
 const r = run("chat", [teen("Map")], maphs);
 const ie = document.createElement("pre");

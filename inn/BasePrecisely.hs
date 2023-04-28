@@ -287,6 +287,9 @@ class Ring a where
   (-) :: a -> a -> a
   (*) :: a -> a -> a
   fromInteger :: Integer -> a
+  negate :: a -> a
+  negate = (fromIntegral 0 -)
+
 class Integral a where
   div :: a -> a -> a
   mod :: a -> a -> a
@@ -574,7 +577,7 @@ instance Show Double where
     (as, bs) = if d >= one then span (<= d) tens else span (>= d) tenths
     norm = if d >= one then d / last as else d / head bs
     dig = intFromDouble norm
-    go = shows dig . ('.':) . shows (intFromDouble $ (tens!!6) * (norm - doubleFromInt dig)) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)
+    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble ((tens!!6) * (norm - doubleFromInt dig)))++) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)
 readInteger = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
 
 class Field a where
