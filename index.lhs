@@ -292,7 +292,7 @@ maze = fromList $ concat $ zipWith row [0..]
   row r s = concat $ zipWith (cell r) [0..] s
   cell r c x | x /= ' '  = [((r, c), x)]
              | otherwise = []
-dirs = [(1, 0), (0, 0-1), (0-1, 0-1), (0-1, 0), (0, 1), (1, 1)]
+dirs = [(1, 0), (0, -1), (-1, -1), (-1, 0), (0, 1), (1, 1)]
 turn f x = take 2 $ tail $ dropWhile (/= x) $ cycle $ f dirs
 data Hex = Hex (Int, Int) (Int, Int) String
 step (Hex (x, y) (xd, yd) path) =
@@ -430,7 +430,7 @@ rotr :: Int -> Word -> Word
 rotr i n = (wordShr n u) + (wordShl n (32 - u)) where u = fromIntegral i
 xor = wordXor
 (.&.) = wordAnd
-complement x = 0-1-x
+complement x = -1-x
 
 -- Swiped from `Data.List.Split`.
 chunksOf i ls = map (take i) (go ls) where

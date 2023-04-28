@@ -141,7 +141,7 @@ We repeatedly nudge our guesses according to our two test cases:
 \begin{code}
 rate = 0.0001
 step x y (p, q) = (p - oopsp p q x y * rate, q - oopsq p q x y * rate)
-learn = iterate (step 100 212 . step (0-40) (0-40)) (1.23, 4.56)
+learn = iterate (step 100 212 . step (-40) (-40)) (1.23, 4.56)
 \end{code}
 
 where we've defined the size of a nudge to be 0.0001 times the slope of the
@@ -222,15 +222,15 @@ d expr = case expr of
   Var v -> Var $ Dee v
   x :+ y -> d x :+ d y
   x :* y -> (x :* d y) :+ (d x :* y)
-  x :^ y -> (y :* (x :^ (y :+ Con (0-1))):* d x)
+  x :^ y -> (y :* (x :^ (y :+ Con (-1))):* d x)
     :+ ((Log :@ x) :* (x :^ y) :* d y)
   Lam v x -> Lam (Dee v) $ d x
   f :@ x | Lam (Dee v) y <- d f -> sub (Dee v) (d x) $ sub v x y
-  Inv -> lzdz $ Con (0-1) :* (Inv :@ (z :* z))
+  Inv -> lzdz $ Con (-1) :* (Inv :@ (z :* z))
   Log -> lzdz $ Inv :@ z
   Exp -> lzdz $ Exp :@ z
   Sin -> lzdz $ Cos :@ z
-  Cos -> lzdz $ Con (0-1) :* (Sin :@ z)
+  Cos -> lzdz $ Con (-1) :* (Sin :@ z)
   where
   z = Var $ S "z"
   lzdz x = Lam (Dee $ S "z") $ x :* Var (Dee $ S "z")
@@ -290,7 +290,7 @@ chainr1 p op = go id where
 line :: Charser Expr
 line = expr <* eof where
   expr = pwr `chainl1` ((spch '+' *> pure (:+))
-    <|> (spch '-' *> pure (\x y -> x :+ (Con (0-1) :* y))))
+    <|> (spch '-' *> pure (\x y -> x :+ (Con (-1) :* y))))
   pwr = term `chainr1` (spch '^' *> pure (:^))
   term = apps  `chainl1` ((spch '*' >> pure (:*))
     <|> (spch '/' *> pure (\x y -> x :* (Inv :@ y))))

@@ -421,14 +421,16 @@ memget k@(a, b) = get >>= \(tab, (hp, f)) -> case mlookup k tab of
   Nothing -> put (insert k hp tab, (hp + 2, f . (a:) . (b:))) >> pure hp
   Just v -> pure v
 
--- Parser only supports nonnegative integer literals, hence sign is always `True`.
-integerify s = integerSignList x \True xs ->
-  Nd (Nd (LfExtra $ Link "Base" "Integer") (LfExtra $ Link "#" "True")) $
+integerify s = integerSignList x \sgn xs ->
+  Nd (Nd (LfExtra $ Link "Base" "Integer") (LfExtra $ Link "#" $ show sgn)) $
     foldr (\h t -> Nd (Nd (Lf "CONS") (LfExtra $ Basic [chr $ intFromWord h])) t) (Lf "K") xs
   where
   x = case s of
+    '-':t -> toInteger 0 - posLit t
+    _ -> posLit s
+  posLit = \case
     'x':t -> unhex t
-    _ -> readInteger s
+    t -> readInteger t
   unhex = foldl (\n d -> toInteger 16*n + toInteger (hexValue d)) (toInteger 0)
 
 enc t = case t of

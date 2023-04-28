@@ -8,7 +8,8 @@ data ParserState = ParserState
   { readme :: [(Char, (Int, Int))]
   , landin :: String
   , indents :: [Int]
-  }
+  , openClose :: (Bool, Bool)
+  } deriving Show
 data Parser a = Parser { getParser :: ParserState -> Either (String, ParserState) (a, ParserState) }
 instance Functor Parser where fmap f x = pure f <*> x
 instance Applicative Parser where
@@ -28,15 +29,20 @@ instance Alternative Parser where
     Left (err, errInp) -> if samePos inp errInp then getParser y inp else Left (err, errInp)
     Right x -> Right x
 
+putOC o c = Parser \pasta -> Right ((), pasta { openClose = (o, c) })
+getOC = Parser \pasta -> Right (openClose pasta, pasta)
+setOC = putOC True True
+clearOC = putOC False False
+
 lookahead p = do
   saved <- Parser \pasta -> Right (pasta, pasta)
-  ret <- p *> pure (pure ()) <|> pure (bad "")
+  ret <- p *> pure (pure ()) <|> pure (bad "lookahead")
   Parser \_ -> Right ((), saved)
   ret
 
 notFollowedBy p = do
   saved <- Parser \pasta -> Right (pasta, pasta)
-  ret <- p *> pure (bad "") <|> pure (pure ())
+  ret <- p *> pure (bad "notFollowedBy") <|> pure (pure ())
   Parser \_ -> Right ((), saved)
   ret
 
@@ -51,7 +57,7 @@ samePos p q = case readme p of
     _ -> False
 
 parse f str = either badpos Right $ getParser f initState where
-  initState = ParserState (rowcol str (1, 1)) [] []
+  initState = ParserState (rowcol str (1, 1)) [] [] (False, False)
   rowcol s rc = case s of
     [] -> []
     h:t -> (h, rc) : rowcol t (advanceRC (ord h) rc)
@@ -108,12 +114,13 @@ sat f = Parser \pasta -> let err s = Left (s, pasta) in case landin pasta of
     _ -> err "unsat"
 
 char = sat . (==)
+oneOf s = sat (`elem` s)
 rawSat f = Parser \pasta -> let err s = Left (s, pasta) in case readme pasta of
   [] -> err "EOF"
   (h, _):t -> if f h then Right (h, pasta { readme = t }) else err "unsat"
 
 eof = Parser \pasta -> case pasta of
-  ParserState [] [] _ -> Right ((), pasta)
+  ParserState [] [] _ _ -> Right ((), pasta)
   _ -> Left ("want eof", pasta)
 
 blockComment = try (rawSat ('{' ==) *> rawSat ('-' ==)) *> blockCommentBody
@@ -122,9 +129,11 @@ blockCommentBody = try (rawSat ('-' ==) *> rawSat ('}' ==)) *> pure False <|>
 comment = try $ rawSat ('-' ==) *> some (rawSat ('-' ==)) *>
   (rawSat isNewline <|> rawSat (not . isSymbol) *> many (rawSat $ not . isNewline) *> rawSat isNewline) *> pure True
 spaces = isNewline <$> rawSat isSpace
-whitespace = do
-  offside <- or <$> many (spaces <|> comment <|> blockComment)
-  Parser \pasta -> Right ((), if offside then angle (indentOf pasta) pasta else pasta)
+singleWhitespace = spaces <|> comment <|> blockComment
+whitespace = (<|> pure ()) do
+  offside <- or <$> some singleWhitespace
+  when offside $ Parser \pasta -> Right ((), angle (indentOf pasta) pasta)
+  clearOC
 
 hexValue d
   | d <= '9' = ord d - ord '0'
@@ -144,7 +153,7 @@ nameTailed p = liftA2 (:) p $ many nameTailChar
 
 nat = readInteger <$> some digit
 hexInt = foldl (\n d -> 16*n + (hexValue d)) 0 <$> some hexit
-escape = char '\\' *> (sat (`elem` "'\"\\") <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> nat) <|> char 'x' *> (chr <$> hexInt))
+escape = char '\\' *> (oneOf "'\"\\" <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> nat) <|> char 'x' *> (chr <$> hexInt))
 tokOne delim = escape <|> rawSat (delim /=)
 
 charSeq = try . mapM char
@@ -153,9 +162,12 @@ quoteStr = between (char '"') (char '"') $ many $ many (charSeq "\\&") *> tokOne
 quasiquoteStr = charSeq "[r|" *> quasiquoteBody
 quasiquoteBody = charSeq "|]" *> pure [] <|> (:) <$> rawSat (const True) <*> quasiquoteBody
 tokStr = quoteStr <|> quasiquoteStr
-hexconstant = litinteger . ('x':) <$> (try (char '0' *> (char 'x' <|> char 'X')) *> some hexit)
+hexconstant = do
+  sgn <- try unaryMinus *> pure ('-':) <|> pure id
+  try $ char '0' *> (char 'x' <|> char 'X')
+  litinteger . sgn . ('x':) <$> some hexit
 decimal = do
-  ds <- some digit
+  ds <- (try unaryMinus *> pure ('-':) <|> pure id) <*> some digit
   litdouble . (ds++) . ('.':) <$> (try $ char '.' *> some digit) <|> pure (litinteger ds)
 litdouble s = E $ Lit (TC "Double", s)
 litchar c = E $ Lit (TC "Char", [c])
@@ -174,28 +186,46 @@ varId = try do
 
 reservedSym s = elem s ["..", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
 
-varSymish = lexeme $ (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol)
-varSym = lexeme $ try do
+varSymish = (:) <$> sat (\c -> isSymbol c && c /= ':') <*> many (sat isSymbol)
+varSym = do
+  clo <- snd <$> getOC
   s <- varSymish
-  if reservedSym s then bad $ "reserved: " ++ s else pure s
+  when (reservedSym s) $ bad $ "reserved: " ++ s
+  when (s == "-" && not clo) $ lookahead nonOpener <|> bad "unary minus"
+  whitespace
+  pure s
+
+unaryMinus = do
+  clo <- snd <$> getOC
+  when clo $ bad "want non-closing lexeme"
+  char '-'
+  notFollowedBy $ sat isSymbol
+  notFollowedBy nonOpener *> pure "-" <|> bad "want opening lexeme"
 
 conId = lexeme $ nameTailed large
 conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
 conSym = try do
   s <- conSymish
   if elem s [":", "::"] then bad $ "reserved: " ++ s else pure s
-special = lexeme . char
-comma = special ','
-semicolon = special ';'
-lParen = special '('
-rParen = special ')'
-lBrace = special '{'
-rBrace = special '}'
-lSquare = special '['
-rSquare = special ']'
-backquote = special '`'
 
-lexeme f = f <* whitespace
+lexeme f = f <* setOC <* whitespace
+charNeither c = char c <* clearOC <* whitespace
+charOpener c = char c <* putOC True False <* whitespace
+charCloser c = char c <* putOC False True <* whitespace
+
+nonOpener = singleWhitespace *> pure () <|> oneOf ")}],;" *> pure ()
+nonCloser = singleWhitespace *> pure () <|> oneOf "({[,;" *> pure ()
+
+comma = charNeither ','
+semicolon = charNeither ';'
+lParen = charOpener '('
+rParen = charCloser ')'
+lBrace = charOpener '{'
+rBrace = charCloser '}'
+lSquare = charOpener '['
+rSquare = charCloser ']'
+
+backquoted = between (char '`' *> whitespace) (char '`' *> whitespace)
 
 lexemePrelude = whitespace *>
   Parser \pasta -> case getParser (res "module" <|> (:[]) <$> char '{') pasta of
@@ -319,9 +349,9 @@ addLets ls x = L "let" $ foldr encodeVar (L "in" bodies) ls where
     Just q -> A (E $ XQual q) rest
   bodies = foldr A x $ joinIsFail . fst . snd <$> ls
 
-op = conSym <|> varSym <|> between backquote backquote (conId <|> varId)
+op = conSym <|> varSym <|> backquoted (conId <|> varId)
 
-qop = modded (varSym <|> conSym) <|> between backquote backquote (modded $ conId <|> varId) <|> V <$> res ":"
+qop = modded (varSym <|> conSym) <|> backquoted (modded $ conId <|> varId) <|> V <$> res ":"
 con = conId <|> try (paren conSym)
 var = varId <|> try (paren varSym)
 
@@ -390,8 +420,9 @@ flipPairize y x = A (A (V ",") x) y
 moreCommas = foldr1 (A . A (V ",")) <$> sepBy1 expr comma
 thenComma = comma *> ((flipPairize <$> moreCommas) <|> pure (A (V ",")))
 parenExpr = (&) <$> expr <*> (((\o a -> A o a) <$> qop) <|> thenComma <|> pure id)
-rightSect = ((\o a -> L "@" $ A (A o $ V "@") a) <$> (qop <|> V . (:"") <$> comma)) <*> expr
-section = parenExpr <* rParen <|> rightSect <* rParen
+-- "(- x)" and "(-x)" differ, thus the `try`.
+rightSect = ((\o a -> L "@" $ A (A o $ V "@") a) <$> (try qop <|> V . (:"") <$> comma)) <*> expr
+section = rightSect <|> parenExpr
 
 maybePureUnit = maybe (V "pure" `A` V "()") id
 stmt = letStmt
@@ -444,9 +475,10 @@ atom = ifthenelse <|> doblock <|> letin
 
 parenAtom = rParen *> pure (V "()")
   <|> try ((comma *> pure (V ",") <|> V <$> res ":" <|> modded (conSym <|> varSym)) <* rParen)
-  <|> section
+  <|> section <* rParen
 
 aexp = foldl1 A <$> some atom
+unexp = unaryMinus *> (A (V "negate") <$> unexp) <|> aexp
 
 chain a = \case
   [] -> a
@@ -455,14 +487,14 @@ chain a = \case
     _ -> A (E $ Basic "{+") $ A (A (A f a) b) $ foldr A (E $ Basic "+}") rest
   _ -> error "unreachable"
 expr = do
-  x <- chain <$> aexp <*> many (try $ A <$> qop <*> aexp)
+  x <- chain <$> unexp <*> many (try $ A <$> qop <*> unexp)
   res "::" *> annotate x <|> pure x
 annotate x = do
   q <- Qual <$> fatArrows <*> _type
   pure $ L "::" $ A x $ E $ XQual q
 
 gcon = conId <|> try (paren $ conSym <|> res ":" <|> (:"") <$> comma)
-qconop = conSym <|> res ":" <|> between backquote backquote conId
+qconop = conSym <|> res ":" <|> backquoted conId
 
 apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatVar Nothing <$> (res "_" *> pure "_")
@@ -534,7 +566,7 @@ braceDef = do
     Right tab -> pure $ toAscList tab
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
-conop = conSym <|> between backquote backquote conId
+conop = conSym <|> backquoted conId
 fieldDecl = (\vs t -> map (, t) vs) <$> sepBy1 var comma <*> (res "::" *> _type)
 constr = try ((\x c y -> Constr c [("", x), ("", y)]) <$> bType <*> conop <*> bType)
   <|> Constr <$> conId <*>

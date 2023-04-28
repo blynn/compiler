@@ -152,7 +152,8 @@ lBrace = special '{'
 rBrace = special '}'
 lSquare = special '['
 rSquare = special ']'
-backquote = special '`'
+
+backquoted = between (char '`' *> whitespace) (char '`' *> whitespace)
 
 lexeme f = f <* whitespace
 
@@ -278,11 +279,11 @@ joinIsFail t = A (L "join#" t) (V "fail#")
 addLets ls x = L "let" $ foldr L (L "in" bodies) $ fst <$> ls where
   bodies = foldr A x $ joinIsFail . snd <$> ls
 
-qconop = conSym <|> res ":" <|> between backquote backquote conId
+qconop = conSym <|> res ":" <|> backquoted conId
 
 qconsym = conSym <|> res ":"
 
-op = qconsym <|> varSym <|> between backquote backquote (conId <|> varId)
+op = qconsym <|> varSym <|> backquoted (conId <|> varId)
 con = conId <|> paren qconsym
 var = varId <|> paren varSym
 
@@ -446,7 +447,7 @@ defSemi = coalesce . concat <$> sepBy1 def (some semicolon)
 braceDef = concat <$> braceSep defSemi
 
 simpleType c vs = foldl TAp (TC c) (map TV vs)
-conop = conSym <|> between backquote backquote conId
+conop = conSym <|> backquoted conId
 fieldDecl = (\vs t -> map (, t) vs) <$> sepBy1 var comma <*> (res "::" *> _type)
 constr = (\x c y -> Constr c [("", x), ("", y)]) <$> bType <*> conop <*> bType
   <|> Constr <$> conId <*>
