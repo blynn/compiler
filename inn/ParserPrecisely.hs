@@ -204,7 +204,7 @@ unaryMinus = do
 
 conId = lexeme $ nameTailed large
 conSymish = lexeme $ liftA2 (:) (char ':') $ many $ sat isSymbol
-conSym = try do
+conSym = do
   s <- conSymish
   if elem s [":", "::"] then bad $ "reserved: " ++ s else pure s
 
@@ -351,7 +351,7 @@ addLets ls x = L "let" $ foldr encodeVar (L "in" bodies) ls where
 
 op = conSym <|> varSym <|> backquoted (conId <|> varId)
 
-qop = modded (varSym <|> conSym) <|> backquoted (modded $ conId <|> varId) <|> V <$> res ":"
+qop = V <$> res ":" <|> modded (varSym <|> conSym) <|> backquoted (modded $ conId <|> varId)
 con = conId <|> try (paren conSym)
 var = varId <|> try (paren varSym)
 
@@ -493,8 +493,8 @@ annotate x = do
   q <- Qual <$> fatArrows <*> _type
   pure $ L "::" $ A x $ E $ XQual q
 
-gcon = conId <|> try (paren $ conSym <|> res ":" <|> (:"") <$> comma)
-qconop = conSym <|> res ":" <|> backquoted conId
+gcon = conId <|> try (paren $ res ":" <|> (:"") <$> comma <|> conSym)
+qconop = res ":" <|> conSym <|> backquoted conId
 
 apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> flip PatVar Nothing <$> (res "_" *> pure "_")
