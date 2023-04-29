@@ -263,19 +263,19 @@ instance Show V where
   show (Dee v) = "d " ++ show v
 
 instance Show Expr where
-  show expr = case expr of
-    Con c -> show c
-    Var v -> show v
-    x :+ y -> concat ["(", show x, " + ", show y, ")"]
-    x :* y -> concat ["(", show x, "*", show y, ")"]
-    x :^ y -> concat ["(", show x, "^", show y, ")"]
-    x :@ y -> concat ["(", show x, " ", show y, ")"]
-    Inv -> "(1/)"
-    Sin -> "sin"
-    Cos -> "cos"
-    Exp -> "exp"
-    Log -> "log"
-    Lam v y -> concat ["\\", show v, " -> ", show y]
+  showsPrec d expr = case expr of
+    Con c -> shows c
+    Var v -> shows v
+    x :+ y -> showParen (d > 6) $ showsPrec 6 x . (" + "++) . showsPrec 6 y
+    x :* y -> showParen (d > 7) $ showsPrec 7 x . ('*':) . showsPrec 7 y
+    x :^ y -> showParen (d > 8) $ showsPrec 9 x . ('^':) . showsPrec 8 y
+    Inv :@ x -> showParen True $ ("1/"++) . showsPrec 8 x
+    x :@ y -> showParen (d > 9) $ showsPrec 9 x . (' ':) . showsPrec 10 y
+    Sin -> (++) "sin"
+    Cos -> (++) "cos"
+    Exp -> (++) "exp"
+    Log -> (++) "log"
+    Lam v y -> ("\\"++) . shows v . (" -> "++) . shows y
 \end{code}
 
 We supply a parser so it's less painful to play with our functions.
@@ -289,11 +289,11 @@ chainr1 p op = go id where
 
 line :: Charser Expr
 line = expr <* eof where
-  expr = pwr `chainl1` ((spch '+' *> pure (:+))
+  expr = term `chainl1` ((spch '+' *> pure (:+))
     <|> (spch '-' *> pure (\x y -> x :+ (Con (-1) :* y))))
-  pwr = term `chainr1` (spch '^' *> pure (:^))
-  term = apps  `chainl1` ((spch '*' >> pure (:*))
+  term = pwr  `chainl1` ((spch '*' >> pure (:*))
     <|> (spch '/' *> pure (\x y -> x :* (Inv :@ y))))
+  pwr = apps `chainr1` (spch '^' *> pure (:^))
   apps = dOrApply id <$> some atm
   dOrApply acc [Just one]     = acc one
   dOrApply acc (Nothing:rest) = acc (d $ dOrApply id rest)
@@ -324,13 +324,40 @@ Unlike Haskell, lambdas bind exactly one variable, so that we can more easily
 parse `\d x` as the lambda binding the differentiable variable $dx$. There is
 no unary minus, so we write negative integers as, for example, `0 - 42`.
 
+We add a few basic simplification rules:
+
+\begin{code}
+simplify :: Expr -> Expr
+simplify = \case
+  x :+ y -> go $ simplify x :+ simplify y
+  x :* y -> go $ simplify x :* simplify y
+  x :^ y -> go $ simplify x :^ simplify y
+  x :@ y -> go $ simplify x :@ simplify y
+  Lam v x -> Lam v $ go x
+  e -> e
+  where
+  go = \case
+    Con a :+ Con b -> Con $ a + b
+    Con a :* Con b -> Con $ a * b
+    Con a :^ Con b -> Con $ a ^ b
+    Con 0 :+ x -> x
+    x :+ Con 0 -> x
+    Con 0 :* x -> Con 0
+    x :* Con 0 -> Con 0
+    Con 1 :* x -> x
+    x :* Con 1 -> x
+    x :^ Con 0 -> Con 1
+    x :^ Con 1 -> x
+    e -> e
+\end{code}
+
 Lastly, we add some code for the interactive demo at the top of this page:
 
 \begin{code}
 go :: String -> String
 go s = case parse line "" s of
   Left err -> "parse error: " ++ show err
-  Right expr -> show expr
+  Right expr -> show $ simplify expr
 
 main = interact go
 \end{code}
@@ -347,12 +374,11 @@ go "d (d y / d x) / d x"
 We get:
 
 ------------------------------------------------------------------------
-(((d y*((-1*((1/) (d x*d x)))*d d x)) + (d d y*((1/) d x)))*((1/) d x))
+(d y*-1*(1/(d x*d x))*d d x + d d y*(1/d x))*(1/d x)
 ------------------------------------------------------------------------
 
-Our program isn't quite ready to take over our calculus homework because it
-fails to collect like terms and fold constants and such. However, we can
-manually simplify to get:
+Our program isn't quite ready to take over our calculus homework because our
+simplification function is too simple. However, we can manually figure out:
 
 \[
 \frac{d(\frac{dy}{dx})}{dx} = \frac{ddy}{dx^2} - \frac{dy}{dx} \frac{ddx}{dx^2}
