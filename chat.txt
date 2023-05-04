@@ -187,7 +187,30 @@ function interpret() {
       oe.classList.add('output');
       oe.innerText = r.out;
       convo.appendChild(oe);
-      if (r.buf[1] == "svg") {
+      if (r.buf[1] == "html") {
+        const widget = document.createElement("div");
+        widget.innerHTML = r.out;
+        convo.appendChild(widget);
+/* Example:
+do
+  putStr "html" >> nextOut
+  putStr "click b0 ta0" >> nextOut
+  putStr "interact reverse" >> nextOut
+  putStr "<textarea id='ta0'>are we not pure? no, sir! prisoner up to new era</textarea> <button id='b0'>Go!</button>"
+*/
+const as = r.buf[2].split(' ');
+if (as[0] == "click") {
+  const m = teen(module_name);
+  const expr = teen(r.buf[3]);
+  const ta = document.createElement("textarea");
+  convo.appendChild(ta);
+  document.getElementById(as[1]).addEventListener("click", (event) => {
+    const inp = document.getElementById(as[2]).value;
+    const wr = run("eval_expr", [m, expr], inp);
+    ta.value += wr.out + "\n";
+  });
+}
+      } else if (r.buf[1] == "svg") {
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         const as = r.buf[2].split('\n');
         for (let i = 0; i < as.length - 1; i += 2) {

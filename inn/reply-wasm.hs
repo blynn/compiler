@@ -32,3 +32,11 @@ foreign export ccall "chat_new" chat_new
 chat_new = do
   [tgt] <- getArgs
   writeIORef ref . moduleNew tgt =<< readIORef ref
+
+foreign export ccall "eval_expr" evalExpr
+evalExpr = do
+  (m:f:_) <- getArgs
+  (mos, (libStart, lib)) <- readIORef ref
+  case readInput mos m f of
+    Right (Right expr) -> nextOut *> exec lib expr
+    _ -> putStr "error" *> nextOut *> putStr "want expr"

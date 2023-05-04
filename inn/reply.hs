@@ -66,9 +66,9 @@ readInput mos name s = do
     Right expr -> Right <$> tryExpr expr
   where
   orig = _neat $ mos!name
-  fmt = Left <$> fragment <|> Right <$> single
+  fmt = Left <$> try fragment <|> Right <$> single
   fragment = foldr id neatEmpty{moduleImports = moduleImports orig} . map snd <$> haskell
-  single = many (char ' ') *> expr <* eof
+  single = whitespace *> expr <* eof
   importSelf neat = neat{moduleImports = insertWith (++) "" [(name, const True)] $ moduleImports neat}
   tryAddDefs frag = do
     mos1 <- compileModule mos (name, importSelf frag)
