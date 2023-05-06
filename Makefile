@@ -69,8 +69,8 @@ $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS T
 $(call party,party1.c,multiparty,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer1 party)
 $(call party,party2.c,party1,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS1 Typer2 party1)
 $(call party,crossly.c,party2,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2 Typer3 party2)
-$(call party,slowprecisely.c,crossly,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
-$(call party,precisely.c,slowprecisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,crossly1.c,crossly,Base2 System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,precisely.c,crossly1,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
 $(call party,check.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
 

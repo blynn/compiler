@@ -423,15 +423,6 @@ initHash = fromIntegral . fracBits 32 . rt2 . fromIntegral <$> take 8  primes
 roundKs  :: [Word]
 roundKs  = fromIntegral . fracBits 32 . rt3 . fromIntegral <$> take 64 primes
 
--- A pale imitation of parts of `Data.Bits`.
-rshift :: Int -> Word -> Word
-rshift i = (`wordShr` fromIntegral i)
-rotr :: Int -> Word -> Word
-rotr i n = (wordShr n u) + (wordShl n (32 - u)) where u = fromIntegral i
-xor = wordXor
-(.&.) = wordAnd
-complement x = -1-x
-
 -- Swiped from `Data.List.Split`.
 chunksOf i ls = map (take i) (go ls) where
   go [] = []
@@ -451,14 +442,16 @@ sha256 s = concatMap hex32 $ foldl chunky initHash $ chunksOf 16 ws where
 
 chunky h c = zipWith (+) h $ foldl hashRound h $ zipWith (+) roundKs w where
   w = c ++ foldr1 (zipWith (+)) [w, s0, drop 9 w, s1] where
-    s0 = foldr1 (zipWith xor) $ map (<$> tail w) [rotr 7, rotr 18, rshift 3]
-    s1 = foldr1 (zipWith xor) $ map (<$> drop 14 w) [rotr 17, rotr 19, rshift 10]
+    s0 = foldr1 (zipWith xor) $ map (<$> tail w) [ror 7, ror 18, shr 3]
+    s1 = foldr1 (zipWith xor) $ map (<$> drop 14 w) [ror 17, ror 19, shr 10]
+    shr = flip shiftR
+    ror = flip rotateR
 
 hashRound [a,b,c,d,e,f,g,h] kw = [t1 + t2, a, b, c, d + t1, e, f, g] where
-  s1 = foldr1 xor $ map (`rotr` e) [6, 11, 25]
+  s1 = foldr1 xor $ map (rotateR e) [6, 11, 25]
   ch = (e .&. f) `xor` (complement e .&. g)
   t1 = h + s1 + ch + kw
-  s0 = foldr1 xor $ map (`rotr` a) [2, 13, 22]
+  s0 = foldr1 xor $ map (rotateR a) [2, 13, 22]
   maj = (a .&. b) `xor` (a .&. c) `xor` (b .&. c)
   t2 = s0 + maj
 
@@ -475,18 +468,6 @@ main = interact sha256
 -- change 0x81 to 0x86 and 0x01 to 0x06.
 import Base
 import System
-
--- Ersatz `Data.Bits`. We use `xor` for more than one type. The others are only used on `Word64` values.
-class Xor a where xor :: a -> a -> a
-instance Xor Word64 where xor (Word64 a b) (Word64 c d) = Word64 (xor a c) (xor b d)
-instance Xor Word where xor = wordXor
-instance Xor Int where xor = intXor
-complement x = -1 - x
-(Word64 a b) .|. (Word64 c d) = Word64 (wordOr a c) (wordOr b d)
-(Word64 a b) .&. (Word64 c d) = Word64 (wordAnd a c) (wordAnd b d)
-rotateL (Word64 a b) nInt = let n = wordFromInt nInt in
-  uncurry Word64 (word64Shl a b n 0) .|.
-  uncurry Word64 (word64Shr a b (64 - n) 0)
 
 -- Swiped from `Data.List.Split`.
 chunksOf i ls = map (take i) (go ls) where

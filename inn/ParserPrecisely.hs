@@ -477,8 +477,8 @@ parenAtom = rParen *> pure (V "()")
   <|> try ((comma *> pure (V ",") <|> V <$> res ":" <|> modded (conSym <|> varSym)) <* rParen)
   <|> section <* rParen
 
-aexp = foldl1 A <$> some atom
-unexp = unaryMinus *> (A (V "negate") <$> unexp) <|> aexp
+aexp = foldl1 A <$> some unexp
+unexp = try unaryMinus *> (A (V "negate") <$> unexp) <|> atom
 
 chain a = \case
   [] -> a
@@ -487,7 +487,7 @@ chain a = \case
     _ -> A (E $ Basic "{+") $ A (A (A f a) b) $ foldr A (E $ Basic "+}") rest
   _ -> error "unreachable"
 expr = do
-  x <- chain <$> unexp <*> many (try $ A <$> qop <*> unexp)
+  x <- chain <$> aexp <*> many (try $ A <$> qop <*> aexp)
   res "::" *> annotate x <|> pure x
 annotate x = do
   q <- Qual <$> fatArrows <*> _type

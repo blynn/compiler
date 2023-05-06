@@ -1,5 +1,4 @@
--- Assumes overloaded integer literals, lexical negation.
--- Bits.
+-- Ring, Integral, Integer.
 module Base where
 
 infixr 9 .
@@ -248,8 +247,8 @@ class Enum a where
   enumFrom       :: a -> [a]
   enumFromTo     :: a -> a -> [a]
 instance Enum Int where
-  succ = (+ 1)
-  pred = (- 1)
+  succ = (+1)
+  pred = (+(0-1))
   toEnum = id
   fromEnum = id
   enumFrom = iterate succ
@@ -267,15 +266,15 @@ instance Enum Bool where
   enumFromTo False False = [False]
   enumFromTo True True = [True]
 instance Enum Char where
-  succ = chr . (+ 1) . ord
-  pred = chr . (- 1) . ord
+  succ = chr . (+1) . ord
+  pred = chr . (+(0-1)) . ord
   toEnum = chr
   fromEnum = ord
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 instance Enum Word where
-  succ = (+ 1)
-  pred = (- 1)
+  succ = (+oneWord)
+  pred = (+(zeroWord - oneWord))
   toEnum = wordFromInt
   fromEnum = intFromWord
   enumFrom = iterate succ
@@ -289,7 +288,7 @@ class Ring a where
   (*) :: a -> a -> a
   fromInteger :: Integer -> a
   negate :: a -> a
-  negate = (0 -)
+  negate = (fromIntegral 0 -)
 
 class Integral a where
   div :: a -> a -> a
@@ -307,6 +306,7 @@ instance Ring Int where
   (-) = intSub
   (*) = intMul
   fromInteger = intFromWord . fromInteger
+  -- fromInteger (Integer xsgn xs) = intFromWord $ (if xsgn then id else wordSub zeroWord) $ fst $ mpView xs
 instance Integral Int where
   div = intDiv
   mod = intMod
@@ -314,21 +314,18 @@ instance Integral Int where
   rem = intRem
   toInteger x
     | 0 <= x = Integer True $ if x == 0 then [] else [wordFromInt x]
-    | True = Integer False [wordFromInt -x]
-zeroWord = wordFromInt $ ord '\0'
+    | True = Integer False [wordFromInt $ 0 - x]
 instance Ring Word where
   (+) = wordAdd
   (-) = wordSub
   (*) = wordMul
-  fromInteger (Integer xsgn xs) = (if xsgn then id else wordSub zeroWord) case xs of
-    [] -> zeroWord
-    (x:_) -> x
+  fromInteger (Integer xsgn xs) = (if xsgn then id else wordSub zeroWord) $ fst $ mpView xs
 instance Integral Word where
   div = wordDiv
   mod = wordMod
   quot = wordQuot
   rem = wordRem
-  toInteger x = Integer True $ if x == 0 then [] else [x]
+  toInteger x = Integer True $ if x == zeroWord then [] else [x]
 instance Eq Word where (==) = wordEq
 instance Ord Word where (<=) = wordLE
 
@@ -337,7 +334,7 @@ instance Ring Word64 where
   Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
   Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
   Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub 0 0 x y where
+  fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub zeroWord zeroWord x y where
     (x, xt) = mpView xs
     (y, _) = mpView xt
 instance Ord Word64 where
@@ -375,7 +372,7 @@ instance Integral Integer where
     then Integer True qs
     else case rs of
       [] -> mpCanon0 False qs
-      _  -> mpCanon0 False $ mpAdd qs [1]
+      _  -> mpCanon0 False $ mpAdd qs [oneWord]
     where (qs, rs) = mpDivMod xs ys
   mod (Integer xsgn xs) (Integer ysgn ys) = if xsgn == ysgn
     then mpCanon0 xsgn rs
@@ -391,17 +388,20 @@ instance Ord Integer where
     | xsgn = if ysgn then mpCompare xs ys else GT
     | True = if ysgn then LT else mpCompare ys xs
 instance Enum Integer where
-  succ = (+ Integer True [1])
-  pred = (+ Integer False [1])
+  succ = (+ Integer True [oneWord])
+  pred = (+ Integer False [oneWord])
   toEnum = toInteger
   fromEnum = fromInteger
   enumFrom = iterate succ
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
-mpView [] = (0, [])
+zeroWord = wordFromInt $ ord '\0'
+oneWord = wordFromInt 1
+
+mpView [] = (zeroWord, [])
 mpView (x:xt) = (x, xt)
 
-mpCanon sgn xs = mpCanon0 sgn $ reverse $ dropWhile (0 ==) $ reverse xs
+mpCanon sgn xs = mpCanon0 sgn $ reverse $ dropWhile (zeroWord ==) $ reverse xs
 mpCanon0 sgn xs = case xs of
   [] -> Integer True []
   _ -> Integer sgn xs
@@ -417,40 +417,40 @@ mpAdc [] [] c = ([], c)
 mpAdc xs ys c = first (lo:) $ mpAdc xt yt hi where
   (x, xt) = mpView xs
   (y, yt) = mpView ys
-  (lo,hi) = uncurry (word64Add c 0) $ word64Add x 0 y 0
+  (lo,hi) = uncurry (word64Add c zeroWord) $ word64Add x zeroWord y zeroWord
 
-mpAdd xs ys | c == 0 = zs
+mpAdd xs ys | c == zeroWord = zs
             | True = zs ++ [c]
-  where (zs, c) = mpAdc xs ys 0
+  where (zs, c) = mpAdc xs ys zeroWord
 
-mpSub xs ys = fst $ mpSbb xs ys 0
+mpSub xs ys = fst $ mpSbb xs ys zeroWord
 
 mpSbb xs ys b = go xs ys b where
   go [] [] b = ([], b)
-  go xs ys b = first (lo:) $ go xt yt $ 1 - hi where
+  go xs ys b = first (lo:) $ go xt yt $ oneWord - hi where
     (x, xt) = mpView xs
     (y, yt) = mpView ys
-    (lo,hi) = uncurry word64Sub (word64Sub x 1 y 0) b 0
+    (lo,hi) = uncurry word64Sub (word64Sub x oneWord y zeroWord) b zeroWord
 
-mpMulWord _ []     c = if c == 0 then [] else [c]
+mpMulWord _ []     c = if c == zeroWord then [] else [c]
 mpMulWord x (y:yt) c = lo:mpMulWord x yt hi where
-  (lo, hi) = uncurry (word64Add c 0) $ word64Mul x 0 y 0
+  (lo, hi) = uncurry (word64Add c zeroWord) $ word64Mul x zeroWord y zeroWord
 
 mpMul [] _ = []
-mpMul (x:xt) ys = case mpMulWord x ys 0 of
+mpMul (x:xt) ys = case mpMulWord x ys zeroWord of
   [] -> []
   z:zs -> z:mpAdd zs (mpMul xt ys)
 
-mpDivModWord xs y = first (reverse . dropWhile (0 ==)) $ go 0 $ reverse xs where
+mpDivModWord xs y = first (reverse . dropWhile (zeroWord ==)) $ go zeroWord $ reverse xs where
   go r [] = ([], r)
   go n (x:xt) = first (q:) $ go r xt where
-    q = fst $ word64Div x n y 0
-    r = fst $ word64Mod x n y 0
+    q = fst $ word64Div x n y zeroWord
+    r = fst $ word64Mod x n y zeroWord
 
-mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
+mpDivMod xs ys = first (reverse . dropWhile (== zeroWord)) $ go us where
   s = mpDivScale $ last ys
-  us = mpMulWord s (xs ++ [0]) 0
-  vs = mpMulWord s ys 0
+  us = mpMulWord s (xs ++ [zeroWord]) zeroWord
+  vs = mpMulWord s ys zeroWord
   (v1:vt) = reverse vs
   vlen = length vs
   go us | ulen <= vlen = ([], fst $ mpDivModWord us s)
@@ -459,21 +459,21 @@ mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
     ulen = length us
     (u0:u1:ut) = reverse us
     (lsbs, msbs) = splitAt (ulen - vlen - 1) us
-    (ql, qh) = word64Div u1 u0 v1 0
-    q0 = if 1 <= qh then -1 else ql
-    (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- 1) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs 0) 0, bor == 0]
+    (ql, qh) = word64Div u1 u0 v1 zeroWord
+    q0 = if oneWord <= qh then (zeroWord-oneWord) else ql
+    (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- oneWord) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs zeroWord) zeroWord, bor == zeroWord]
 
 mpDivScale n
-  | n1 == 0 = 1
-  | otherwise = fst $ word64Div 0 1 n1 0
-  where n1 = succ n
+  | n1 == zeroWord = oneWord
+  | otherwise = fst $ word64Div zeroWord oneWord n1 zeroWord
+  where n1 = n + oneWord
 
 mpBase _ [] = ('0':)
 mpBase b xs = go xs where
   go [] = id
   go xs = go q . shows r where (q, r) = mpDivModWord xs b
 
-instance Show Integer where showsPrec _ (Integer xsgn xs) = (if xsgn then id else ('-':)) . mpBase 10 xs
+instance Show Integer where showsPrec _ (Integer xsgn xs) = (if xsgn then id else ('-':)) . mpBase (wordFromInt 10) xs
 
 instance (Ord a, Ord b) => Ord (a, b) where
   (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)
@@ -513,11 +513,11 @@ instance Show Int where
     | 2 * n == 0 = ("-2147483648"++)
     | True = ('-':) . showInt__ (0 - n)
 showWord_ n
-  | 0 == n = id
-  | True = showWord_ (n`div`10) . (chr (48+(intFromWord $ n`mod`10)):)
+  | zeroWord == n = id
+  | True = showWord_ (n`div`wordFromInt 10) . (chr (48+(intFromWord $ n`mod`wordFromInt 10)):)
 instance Show Word where
   showsPrec _ n
-    | 0 == n = ('0':)
+    | zeroWord == n = ('0':)
     | True = showWord_ n
 instance Show Word64 where
   showsPrec p (Word64 x y) = showsPrec p $ Integer True [x, y]
@@ -538,10 +538,10 @@ integerSignList (Integer xsgn xs) f = f xsgn xs
 unwords [] = ""
 unwords ws = foldr1 (\w s -> w ++ ' ':s) ws
 unlines = concatMap (++"\n")
-abs x = if 0 <= x then x else -x
+abs x = if 0 <= x then x else 0 - x
 signum x | 0 == x = 0
          | 0 <= x = 1
-         | otherwise = -1
+         | otherwise = 0 - 1
 otherwise = True
 sum = foldr (+) 0
 product = foldr (*) 1
@@ -557,7 +557,7 @@ instance Ring Double where
   (*) = doubleMul
   fromInteger n = integerSignList n \sgn ws -> case reverse ws of
     [] -> doubleFromInt 0
-    x:xt -> (if sgn then id else negate) let
+    x:xt -> (if sgn then id else (doubleFromInt 0-)) let
       dx = doubleFromWord x
       sh = foldr1 (*) $ replicate 32 $ doubleFromInt 2
       in case xt of
@@ -567,65 +567,24 @@ instance Ring Double where
 instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 instance Show Double where
-  showsPrec _ d = case compare d 0 of
+  showsPrec _ d = case compare d $ doubleFromInt 0 of
    EQ -> ('0':)
-   LT -> ('-':) . shows -d
+   LT -> ('-':) . shows (doubleFromInt 0 - d)
    GT -> go where
-    tens = iterate (10*) 1
-    tenths = iterate (0.1*) 1
-    (as, bs) = if d >= 1 then span (<= d) tens else span (>= d) tenths
-    norm = if d >= 1 then d / last as else d / head bs
+    one = doubleFromInt 1
+    ten = doubleFromInt 10
+    tens = iterate (ten*) one
+    tenth = one / ten
+    tenths = iterate (tenth*) one
+    (as, bs) = if d >= one then span (<= d) tens else span (>= d) tenths
+    norm = if d >= one then d / last as else d / head bs
     dig = intFromDouble norm
-    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble (1000000 * (norm - doubleFromInt dig)))++) . ('e':) . shows (if d >= 1 then length as - 1 else 0 - length as)
+    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble ((tens!!6) * (norm - doubleFromInt dig)))++) . ('e':) . shows (if d >= one then length as - 1 else 0 - length as)
 
 class Field a where
   recip :: a -> a
-  recip = (1 /)
+  recip = (fromIntegral 1 /)
   (/) :: a -> a -> a
   a / b = a * recip b
 
 instance Field Double where (/) = doubleDiv
-
-class Bits a where
-  xor :: a -> a -> a
-  (.&.) :: a -> a -> a
-  (.|.) :: a -> a -> a
-  shiftR :: a -> Int -> a
-  rotateR :: a -> Int -> a
-  rotateL :: a -> Int -> a
-  complement :: a -> a
-  complement x = -1 - x
-
-instance Bits Int where
-  xor = intXor
-  (.&.) = intAnd
-  (.|.) = intOr
-  shiftR n i = intShr n $ fromIntegral i
-  rotateR n i = intOr (intShr n u) (intShl n $ 32 - u) where u = fromIntegral i
-  rotateL n i = intOr (intShr n $ 32 - u) (intShl n u) where u = fromIntegral i
-
-instance Bits Word where
-  xor = wordXor
-  (.&.) = wordAnd
-  (.|.) = wordOr
-  shiftR n i = wordShr n $ fromIntegral i
-  rotateR n i = wordOr (wordShr n u) (wordShl n $ 32 - u) where u = fromIntegral i
-  rotateL n i = wordOr (wordShr n $ 32 - u) (wordShl n u) where u = fromIntegral i
-
-instance Bits Word64 where
-  xor (Word64 a b) (Word64 c d) = Word64 (wordXor a c) (wordXor b d)
-  (Word64 a b) .&. (Word64 c d) = Word64 (wordAnd a c) (wordAnd b d)
-  (Word64 a b) .|. (Word64 c d) = Word64 (wordOr a c) (wordOr b d)
-  shiftR (Word64 a b) i
-    | u >= 32 = Word64 (wordShr b $ u - 32) 0
-    | otherwise = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u)
-    where u = fromIntegral i
-  rotateR (Word64 a b) i
-    | u >= 32 = small b a $ u - 32
-    | otherwise = small a b u
-    where
-    u = fromIntegral i
-    small a b u = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u + wordShl a (32 - u))
-  rotateL (Word64 a b) i = let n = wordFromInt i in
-    uncurry Word64 (word64Shl a b n 0) .|.
-    uncurry Word64 (word64Shr a b (64 - n) 0)
