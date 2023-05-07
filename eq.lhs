@@ -445,7 +445,7 @@ the right-hand side. This ensures each rewrite shrinks the term according to
 our well-founded partial order, so we eventually reach a term for which no
 rewrite rules apply.
 
-We introduce the 'lexicographic path order' (LPO) on our terms.
+We introduce the _lexicographic path order_ (LPO) on our terms.
 See references for the motivation, and why it works.
 Our `funargs` helper uncurries the function and arguments needed by `lpoGT`.
 Harrison has no need for this because of a different data structure.
@@ -501,8 +501,8 @@ Let `t` be a term, `rules` be a rewriting system and let `x = fixRewrite rules
 t`. Next, apply the rewrite rules in an arbitrary order on `t` to obtain `y`, a
 term on which no further rewrites are possible.
 
-If we always have `y` equals `x`, then the rewriting system is 'confluent'.
-After enough steps, every term reaches its unique 'normal form', no matter
+If we always have `y` equals `x`, then the rewriting system is _confluent_.
+After enough steps, every term reaches its unique _normal form_, no matter
 which order we apply the rewrites.
 
 On the other hand, if we find cases where `x` and `y` differ, then we introduce
@@ -534,7 +534,7 @@ The LHS of rule 3 matches a subterm in the LHS of rule 1 via the substitution
 ------------------------------------------------------------------------
 
 Thus we can either use rule 1 or rule 3 to rewrite this term.
-The resulting two terms are a 'critical pair' of these two rules.
+The resulting two terms are a _critical pair_ of these two rules.
 
 ------------------------------------------------------------------------
 1 * z1 = (I x3 * x3) * z1 = I x3 * (x3 * z1)
@@ -657,8 +657,8 @@ which hitherto had been accomplished by a mathematical analogue of alchemy.
 We didn't make it to Robbins algebras. A big obstacle is commutativity: how
 can we handle "x + y = y + x" in our framework? See McCune or Harrison for
 references or section 7 of
-http://www.cs.tau.ac.il/~nachum/papers/taste-fixed.pdf[Dershowitz, 'A Taste of
-Rewrite Systems']. (Our sorting demo comes from the latter.)
+http://www.cs.tau.ac.il/~nachum/papers/taste-fixed.pdf[Dershowitz, _A Taste of
+Rewrite Systems_]. (Our sorting demo comes from the latter.)
 
 With the help of a few identities and a cost model,
 http://www.cs.cornell.edu/~ross/publications/eqsat/[automating equational

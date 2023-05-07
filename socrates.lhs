@@ -157,7 +157,7 @@ https://en.wikipedia.org/wiki/Mealy_machine[Mealy machines].
 
 DFAs are hobbled by lack of memory. Let's fix this. Perhaps the simplest kind
 of memory is a stack, as evidenced by the popularity of stack-based virtual
-machines. We model such machines with 'deterministic push-down automata':
+machines. We model such machines with _deterministic push-down automata_:
 
 \begin{code}
 type Diff = (State, [Char])
@@ -244,9 +244,9 @@ machine uglier.
 
 Better to allow "bottomless" stacks. Rather than rejecting, we
 define the result of popping an empty stack to be a special `Char`
-value that we call a 'blank'.
+value that we call a _blank_.
 
-We have just described 'Turing machines'.
+We have just described _Turing machines_.
 Usually, the two stacks and current value are explained in terms of a movable
 read/write head on a tape that is infinitely long in either direction, which is
 disconcerting since it's impossible to cram an infinite tape into a real
@@ -340,8 +340,8 @@ Knuth vividly recounts the history in
 https://www.win.tue.nl/~mvdbrand/courses/seminar/0809/papers/ag-genesis.pdf[a
 paper on attribute grammars]. (Attribute grammars are a venerable branch of
 formal semantics; see Backhouse,
-'https://link.springer.com/content/pdf/10.1007/3-540-46002-0_11.pdf[A
-Functional Semantics of Attribute Grammars]' for a modern take.)
+https://link.springer.com/content/pdf/10.1007/3-540-46002-0_11.pdf[_A
+Functional Semantics of Attribute Grammars_] for a modern take.)
 
 https://smlfamily.github.io/sml97-defn.pdf[Standard ML] is the gold standard.
 
@@ -370,7 +370,7 @@ Canetti later defined
 https://en.wikipedia.org/wiki/Universal_composability[universal composability].
 
 https://www.youtube.com/watch?v=bmKYiUOEo2A[Conal Elliot gave an inspiring talk
-on 'denotational design']. He advocates mathematical thinking beyond its
+on _denotational design_]. He advocates mathematical thinking beyond its
 traditional strongholds, and in particular shows how it applies to manipulating
 images. See also
 https://www.youtube.com/watch?v=j3Q32brCUAI[Functional Reactive Programming]

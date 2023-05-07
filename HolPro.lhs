@@ -309,7 +309,7 @@ theorem we wish to prove from given assumptions. Each assumption of a `Goal`
 is a labeled theorem, and the conclusion is a `Hol` term.
 
 Given a `Hol` term to prove, we begin by making it a goal with no assumptions.
-Then we apply a 'tactic' to replace the goal with subgoals, along with a
+Then we apply a _tactic_ to replace the goal with subgoals, along with a
 justification function that describes how to prove the original goal if each of
 the subgoals are proved. We may apply tactics recursively, thus we wind up with
 a tree. Ultimately, if we prove each leaf theorem, then recursively tracing the

@@ -556,7 +556,7 @@ Or maybe I'm still bitter about that exam. In any case, here is a dilettante's
 guide to writing compilers while thumbing your nose at the establishment.
 
 (I also flunked AI, Networks, and Numerical Analysis. After reading John L.
-Gustafson, 'The End of Error: Unum Computing', I'm glad I'm not an expert on
+Gustafson, _The End of Error: Unum Computing_, I'm glad I'm not an expert on
 the stuff they asked in that Numerical Analysis exam. But that's a topic for
 another day.)
 

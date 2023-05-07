@@ -110,7 +110,7 @@ We switch focus to `q` and find a linear approximation in terms of a variable
 `dq` at `q = 4.56`, and adjust `q` similarly, at which point we repeat the
 whole process using our improved guesses for `p` and `q`. With luck, we'll home
 in on the correct constants after iterating many times.
-This technique is known as 'gradient descent'.
+This technique is known as _gradient descent_.
 
 (We could be cleverer and modify our guesses so the approximate error is
 exactly zero, which is called
@@ -156,7 +156,7 @@ learn!!50000 == (1.8000000000067133,31.99999999798702)
 
 which is close to the true constants (9/5, 32).
 
-Why choose 0.0001? This fussy parameter is known as the 'learning rate'. The
+Why choose 0.0001? This fussy parameter is known as the _learning rate_. The
 smaller it is, the longer it takes to reach a good answer. But if it is too
 large, those gentle nudges become violent shoves and our guesses are forever
 all over the map. Researchers have explored many ideas to tune the learning
@@ -425,18 +425,18 @@ can be replaced by `x` and `y`. Alternatively, we can compute
 == Think differential ==
 
 In the dark ages, generalizations of our self-taught temperature conversion
-program were called 'neural networks'. More recently, we've been saying 'deep
-learning'. Even more recently,
+program were called _neural networks_. More recently, we've been saying _deep
+learning_. Even more recently,
 https://techburst.io/deep-learning-est-mort-vive-differentiable-programming-5060d3c55074[this
-area seems to have been rebranded as 'differentiable programming'].
+area seems to have been rebranded as _differentiable programming_].
 
 This reflects a shift in thinking. Although the underlying mathematics remains
 the same, the emphasis is no longer on crudely modeling the human brain, nor
 stitching together layers of matrix multiplications. The latest fashion is to
 program with differentiable functions and improve them with gradient descent,
 or perhaps other methods.
-See Conal Elliot, https://github.com/conal/talk-2018-deep-learning-rebooted['A
-Functional Reboot for Deep Learning'].
+See Conal Elliot, https://github.com/conal/talk-2018-deep-learning-rebooted[_A
+Functional Reboot for Deep Learning_].
 
 In a 2019 paper,
 http://online.watsci.org/abstract_pdf/2019v26/v26n3a-pdf/4.pdf[Bartlett and
@@ -518,8 +518,8 @@ An example of the second trick: if we know $(f, df) = (1, 2 dx)$ and $(g, dg) =
 (3, 4 dx)$ then the product rule gives $(f g, d(f g)) = (3, 10 dx)$. Algebra
 is great, but sticking with values sure is easier than manipulating symbols.
 
-Automatic differentiation has a 'forward mode' and a 'reverse mode'.
-The latter is also called 'backpropagation' in some contexts.
+Automatic differentiation has a _forward mode_ and a _reverse mode_.
+The latter is also called _backpropagation_ in some contexts.
 These modes relate to the chain rule, which in our implementation is hidden in
 lambdas and applications. Working through the details, we find the chain rule
 leads to expressions like:

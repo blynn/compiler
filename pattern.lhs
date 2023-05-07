@@ -24,8 +24,8 @@ We leave supporting patterns as the left-hand side of an equation for another
 day. We also ignore fixity declarations for pattern infix operators.
 
 We probably should have started by reading Peyton Jones,
-https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf['The
-Implementation of Functional Programming Languages'], Chapter 5.
+https://www.microsoft.com/en-us/research/wp-content/uploads/1987/01/slpj-book-1987-small.pdf[_The
+Implementation of Functional Programming Languages_], Chapter 5.
 Instead, we forge ahead with the first algorithm that comes to mind.
 
 Consider a top-level function defined with multiple equations:
@@ -174,9 +174,9 @@ translate to expressions involving booleans.
 <div id='patty' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::patty.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -291,9 +291,9 @@ a type synonym for `[Char]`, but this breaks FFI typing.
 <div id='guardedly' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::guardedly.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -320,9 +320,9 @@ raw-strings-qq package].
 <div id='assembly' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::assembly.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>

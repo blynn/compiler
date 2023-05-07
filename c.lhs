@@ -100,8 +100,8 @@ reduce projection functions (such as `fst` and `snd`) as we collect garbage.
 See:
 
   * https://www.cs.ox.ac.uk/publications/publication3788-abstract.html[John
-Hughes 1983, 'The design and implementation of programming languages']
-  * https://homepages.inf.ed.ac.uk/wadler/papers/leak/leak.ps.gz[Philip Wadler 1987, 'Fixing some space leaks with a garbage collector']
+Hughes 1983, _The design and implementation of programming languages_]
+  * https://homepages.inf.ed.ac.uk/wadler/papers/leak/leak.ps.gz[Philip Wadler 1987, _Fixing some space leaks with a garbage collector_]
 
 We partially achieve this by reducing `K I T` nodes during garbage collection.
 

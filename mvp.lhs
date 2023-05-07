@@ -59,7 +59,7 @@ trickier than at the top-level, because of shared variable bindings floating
 around. Again, we find the strongly connected components to detect mutual
 dependencies, but instead of a table of addresses, we apply simple lambda
 lifting.
-See https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[Peyton Jones and Lester, 'Implementing Functional Languages: a tutorial'], Chapter 6.
+See https://www.microsoft.com/en-us/research/publication/implementing-functional-languages-a-tutorial/[Peyton Jones and Lester, _Implementing Functional Languages: a tutorial_], Chapter 6.
 
 In brief, we order the members of each component arbitrarily and insert
 variables so they can all reach each other; we automate what we did by hand
@@ -99,9 +99,9 @@ matching on `True` and `False`.
 <div id='mutually' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::mutually.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -213,9 +213,9 @@ left.
 <div id='virtually' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::virtually.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -247,9 +247,9 @@ We replace `fpair` and `flst` with more idiomatic Haskell.
 <div id='marginally' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::marginally.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -327,9 +327,9 @@ For now we'll just put up with `exit()` instead of exceptions.
 <div id='methodically' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::methodically.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>

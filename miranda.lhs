@@ -212,7 +212,7 @@ include::e4096.hs[]
 == A rematch? ==
 
 See
-https://codesync.global/media/open-sourcing-miranda-david-turner-code-mesh-v-2020-codemeshv2020/[David Turner's talk, 'Open Sourcing Miranda'], especially for
+https://codesync.global/media/open-sourcing-miranda-david-turner-code-mesh-v-2020-codemeshv2020/[David Turner's talk, _Open Sourcing Miranda_], especially for
 tips on updating C code written 30 years ago! I was pleased to hear that:
 
   * Miranda's VM has an ATOMLIMIT that is like our scheme of addressses starting

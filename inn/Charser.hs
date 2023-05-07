@@ -1,20 +1,20 @@
 module Charser where
 import Base
-data Charser a = Charser { getCharser :: String -> Either String (a, String) }
+data Charser a = Charser { unCharser :: String -> Either String (a, String) }
 instance Functor Charser where fmap f (Charser x) = Charser $ fmap (first f) . x
 instance Applicative Charser where
   pure a = Charser \s -> Right (a, s)
   f <*> x = Charser \s -> do
-    (fun, t) <- getCharser f s
-    (arg, u) <- getCharser x t
+    (fun, t) <- unCharser f s
+    (arg, u) <- unCharser x t
     pure (fun arg, u)
 instance Monad Charser where
   Charser f >>= g = Charser $ (good =<<) . f
-    where good (r, t) = getCharser (g r) t
+    where good (r, t) = unCharser (g r) t
   return = pure
 instance Alternative Charser where
   empty = Charser \_ -> Left ""
-  (<|>) x y = Charser \s -> either (const $ getCharser y s) Right $ getCharser x s
+  (<|>) x y = Charser \s -> either (const $ unCharser y s) Right $ unCharser x s
 
 sat f = Charser \case
   h:t | f h -> Right (h, t)
@@ -57,4 +57,4 @@ alphaNumChar = letterChar <|> digitChar
 space :: Charser ()
 space = many (sat isSpace) *> pure ()
 
-parse p _ = fmap fst . getCharser p
+parse p _ = fmap fst . unCharser p

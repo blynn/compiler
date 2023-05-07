@@ -131,7 +131,7 @@ remainder of the input string. Otherwise it returns `Nothing`.
 
 Values of type `Parser x` compose in natural ways. See
 http://www.cs.uu.nl/research/techreps/repo/CS-2008/2008-044.pdf[Swierstra,
-'Combinator Parsing: A Short Tutorial'].
+_Combinator Parsing: A Short Tutorial_].
 
 ------------------------------------------------------------------------
 pure x inp = Just (P x inp);
@@ -297,8 +297,8 @@ https://tromp.github.io/cl/LC.pdf[John Tromp lists rewrite rules] to further
 reduce the size of the output combinatory logic term after bracket abstraction.
 
 Chapter 16 of
-https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/['The
-Implementation of Functional Programming Languages' by Simon Peyton Jones]
+https://www.microsoft.com/en-us/research/publication/the-implementation-of-functional-programming-languages/[_The
+Implementation of Functional Programming Languages_ by Simon Peyton Jones]
 gives a comprehensive overview of this strategy.
 
 http://www.cantab.net/users/antoni.diller/brackets/intro.html[Antoni Diller has interactive demos and more references].

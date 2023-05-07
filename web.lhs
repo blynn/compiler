@@ -86,9 +86,9 @@ slower.
 <p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/Ast3.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -98,9 +98,9 @@ include::inn/Ast3.hs[]
 <p><a onclick='hideshow("Parser3");'>&#9654; Toggle `Parser3.hs`</a></p><div id='Parser3' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/Parser3.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -110,9 +110,9 @@ include::inn/Parser3.hs[]
 <p><a onclick='hideshow("Typer3");'>&#9654; Toggle `Typer3.hs`</a></p><div id='Typer3' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/Typer3.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -122,9 +122,9 @@ include::inn/Typer3.hs[]
 <p><a onclick='hideshow("party2");'>&#9654; Toggle `party2.hs`</a></p><div id='party2' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/party2.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -161,8 +161,8 @@ by hand, to find the next digit of the divisor, I pick something that seems
 reasonable via a method that seems partly subconscious! How can we possibly
 code this?
 
-Luckily, there is a simple algorithm that makes good guesses. See Knuth, 'The
-Art of Computer Programming'.
+Luckily, there is a simple algorithm that makes good guesses. See Knuth, _The
+Art of Computer Programming_.
 
 We rename `div` and `mod` to `quot` and `rem`, then introduce wrappers for
 `div` and `mod`. Now our divisions behave correctly, though it is sad that
@@ -183,9 +183,9 @@ overloading by returning `ord '\0'`.
 <p><a onclick='hideshow("BasePrecisely");'>&#9654; Toggle `BasePrecisely.hs`</a></p><div id='BasePrecisely' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/BasePrecisely.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -208,9 +208,9 @@ of `crossly warts` to create `WartsBytes.hs`.
 <div id='warts2hs' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/warts2hs.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -233,9 +233,9 @@ the `go` function; export declarations are ignored.
 <div id='Webby' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/Webby.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -257,9 +257,9 @@ the host environment.
 <div id='SystemWasm' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::inn/SystemWasm.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>

@@ -19,7 +19,7 @@ eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compil
 
 menu.html: menu; cobble menu menu
 
-%.html: %.lhs menu.html; cobble mathbook menu $<
+%.html: %.lhs menu.html; ./stitch book menu $<
 %:%.c;clang -O3 $^ -o $@
 webby:webby.c;clang -O3 $^ -o $@ -lm
 precisely:precisely.c;clang -O3 $^ -o $@ -lm
@@ -44,9 +44,9 @@ reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/r
 DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs
 doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
 
-doh.html:doh.txt menu.html;cobble mathbook menu $<
+doh.html:doh.txt menu.html;./stitch book menu $<
 
-chat.html:chat.txt menu.html;cobble mathbook menu $<
+chat.html:chat.txt menu.html;./stitch book menu $<
 
 $(call rtsup,patty,lonely)
 $(call rtsup,guardedly,patty)
@@ -100,9 +100,9 @@ wasm/douady.c:wasm/douady.hs lonely;(cat rts.c && ./lonely < $<) > $@
 wasm/douady.o:wasm/douady.c;$(WCC) $^ -o $@
 wasm/std.o:wasm/std.c;$(WCC) $^ -o $@
 douady.wasm:wasm/std.o wasm/douady.o wasm/grow_memory_to.o;$(WLD) $^ -o $@
-douady.html:douady.txt menu.html;cobble mathbook menu $<
+douady.html:douady.txt menu.html;./stitch book menu $<
 
-index.html:index.lhs imp.wasm hilsys.inc menu;cobble mathbook menu $<
+index.html:index.lhs imp.wasm hilsys.inc menu;./stitch book menu $<
 hilsys.inc:hilsys.lhs;sed '1,/\\end{code}/d' $< | sed '/\\begin{code}/,/\\end{code}/!d;//d' > $@
 
 site: $(SITE)

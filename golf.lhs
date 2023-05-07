@@ -11,14 +11,14 @@ https://queue.acm.org/detail.cfm?id=1039523[Alan Kay described LISP as the
 "Maxwell's equations of software"] because a "half page of code" described LISP
 itself. Surely the equally powerful lambda calculus, which can describe itself
 in far less space, is more deserving of the title.
-http://www.paulgraham.com/rootsoflisp.html[Paul Graham's 'The Roots of Lisp']
+http://www.paulgraham.com/rootsoflisp.html[Paul Graham's _The Roots of Lisp_]
 dubs the LISP self-interpreter "The Surprise" because of its supposed brevity.
 What, then, should one call a one-line lambda calculus self-interpereter?
 
 (Aside: on the other hand, the analogy with Maxwell's equations is apt, because
 if Maxwell had used link:../haskell/ga.html[geometric algebra] instead of
 vector algebra, he could have been less verbose and we would be celebrating
-Maxwell's 'equation', that is, one equation instead of four:
+Maxwell's _equation_, that is, one equation instead of four:
 
 \[
 (\partial_t + \nabla)(\mathbf{e} + \mathbf{B}) = 0

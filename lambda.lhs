@@ -69,14 +69,14 @@ type VarId = String
 data LC = Var VarId | Lam VarId LC | LC :@ LC
 ------------------------------------------------------------------------
 
-A program is represented by a 'closed' lambda term, which means every `Var`
+A program is represented by a _closed_ lambda term, which means every `Var`
 node must be a descendant of a `Lam` node with a matching `VarId`.
 
-Normally, we next talk about variable substitution (or 'beta reduction') to
-describe the 'dynamic semantics', that is, how to compute with a lambda term.
+Normally, we next talk about variable substitution (or _beta reduction_) to
+describe the _dynamic semantics_, that is, how to compute with a lambda term.
 We leave that for the textbooks (or see link:../lambda[my notes on lambda
 calculus]). For our purposes, a closed lambda term is merely notation for a
-'combinatory logic' term, which is a full binary tree whose leaves can be one
+_combinatory logic_ term, which is a full binary tree whose leaves can be one
 of 6 different values:
 
 ++++++++++
@@ -117,9 +117,9 @@ The `Ext String` field comes into play later, when we want to mix external
 functions with our combinators.
 
 The `rewrite` function below rewrites a closed LC term as a CL term, using an
-algorithm known as 'bracket abstraction'. See
-https://en.wikipedia.org/wiki/To_Mock_a_Mockingbird[Smullyan's "To Mock a
-Mockingbird"] for a particularly enjoyable explanation of why this results in a
+algorithm known as _bracket abstraction_. See
+https://en.wikipedia.org/wiki/To_Mock_a_Mockingbird[Smullyan's _To Mock a
+Mockingbird_] for a particularly enjoyable explanation of why this results in a
 combinatory logic term whose meaning matches that of the original lambda term.
 
 \begin{code}
@@ -148,7 +148,7 @@ amalgam of CL and LC terms.
 
 == What is combinatory logic? ==
 
-To execute a combinatory logic term, we 'reduce' subterms matching certain
+To execute a combinatory logic term, we _reduce_ subterms matching certain
 patterns to other subterms:
 
 \begin{code}
@@ -165,16 +165,16 @@ reduce t = case t of
 
 The S combinator duplicates one of its arguments. Although we think of the
 result as a tree, in our implementation, we wind up with two nodes pointing to
-the same copy of the argument that is duplicated, that is, we employ 'sharing'
+the same copy of the argument that is duplicated, that is, we employ _sharing_
 to conserve memory. The S combinator also means a tree need not shrink after a
 so-called reduction.
 
 If none of the patterns appear, then no reductions are possible and the term is
-said to be in 'normal form'. Otherwise one or more subterms can be reduced, and
+said to be in _normal form_. Otherwise one or more subterms can be reduced, and
 we must choose which to reduce. After a reduction, new reducible subterms may
 appear, and again we must choose.
 
-One strategy is to reduce in 'normal order': repeatedly reduce the leftmost
+One strategy is to reduce in _normal order_: repeatedly reduce the leftmost
 subtree that can be reduced.
 
 If a term can be reduced to a normal form (which is in some sense unique by
@@ -182,7 +182,7 @@ https://plato.stanford.edu/entries/logic-combinatory/#ChurTheoConsTheo[Church-Ro
 then normal-order reduction will find it. Other evaluation orders might never
 terminate even when a normal form exists.
 
-The left 'spine' of the tree is the path that starts from the root node and
+The left _spine_ of the tree is the path that starts from the root node and
 recursively follows the left child. To evaluate in normal order, we walk down
 the left spine until we bottom out, then reduce as we walk back up to the root;
 on each reduction, we must walk back down again in case the replacement subtree
@@ -207,8 +207,8 @@ normalize t = down t [] up1 where
     a:as -> up2 (t :# normalize a) as
 \end{code}
 
-For our computations, it turns out we only need our terms to reach 'weak head
-normal form', which means we skip the second trip.
+For our computations, it turns out we only need our terms to reach _weak head
+normal form_, which means we skip the second trip.
 
 \begin{code}
 run :: CL -> CL
@@ -231,7 +231,7 @@ logic, the program is a term, the input string is encoded as a term, and the
 output string is the decoding of the program term applied to the input term.
 
 We use
-link:scott.html[the 'Scott encoding']. Strings are Scott-encoded lists of
+link:scott.html[the _Scott encoding_]. Strings are Scott-encoded lists of
 Scott-encoded Peano numbers.
 
 Encoding and decoding requires us to evaluate combinators alongside our own
@@ -321,7 +321,7 @@ Yes!
 https://homepages.inf.ed.ac.uk/wadler/papers/papers-we-love/reynolds-definitional-interpreters-1998.pdf[Reynolds'
 landmark paper of 1972] surveys multiple languages defined in multiple variants
 of lambda calculus, then reveals this variety is unnecessary. Thanks to
-'defunctionalization' and 'continuation-passing style' (CPS), we can get by
+_defunctionalization_ and _continuation-passing style_ (CPS), we can get by
 with a lambda calculus without first-class functions (is this the same as
 https://en.wikipedia.org/wiki/Kappa_calculus[kappa calculus]?), and which
 evaluates in any given order.
@@ -330,7 +330,7 @@ A few years later, https://en.wikisource.org/wiki/Lambda_Papers[Steele and
 Sussman wrote the lambda papers]: a series of cookbooks describing how
 to define many practical programming constructs in lambda calculus.
 
-http://www.cs.nott.ac.uk/~pszgmh/fifty.pdf[Hutton and Bahr 'calculate' a
+http://www.cs.nott.ac.uk/~pszgmh/fifty.pdf[Hutton and Bahr _calculate_ a
 correct compiler from its specification], showing the power of precise
 definitions. They have also http://www.cs.nott.ac.uk/~pszgmh/cutting.pdf[fused
 CPS transformation and defunctionalization] into a single step.
@@ -340,8 +340,8 @@ work on compiling to categories] uses bracket abstraction to yield a compelling
 alternative to domain-specific languages.
 
 http://adam.chlipala.net/papers/CtpcPLDI07/CtpcPLDI07.pdf[Chlipala wrote
-'A Certified Type-Preserving Compiler from Lambda Calculus to Assembly
-Language'], which we take as a license to be informal when we please.
+_A Certified Type-Preserving Compiler from Lambda Calculus to Assembly
+Language_], which we take as a license to be informal when we please.
 We can always fall back to this paper to see how it's really done!
 
 See also http://wadler.blogspot.com/2016/06/papers-we-love-john-reynolds_10.html[Papers We Love].

@@ -239,7 +239,7 @@ due to their vintage:
   regular expressions. In fact, link:../haskell/re.html[regular expression
   derivatives] are superior. (In practice, NFAs may be better to
   because conversion to DFAs may blow up exponentially.)
-  See also http://stedolan.net/research/semirings.pdf['Fun with Semirings'] for
+  See also http://stedolan.net/research/semirings.pdf[_Fun with Semirings_] for
   lesser-known connections between regular languages and other parts of
   computer science.
 

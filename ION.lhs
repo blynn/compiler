@@ -5,7 +5,7 @@ we used a rich powerful language based on lambda calculus to build a shoddy
 compiler for bare-bones lambda calculus.
 
 Let us begin anew from a lower level.
-We take a page from Knuth's 'The Art of Computer Programming' and introduce a
+We take a page from Knuth's _The Art of Computer Programming_ and introduce a
 mythical computer: the International Obfuscated Nonce (ION) machine, so named
 because it's based on a one-time random design used in link:ioccc.html[an entry
 to the 26th International Obfuscated C Code Contest].
@@ -266,7 +266,7 @@ evalIO = eval extsIO
 
 == Machine shop ==
 
-https://www.youtube.com/watch?v=zhj_tUMwTe0[Edward Kmett's talk "Combinators Revisited"] contains many relevant references and ideas.
+https://www.youtube.com/watch?v=zhj_tUMwTe0[Edward Kmett's talk _Combinators Revisited_] contains many relevant references and ideas.
 
 Other choices for implementing lambda calculus include:
 

@@ -10,7 +10,7 @@ https://www.youtube.com/watch?reload=9&v=mOtKD7ml0NU[a human supplies the type
 of a desired function and the computer programs itself].
 
 Types can be lightweight. Indeed, they can be invisible. A compiler can
-use 'type inference' to type-check a program completely free of any type
+use _type inference_ to type-check a program completely free of any type
 annotations. However, it's good to throw a few type annotations in the source,
 as they are a form of documentation that is especially reliable because the
 compiler ensures they stay in sync with the code.
@@ -22,7 +22,7 @@ https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tldi10-vytin
 == Typically ==
 
 We shamelessly lift code from https://web.cecs.pdx.edu/~mpj/thih/thih.pdf[Mark
-P. Jones, 'Typing Haskell in Haskell']. Our version is simpler because we lack
+P. Jones, _Typing Haskell in Haskell_]. Our version is simpler because we lack
 support for mutual recursion and pattern matching.
 
 Since we're using the Scott encoding, from a data type declaration:
@@ -79,9 +79,9 @@ function hideshow(s) {
 <div id='typically' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::typically.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -94,15 +94,15 @@ compiler. We twist our code this way and that, and add eye-watering type
 annotations until it finally compiles.
 
 In contrast, well-designed types do more with less. Haskell's type system not
-only enables easy type inference, but also enables 'typeclasses', a syntax
+only enables easy type inference, but also enables _typeclasses_, a syntax
 sugar for principled overloading. By bestowing Prolog-like powers to the type
 checker, the compiler can predictably generate tedious code so humans can
 ignore irrelevant details.
 
-Again, 'Typing Haskell in Haskell' provides some background. Since we're
+Again, _Typing Haskell in Haskell_ provides some background. Since we're
 generating code as well as checking types, we also need techniques described in
 http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.3952&rep=rep1&type=pdf[John
-Peterson and Mark Jones, 'Implementing Type Classes'].
+Peterson and Mark Jones, _Implementing Type Classes_].
 
 We choose the dictionary approach. A dictionary is a record of functions that
 is implicitly passed around. For example, if we infer the function `foo` has
@@ -221,9 +221,9 @@ memory.
 <div id='classy' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::classy.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>
@@ -266,9 +266,9 @@ bare machine code rather than ION assembly.
 <div id='barely' style='display:none'>
 ++++++++++
 
-------------------------------------------------------------------------
+---------
 include::barely.hs[]
-------------------------------------------------------------------------
+---------
 
 ++++++++++
 </div>

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+supdoc() {
+  sed 's/^\\begin{code}/[.hs]\n--------/' \
+  | sed 's/^\\end{code}/--------/' \
+  | asciidoctor -s -
+}
+
+doctitlepre=""
+cssfile=""
+bodypre=""
+bodypost=""
+
+footer='<a href="/~blynn/">Ben Lynn</a> <i>blynn@cs.stanford.edu</i> <span id="lightswitch" onclick="lights();">&#x1f4a1;</span>
+<script>
+var darkcss=document.createElement("style");
+darkcss.innerHTML="html{background-color:black;color:#aaaaaa;};body{background-color:black;color:#aaaaaa;}textarea{color:#e6e1dc;background-color:#232323;}pre{color:#e6e1dc;background-color:#232323;}svg{filter:invert(100%);}";
+function lights() {
+if ("out" == sessionStorage.getItem("lights")) {
+sessionStorage.removeItem("lights");
+document.body.removeChild(darkcss);
+} else sessionStorage.setItem("lights", "out");
+checklights();
+}
+function checklights() {
+if ("out" == sessionStorage.getItem("lights")) document.body.appendChild(darkcss);
+}
+checklights();
+</script>
+'
+
+fulldoc() {
+echo '<!DOCTYPE html><html lang="en"><head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-G56YW5RFXN"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag("js", new Date());
+
+  gtag("config", "G-G56YW5RFXN");
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
+<script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
+doctitle=$(grep '^==* ' $1 | sed 1q | sed 's/^==* *//' | sed 's/ *=*=$//')
+echo "<title>$doctitlepre$doctitle</title>"
+echo '</head><body>'$bodypre
+echo "<div style='padding-top:1ex;'><h1>$doctitle</h1></div>"  # TODO: ONLY IF STARTS WITH TOP-LEVEL HEADING!
+cat $1 | supdoc
+echo '<script>
+var darkcss=document.createElement("style");
+darkcss.innerHTML="html{background-color:black;color:#aaaaaa;};body{background-color:black;color:#aaaaaa;}textarea{color:#e6e1dc;background-color:#232323;}pre{color:#e6e1dc;background-color:#232323;}svg{filter:invert(100%);}";
+function lights() {
+if ("out" == sessionStorage.getItem("lights")) {
+sessionStorage.removeItem("lights");
+document.body.removeChild(darkcss);
+} else sessionStorage.setItem("lights", "out");
+checklights();
+}
+function checklights() {
+if ("out" == sessionStorage.getItem("lights")) document.body.appendChild(darkcss);
+}
+checklights();
+</script>'
+echo $bodypost'</body></html>'
+}
+
+tohref() {
+  if [[ $1 == "index" ]]
+  then echo "."
+  else echo $1.html
+  fi
+}
+
+if [[ -z ${1+x} ]]
+then supdoc
+else
+  case $1 in
+    solo)
+      cssfile=solo.css
+      bodypost="<hr>"$footer
+      fulldoc $2 > ${2%.*}.html
+      ;;
+    book)
+      cssfile=book.css
+      prevline=$( (echo ; cat $2) | grep -B1 "^${3%.*}," | sed -n 1p | grep , || :)
+      nextline=$( (cat $2 ; echo) | grep -A1 "^${3%.*}," | sed -n 2p | grep , || :)
+      prev=""
+      next=""
+      if [[ ! -z $prevline ]]
+      then prev="<span class='link-prev'><a href='$(tohref ${prevline%%,*})'>&#9204; ${prevline#*,}</a></span>"
+      fi
+      if [[ ! -z $nextline ]]
+      then next="<span class='link-next'><a href='$(tohref ${nextline%%,*})'>${nextline#*,} &#9205</a></span>"
+      fi
+      menu=$(cat ${2%.*}.html)
+      navbar='<div class="navbar">'$prev$next'<div class="link-contents"><a href="#contents">Contents</a></div></div> <!-- navbar -->'
+
+      bodypre='<div class="main"><div class="plump"><div class="menu">'$menu'</div></div><!-- menu, plump --><div class="rside">'$navbar
+      doctitlepre=$(sed 1q $2 | sed 's/^[^,]*,//')" - "
+
+      #bodypost=bookfootermenuinc AND NAVBAR
+      bodypost=$navbar'<hr><div class="skinny" id="contents"><div class="menu">
+<h2>Contents</h2>'$menu'[<a href="#">back to top</a>]</div> <!-- "menu" -->
+<br>
+<br>
+<br>
+</div> <!-- "skinny" -->'$footer'</div> <!-- "rside" --></div> <!-- "main" -->'
+      fulldoc $3 > ${3%.*}.html
+      ;;
+  esac
+fi

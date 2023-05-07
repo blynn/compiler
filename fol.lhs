@@ -74,8 +74,8 @@ along with certain helper functions. With GHC's pattern synonyms extension,
 our code resembles ordinary recursion.
 
 We demonstrate by building classic theorem provers for first-order logic, by
-taking a whirlwind tour through chapters 2 and 3 of John Harrison, 'Handbook of
-Practical Logic and Automated Reasoning'.
+taking a whirlwind tour through chapters 2 and 3 of John Harrison, _Handbook of
+Practical Logic and Automated Reasoning_.
 
 ++++++++++
 <p><a onclick='hideshow("imports");'>&#9654; Toggle extensions and imports</a></p>
@@ -108,9 +108,9 @@ import Text.Megaparsec.Char
 
 == Recursion Schemes ==
 
-We represent 'terms' with an ordinary recursive data structure.
-Terms consist of 'variables', 'constants', and 'functions'.
-Constants are functions that take zero arguments.
+We represent _terms_ with an ordinary recursive data structure. Terms consist
+of _variables_, _constants_, and _functions_. Constants are functions that
+take zero arguments.
 
 \begin{code}
 data Term = Var String | Fun String [Term] deriving (Eq, Ord)
@@ -119,10 +119,10 @@ data Term = Var String | Fun String [Term] deriving (Eq, Ord)
 We use a recursion scheme for the formulas of first-order predicate logic.
 These are like propositional logic formulas, except:
 
-  * An atomic proposition is a 'predicate': a string constant accompanied by a
+  * An atomic proposition is a _predicate_: a string constant accompanied by a
   list of terms.
-  * Subformulas may be 'quantified' by a 'universal' (`Forall`) or 'existential'
-  (`Exists`) quantifier. A quantifier 'binds' a variable in the same manner
+  * Subformulas may be _quantified_ by a _universal_ (`Forall`) or _existential_
+  (`Exists`) quantifier. A quantifier _binds_ a variable in the same manner
   as a lambda.
 
 \begin{code}
@@ -293,9 +293,9 @@ Again, we write special cases for the formulas we care about, along with
 something perfunctory to deal with all other cases.
 
 We `unmap h` before attempting rewrites because we desire bottom-up behaviour.
-For example, the inner subformula in $\neg(x\wedge\bot)$ should first be
-rewritten to yield $\neg\bot$ so that another rewrite rule can simplify this to
-$\top$.
+For example, the inner subformula in \(\neg(x\wedge\bot)\) should first be
+rewritten to yield \(\neg\bot\) so that another rewrite rule can simplify this
+to \(\top\).
 
 \begin{code}
 simplify :: FO -> FO
@@ -326,8 +326,8 @@ simplify = ffix \h fo -> case unmap h fo of
 
 == Negation normal form ==
 
-A handful of rules transform a simplified formula to 'negation normal form'
-(NNF), namely, the formula consists only of 'literals' (atoms or negated
+A handful of rules transform a simplified formula to _negation normal form_
+(NNF), namely, the formula consists only of _literals_ (atoms or negated
 atoms), conjunctions, disjunctions, and quantifiers.
 
 This time, the recursion is top-down. We `unmap h` after the rewrite.
@@ -375,7 +375,7 @@ subst f = ffix \h -> \case
 
 == Skolemization ==
 
-Skolemization transforms an NNF formula to an 'equisatisfiable' formula with no
+Skolemization transforms an NNF formula to an _equisatisfiable_ formula with no
 existential quantifiers, that is, the output is satisifiable if and only if the
 input is. Skolemization is "lossy" because validity might not be preserved.
 
@@ -416,7 +416,7 @@ skolemize t = evalState (skolem' $ nnf $ simplify t) (fst <$> functions t) where
 == Prenex normal form ==
 
 We can pull all the quantifiers of an NNF formula to the front by generating
-new variable names. This is known as 'prenex normal form' (PNF).
+new variable names. This is known as _prenex normal form_ (PNF).
 
 \begin{code}
 variant :: String -> [String] -> String
@@ -444,7 +444,7 @@ pnf = prenex . nnf . simplify
 
 == Quantifier-free formulas ==
 
-A 'quantifier-free' formula is one where every variable is free. Each variable
+A _quantifier-free_ formula is one where every variable is free. Each variable
 is implicitly universally quantified, that is, for each variable `x`, we behave
 as if `forall x.` has been prepended to the formula.
 
@@ -465,7 +465,7 @@ deQuantify = specialize . pnf where
 
 == Ground terms ==
 
-A 'ground term' is a term containing no variables, that is, a term exclusively
+A _ground term_ is a term containing no variables, that is, a term exclusively
 built from constants and functions.
 
 We describe how to enumerate all possible terms given a set of constants and
@@ -495,7 +495,7 @@ groundTuples cons funs m n
 
 == Herbrand universe ==
 
-The 'Herbrand universe' of a formula are the ground terms made from all the
+The _Herbrand universe_ of a formula are the ground terms made from all the
 constants and functions that appear in the formula, with one special case: if
 no constants appear, then we invent one to avoid an empty universe.
 
@@ -532,7 +532,7 @@ few test cases.
 == Automated Theorem Proving ==
 
 It can be shown a quantifier-free formula is satisfiable if and only if it is
-satisfiable under a 'Herbrand interpretation'.
+satisfiable under a _Herbrand interpretation_.
 Loosely speaking, we treat terms like the abstract syntax trees that represent
 them; if a theorem holds under some interpretation, then it also holds for
 syntax trees.
@@ -542,7 +542,7 @@ define a syntax tree based on the constants and functions of the formula, and
 rig predicates on these trees to behave enough like their counterparts in the
 interpretation.
 
-For example, the formula $\forall x . x + 0 = x$ holds under many familiar
+For example, the formula \(\forall x . x + 0 = x\) holds under many familiar
 interpretations. Here's a Herbrand interpretation:
 
 ------------------------------------------------------------------------
@@ -578,17 +578,17 @@ generalize fo = foldr (Qua Forall) fo $ fv fo
 
 Then:
 
-  1. Negate $f$ because validity and satisfiability are dual:
-  the formula $f$ is valid if and only if $\neg f$ is unsatisfiable.
-  2. Transform $\neg f$ to an equisatisfiable quantifier-free formula $t$.
-  Let $m$ be the number of variables in $t$. Initialize $h$ to $\top$.
-  3. Choose $m$ elements from the Herbrand universe of $t$.
-  4. Let $t'$ be the result of substituting the variables of $t$ with
-  these $m$ elements. Compute $h \leftarrow h \wedge t'$.
-  5. If $h$ is unsatisfiable, then $t$ is unsatisfiable under any
-  interpretation, hence $f$ is valid. Otherwise, go to step 3.
+  1. Negate \(f\) because validity and satisfiability are dual:
+  the formula \(f\) is valid if and only if \(\neg f\) is unsatisfiable.
+  2. Transform \(\neg f\) to an equisatisfiable quantifier-free formula \(t\).
+  Let \(m\) be the number of variables in \(t\). Initialize \(h\) to \(\top\).
+  3. Choose \(m\) elements from the Herbrand universe of \(t\).
+  4. Let \(t'\) be the result of substituting the variables of \(t\) with
+  these \(m\) elements. Compute \(h \leftarrow h \wedge t'\).
+  5. If \(h\) is unsatisfiable, then \(t\) is unsatisfiable under any
+  interpretation, hence \(f\) is valid. Otherwise, go to step 3.
 
-We have moved from first-order logic to propositional logic; the formula $h$
+We have moved from first-order logic to propositional logic; the formula \(h\)
 only contains ground terms which act as propositional variables when
 determining satisfiability. In other words, we have
 https://en.wikipedia.org/wiki/Boolean_satisfiability_problem[the classic SAT
@@ -601,14 +601,14 @@ possibility. This is the case for our `groundTuples` function.
 == Gilmore ==
 
 It remains to detect unsatisfiability. One of the earliest approaches (Gilmore
-1960) transforms a given formula to 'disjunctive normal form' (DNF):
+1960) transforms a given formula to _disjunctive normal form_ (DNF):
 
 \[
 \bigvee_i \bigwedge_j x_{ij}
 \]
 
-where the $x_{ij}$ are literals. For example:
-$(\neg a\wedge b\wedge c) \vee (d \wedge \neg e) \vee (f)$.
+where the \(x_{ij}\) are literals. For example:
+\((\neg a\wedge b\wedge c) \vee (d \wedge \neg e) \vee (f)\).
 
 We represent a DNF formula as a set of sets of literals.
 Given an NNF formula, the function `pureDNF` builds an equivalent DNF formula:
@@ -622,12 +622,12 @@ pureDNF = \case
   t -> S.singleton $ S.singleton t
 \end{code}
 
-Next, we eliminate conjunctions containing $\bot$ or the positive and negative
+Next, we eliminate conjunctions containing \(\bot\) or the positive and negative
 versions of the same literal, such as `P(C)` and `~P(C)`. The formula is
 unsatisfiable if and only if nothing remains.
 
-To reduce the formula size, we replace clauses containing $\top$ with the empty
-clause (the empty conjunction is $\top$), and drop clauses that are supersets
+To reduce the formula size, we replace clauses containing \(\top\) with the empty
+clause (the empty conjunction is \(\top\)), and drop clauses that are supersets
 of other clauses.
 
 \begin{code}
@@ -702,8 +702,12 @@ gilmore = herbrand conjDNF S.null simpDNF where
 
 == Davis-Putnam ==
 
-The DPLL algorithm uses the 'conjunctive normal form' (CNF), which is the dual
+The DPLL algorithm uses the _conjunctive normal form_ (CNF), which is the dual
 of DNF:
+
+\[
+\bigwedge_i \bigvee_j x_{ij}
+\]
 
 \begin{code}
 pureCNF = S.map (S.map nono) . pureDNF . nnf . nono
@@ -815,8 +819,8 @@ davisPutnam2 = herbrand conjCNF (not . dpll) satCNF where
 
 == Unification ==
 
-To refute $P(F(x), G(A)) \wedge \neg P(F(B), y)$, the above algorithms would
-have to luck out and select, say, $(x, y) = (B, G(A))$.
+To refute \(P(F(x), G(A)) \wedge \neg P(F(B), y)\), the above algorithms would
+have to luck out and select, say, \( (x, y) = (B, G(A)) \).
 
 Unification finds this assignment intelligently. This observation inspired a
 more efficient approach to theorem proving.
@@ -882,7 +886,7 @@ bump up the bound and try again.
 (We mean "branching" in a yak-shaving sense, that is, while trying to refute A,
 we find we must also refute B, so we add B to our to-do list. At a higher
 level, there is another sense of branching where we realize we made the wrong
-decision so we have to undo it and try again; we call this 'backtracking'.)
+decision so we have to undo it and try again; we call this _backtracking_.)
 
 \begin{code}
 deepen :: (Show t, Num t) => (t -> Either b c) -> t -> Loggy c

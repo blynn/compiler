@@ -1,7 +1,7 @@
 = LC to CL, Semantically =
 
 Compilers abandoned bracket abstraction long ago in favour of generating custom
-combinators for each particular program, known as 'supercombinators'.
+combinators for each particular program, known as _supercombinators_.
 
 We'll buck this trend, partly for notoriety, but also for novelty:
 http://okmij.org/ftp/tagless-final/ski.pdf[a bracket abstraction algorithm
