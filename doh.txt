@@ -8,7 +8,6 @@ Then:
 
 +++<pre id='line1'>take 100 primes</pre>+++
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <style type="text/css">
 .term {
@@ -36,7 +35,6 @@ Then:
 
 +++<pre id='line3'>fibs !! (fibs !! 11)</pre>+++
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src="/~blynn/termlib.js"></script>
 <script defer>

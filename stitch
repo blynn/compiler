@@ -35,21 +35,22 @@ echo '<!DOCTYPE html><html lang="en"><head>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-G56YW5RFXN"></script>
 <script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag("js", new Date());
-
-  gtag("config", "G-G56YW5RFXN");
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag("js", new Date());
+gtag("config", "G-G56YW5RFXN");
 </script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
-<script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
 doctitle=$(grep '^==* ' $1 | sed 1q | sed 's/^==* *//' | sed 's/ *=*=$//')
 echo "<title>$doctitlepre$doctitle</title>"
 echo '</head><body>'$bodypre
-echo "<div style='padding-top:1ex;'><h1>$doctitle</h1></div>"  # TODO: ONLY IF STARTS WITH TOP-LEVEL HEADING!
+if sed 1q $1 | grep -q '^= '
+then echo "<div style='padding-top:1ex;'><h1>$doctitle</h1></div>"
+fi
 cat $1 | supdoc
 echo '<script>
 var darkcss=document.createElement("style");
@@ -85,6 +86,10 @@ else
       bodypost="<hr>"$footer
       fulldoc $2 > ${2%.*}.html
       ;;
+    menu)
+      sed '/^\\/s/^.\(.*\)/\1/
+s/\(.*\),\(.*\)/- link:\1.html[\2]/' $2 | sed 's/index.html/./' | asciidoctor -s - > ${2%.*}.html
+      ;;
     book)
       cssfile=book.css
       prevline=$( (echo ; cat $2) | grep -B1 "^${3%.*}," | sed -n 1p | grep , || :)
@@ -95,7 +100,7 @@ else
       then prev="<span class='link-prev'><a href='$(tohref ${prevline%%,*})'>&#9204; ${prevline#*,}</a></span>"
       fi
       if [[ ! -z $nextline ]]
-      then next="<span class='link-next'><a href='$(tohref ${nextline%%,*})'>${nextline#*,} &#9205</a></span>"
+      then next="<span class='link-next'><a href='$(tohref ${nextline%%,*})'>${nextline#*,} &#9205;</a></span>"
       fi
       menu=$(cat ${2%.*}.html)
       navbar='<div class="navbar">'$prev$next'<div class="link-contents"><a href="#contents">Contents</a></div></div> <!-- navbar -->'

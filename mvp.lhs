@@ -1,18 +1,5 @@
 = Minimum Viable Product =
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-++++++++++
-
 What features would make our compiler friendlier? My biggest gripes are that
 symbols must be defined before use, a finicky parser that lacks support for
 indentation rules, and pathetic error handling.
@@ -94,18 +81,10 @@ expressions and pattern matches.
 As we now have a predefined `Bool` type, we use if-then-else instead of
 matching on `True` and `False`.
 
-++++++++++
-<p><a onclick='hideshow("mutually");'>&#9654; Toggle `mutually.hs`</a></p>
-<div id='mutually' style='display:none'>
-++++++++++
-
+[#mutually.toggleshow]
 ---------
 include::mutually.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 We ignore the following subtle bug for now.
 Consider definitions whose right-hand side is a lone variable. Our `optiComb`
@@ -208,18 +187,10 @@ Our scheme fails to handle the wild-card pattern `_` correctly, which we'll
 fix in a later compiler. Until then, we tread carefully with patterns on the
 left.
 
-++++++++++
-<p><a onclick='hideshow("virtually");'>&#9654; Toggle `virtually.hs`</a></p>
-<div id='virtually' style='display:none'>
-++++++++++
-
+[#virtually.toggleshow]
 ---------
 include::virtually.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Marginally ==
 
@@ -242,18 +213,10 @@ with `pure ()`.
 
 We replace `fpair` and `flst` with more idiomatic Haskell.
 
-++++++++++
-<p><a onclick='hideshow("marginally");'>&#9654; Toggle `marginally.hs`</a></p>
-<div id='marginally' style='display:none'>
-++++++++++
-
+[#marginally.toggleshow]
 ---------
 include::marginally.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Methodically ==
 
@@ -322,15 +285,11 @@ We can work around this problem with a better `getContents` implementation,
 and indeed, perhaps this would already improve current build times.
 For now we'll just put up with `exit()` instead of exceptions.
 
-++++++++++
-<p><a onclick='hideshow("methodically");'>&#9654; Toggle `methodically.hs`</a></p>
-<div id='methodically' style='display:none'>
-++++++++++
-
+[#methodically.toggleshow]
 ---------
 include::methodically.hs[]
 ---------
 
 ++++++++++
-</div>
+include::toggleshow.js[]
 ++++++++++

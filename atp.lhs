@@ -1,6 +1,5 @@
 = Automated Theorem Proving =
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <p>
 <button id='swap'>swap</button>
@@ -630,7 +629,6 @@ built, though has considerably more features.
 https://arxiv.org/abs/1805.07518[Michael Shulman describes an intimate
 connection between linear logic and constructive mathematics].
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script>
 function setup(name, t) {

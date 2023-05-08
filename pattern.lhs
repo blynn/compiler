@@ -1,18 +1,5 @@
 = Patterns and Guards =
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-++++++++++
-
 Patterns and guards make programming much more pleasant.
 
 == Patty ==
@@ -169,18 +156,10 @@ thus our count is wrong if the variable is later eliminated when rewriting the
 We predefine the `Bool` type, as our next compiler will handle guards, which
 translate to expressions involving booleans.
 
-++++++++++
-<p><a onclick='hideshow("patty");'>&#9654; Toggle `patty.hs`</a></p>
-<div id='patty' style='display:none'>
-++++++++++
-
+[#patty.toggleshow]
 ---------
 include::patty.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Guardedly ==
 
@@ -286,18 +265,11 @@ dictionaries; for example, `Eq Char` differs to `Eq Int`. We could have fixed
 this by treating `Char` as a type synonym for `Int` in the same way `String` is
 a type synonym for `[Char]`, but this breaks FFI typing.
 
-++++++++++
-<p><a onclick='hideshow("guardedly");'>&#9654; Toggle `guardedly.hs`</a></p>
-<div id='guardedly' style='display:none'>
-++++++++++
 
+[#guardedly.toggleshow]
 ---------
 include::guardedly.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Assembly ==
 
@@ -315,15 +287,11 @@ We add support for quasiquoted raw strings; see
 http://hackage.haskell.org/package/raw-strings-qq/docs/Text-RawString-QQ.html[the
 raw-strings-qq package].
 
-++++++++++
-<p><a onclick='hideshow("assembly");'>&#9654; Toggle `assembly.hs`</a></p>
-<div id='assembly' style='display:none'>
-++++++++++
-
+[#assembly.toggleshow]
 ---------
 include::assembly.hs[]
 ---------
 
 ++++++++++
-</div>
+include::toggleshow.js[]
 ++++++++++

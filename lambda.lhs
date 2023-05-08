@@ -79,31 +79,10 @@ calculus]). For our purposes, a closed lambda term is merely notation for a
 _combinatory logic_ term, which is a full binary tree whose leaves can be one
 of 6 different values:
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("ugh");'>&#9654; Toggle extensions and imports</a></p>
-<div id='ugh' style='display:none'>
-++++++++++
-
 \begin{code}
 {-# LANGUAGE FlexibleContexts #-}
 import Control.Monad.State
-\end{code}
 
-++++++++++
-</div>
-++++++++++
-
-\begin{code}
 data Com = S | K | I | B | C | T
 \end{code}
 

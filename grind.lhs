@@ -11,48 +11,22 @@ We must also prepare for an link:miranda.html[an upcoming boss battle].
 
 Algorithm 4.1 of Kiselyov's paper; strings and character constants.
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("stringy");'>&#9654; Toggle Source</a></p>
-<div id='stringy' style='display:none'>
-++++++++++
-
+[#stringy.toggleshow]
 ---------
 include::stringy[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Binary ==
 
 Lists; binary operators on the right-hand side.
 
-We can now write `xs ++ ys` in expressions, though the function itself must be
-defined with `(++) xs ys = ...`.
+We can now write `xs <> ys` in expressions, though the function itself must be
+defined with `(<>) xs ys = ...`.
 
-++++++++++
-<p><a onclick='hideshow("binary");'>&#9654; Toggle Source</a></p>
-<div id='binary' style='display:none'>
-++++++++++
-
+[#binary.toggleshow]
 ---------
 include::binary[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Algebraically ==
 
@@ -68,18 +42,10 @@ copy the address of each alternative to the stack, only to eventually eliminate
 all but one. Furthermore, we copy and delete these addresses by evaluating
 intricate sequences of B and K combinators.
 
-++++++++++
-<p><a onclick='hideshow("algebraically");'>&#9654; Toggle Source</a></p>
-<div id='algebraically' style='display:none'>
-++++++++++
-
+[#algebraically.toggleshow]
 ---------
 include::algebraically[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Parity ==
 
@@ -116,29 +82,21 @@ This compiler supports integer constants. We've survived without them for
 so long because the `succ` function has been enough for our numerical needs
 so far.
 
-++++++++++
-<p><a onclick='hideshow("parity");'>&#9654; Toggle Source</a></p>
-<div id='parity' style='display:none'>
-++++++++++
-
+[#parity.toggleshow]
 ---------
 include::parity.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Fixity ==
 
 This compiler supports `infix, infixl, infixr` declarations at the beginning of
 the source.
 
-++++++++++
-<p><a onclick='hideshow("fixity");'>&#9654; Toggle Source</a></p>
-<div id='fixity' style='display:none'>
-++++++++++
-
+[#fixity.toggleshow]
 ---------
 include::fixity.hs[]
 ---------
+
+++++++++++
+include::toggleshow.js[]
+++++++++++

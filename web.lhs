@@ -1,18 +1,5 @@
 = Client-side compiler =
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-++++++++++
-
 Our next goal is a browser-based edition of our compiler.
 
 == Crossly ==
@@ -82,53 +69,25 @@ We experiment with hash consing which reduces heap usage my maximizing
 sharing. However, it may cost too much, as our compiler has grown appreciably
 slower.
 
-++++++++++
-<p><a onclick='hideshow("Ast3");'>&#9654; Toggle `Ast3.hs`</a></p><div id='Ast3' style='display:none'>
-++++++++++
-
+[#Ast3.toggleshow]
 ---------
 include::inn/Ast3.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Parser3");'>&#9654; Toggle `Parser3.hs`</a></p><div id='Parser3' style='display:none'>
-++++++++++
-
+[#Parser3.toggleshow]
 ---------
 include::inn/Parser3.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Typer3");'>&#9654; Toggle `Typer3.hs`</a></p><div id='Typer3' style='display:none'>
-++++++++++
-
+[#Typer3.toggleshow]
 ---------
 include::inn/Typer3.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("party2");'>&#9654; Toggle `party2.hs`</a></p><div id='party2' style='display:none'>
-++++++++++
-
+[#party2.toggleshow]
 ---------
 include::inn/party2.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Precisely ==
 
@@ -179,17 +138,10 @@ wind up with a circular definition, because our compiler would insert another
 `fromInteger` call. We work around this with a definition that bypasses
 overloading by returning `ord '\0'`.
 
-++++++++++
-<p><a onclick='hideshow("BasePrecisely");'>&#9654; Toggle `BasePrecisely.hs`</a></p><div id='BasePrecisely' style='display:none'>
-++++++++++
-
+[#BasePrecisely.toggleshow]
 ---------
 include::inn/BasePrecisely.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Wasm to Haskell? ==
 
@@ -203,18 +155,10 @@ We write a tool that just does enough wasm parsing to print the sections of a
 wasm file we want in the form of a Haskell module, and run this on the output
 of `crossly warts` to create `WartsBytes.hs`.
 
-++++++++++
-<p><a onclick='hideshow("warts2hs");'>&#9654; Toggle `warts2hs.hs`</a></p>
-<div id='warts2hs' style='display:none'>
-++++++++++
-
+[#warts2hs.toggleshow]
 ---------
 include::inn/warts2hs.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 The RTS includes generate code that wraps foreign imports. It can only be used
 with programs that declare the same foreign imports.
@@ -228,18 +172,10 @@ describing the initial contents of the heap.
 For now we look for the `main` function in the `Main` module and export it as
 the `go` function; export declarations are ignored.
 
-++++++++++
-<p><a onclick='hideshow("Webby");'>&#9654; Toggle `Webby.hs`</a></p>
-<div id='Webby' style='display:none'>
-++++++++++
-
+[#Webby.toggleshow]
 ---------
 include::inn/Webby.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == webby.wasm ==
 
@@ -252,18 +188,10 @@ Linux version declares foreign imports for those in our runtime system for
 Linux. The wasm version declares foreign imports for functions provided by
 the host environment.
 
-++++++++++
-<p><a onclick='hideshow("SystemWasm");'>&#9654; Toggle `SystemWasm.hs`</a></p>
-<div id='SystemWasm' style='display:none'>
-++++++++++
-
+[#SystemWasm.toggleshow]
 ---------
 include::inn/SystemWasm.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Messy ==
 
@@ -298,3 +226,7 @@ added in a surprisingly recent compiler.
 Built-in primitives were once in their own `#` module. This was replaced by
 code that pre-defined them for every module. But now I think I was right the
 first time, and hopefully there are no traces of my misadventure left.
+
++++++++++
+include::toggleshow.js[]
++++++++++

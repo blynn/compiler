@@ -2,7 +2,6 @@
 
 Want to see a magic trick? Pick a function, any function:
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <p>
 <button id='id'>id</button>
@@ -18,7 +17,6 @@ Want to see a magic trick? Pick a function, any function:
 
 Watch closely...
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <p>
 <button id='magic'>Abracadabra!</button>
@@ -122,23 +120,13 @@ is true whenever all of the equalities in the tail are true.
 Lists of functions are irksome. We expediently introduce lambdas rather
 than figuring out how to write the relabeling condition with combinators.
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("boilerplate");'>&#9654; Toggle boilerplate</a></p>
-<div id='boilerplate' style='display:none'>
-++++++++++
-
 \begin{code}
-{- To compile with GHC, replace boilerplate with:
+module Main where
+import Base
+import System
+import Charser
+foreign export ccall "main" main
+{- GHC edition:
 {-# LANGUAGE FlexibleContexts, LambdaCase #-}
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
@@ -146,20 +134,7 @@ import Control.Monad.State
 import Data.List
 type Charser = Parsec () String
 -}
-module Main where
-import Base
-import System
-import Charser
-foreign export ccall "main" main
-\end{code}
 
-Yuck!
-
-++++++++++
-</div>
-++++++++++
-
-\begin{code}
 infixr 5 :->
 data Type = TFunctor Type | TC String | TV String | Type :-> Type deriving Show
 data Expr = Var String | Expr :@ Expr | Lam String Expr
@@ -223,11 +198,6 @@ some shortcuts we took are unavailable.
 That leaves the boring stuff: parsing types, pretty-printing theorems,
 interfacing with this webpage, and so on.
 
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<p><a onclick='hideshow("boring");'>&#9654; Toggle boring stuff</a></p>
-<div id='boring' style='display:none'>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 \begin{code}
 instance Show Expr where
   show = \case
@@ -285,9 +255,7 @@ main :: IO ()
 main = interact go
 \end{code}
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-</div>
 <script>
 function setup(s) {
   const name = s.substr(0, s.indexOf(" "));

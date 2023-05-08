@@ -1,18 +1,5 @@
 = Modules =
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-++++++++++
-
 It's about time to add support for modules: our last compiler is almost 2000
 lines of code.
 
@@ -175,18 +162,10 @@ We add the `LEFT` combinator, which is equivalent to `B BK T` and also arises
 frequently in Scott encodings; indeed, the data constructor `Left` compiles to
 `LEFT`. We add the KI combinator to shave off a few more reductions.
 
-++++++++++
-<p><a onclick='hideshow("party");'>&#9654; Toggle `party.hs`</a></p>
-<div id='party' style='display:none'>
-++++++++++
-
+[#party.toggleshow]
 ---------
 include::party.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Multiparty ==
 
@@ -200,41 +179,20 @@ its successor "methodically".)
 cat Base0.hs Ast.hs Map.hs Parser.hs Kiselyov.hs Unify.hs RTS.hs Typer.hs party.hs
 ------------------------------------------------------------------------
 
-++++++++++
-<p><a onclick='hideshow("Base0");'>&#9654; Toggle `Base0.hs`</a></p><div id='Base' style='display:none'>
-++++++++++
-
+[#Base0.toggleshow]
 ---------
 include::inn/Base0.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Map");'>&#9654; Toggle `Map.hs`</a></p><div id='Map' style='display:none'>
-++++++++++
-
+[#Map.toggleshow]
 ---------
 include::inn/Map.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Kiselyov");'>&#9654; Toggle `Kiselyov.hs`</a></p><div id='Kiselyov' style='display:none'>
-++++++++++
-
+[#Kiselyov.toggleshow]
 ---------
 include::inn/Kiselyov.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 (There are more files, which I'll include if I get around to writing a tool to
 help show several source files in HTML. For now, see the git repo.)
@@ -252,17 +210,10 @@ use files like `Base0.hs`.
 This implies much of our `Base` code is untested, but for this special case,
 perhaps we can add a wrapper to test it on its own with GHC.
 
-++++++++++
-<p><a onclick='hideshow("Base");'>&#9654; Toggle `Base.hs` for GHC</a></p><div id='Base' style='display:none'>
-++++++++++
-
+[#Base-GHC.toggleshow]
 ---------
 include::inn/Base.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 Another obstacle is our built-in support for quasi-quoted raw strings. We solve
 this by adding the line:
@@ -277,17 +228,10 @@ define `import_qq_here` to be `import Text.RawString.QQ --`.
 We perform similar tricks to hide `Prelude` symbols we define in the `System`
 module.
 
-++++++++++
-<p><a onclick='hideshow("RTS");'>&#9654; Toggle `RTS.hs` for GHC</a></p><div id='RTS' style='display:none'>
-++++++++++
-
+[#RTS-GHC.toggleshow]
 ---------
 include::inn/RTS.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 Our source now works with GHC with the following options:
 
@@ -407,55 +351,27 @@ symlinks to the desired versions of the modules. Incremental development means
 we only need to change a few symlinks at a time, but in the long run, we ought
 to automate symlinking from a given set of module files.
 
-++++++++++
-<p><a onclick='hideshow("Ast1");'>&#9654; Toggle `Ast1.hs`</a></p><div id='Ast1' style='display:none'>
-++++++++++
-
+[#Ast1.toggleshow]
 ---------
 include::inn/Ast1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Parser1");'>&#9654; Toggle `Parser1.hs`</a></p><div id='Parser1' style='display:none'>
-++++++++++
-
+[#Parser1.toggleshow]
 ---------
 include::inn/Parser1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Typer1");'>&#9654; Toggle `Typer1.hs`</a></p><div id='Typer1' style='display:none'>
-++++++++++
-
+[#Typer1.toggleshow]
 ---------
 include::inn/Typer1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
 We replace a list with a `Map` for faster type unification.
 
-++++++++++
-<p><a onclick='hideshow("Unify1");'>&#9654; Toggle `Unify1.hs`</a></p><div id='Unify1' style='display:none'>
-++++++++++
-
+[#Unify1.toggleshow]
 ---------
 include::inn/Unify1.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Party2 ==
 
@@ -489,74 +405,36 @@ For parsing one of `let where do of`, and also `\case` since we act as if the
 angle-bracket indentation rule by placing an indent value of 0 at the head of
 the `indents` list.
 
-++++++++++
-<p><a onclick='hideshow("Base1");'>&#9654; Toggle `Base1.hs`</a></p><div id='Base1' style='display:none'>
-++++++++++
-
+[#Base1.toggleshow]
 ---------
 include::inn/Base1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Ast2");'>&#9654; Toggle `Ast2.hs`</a></p><div id='Ast2' style='display:none'>
-++++++++++
-
+[#Ast2.toggleshow]
 ---------
 include::inn/Ast2.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Parser2");'>&#9654; Toggle `Parser2.hs`</a></p><div id='Parser2' style='display:none'>
-++++++++++
-
+[#Parser2.toggleshow]
 ---------
 include::inn/Parser2.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("Typer2");'>&#9654; Toggle `Typer2.hs`</a></p><div id='Typer2' style='display:none'>
-++++++++++
-
+[#Typer2.toggleshow]
 ---------
 include::inn/Typer2.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("RTS1");'>&#9654; Toggle `RTS1.hs`</a></p><div id='RTS1' style='display:none'>
-++++++++++
-
+[#RTS1.toggleshow]
 ---------
 include::inn/RTS1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
-
-++++++++++
-<p><a onclick='hideshow("party1");'>&#9654; Toggle `party1.hs`</a></p><div id='party1' style='display:none'>
-++++++++++
-
+[#party1.toggleshow]
 ---------
 include::inn/party1.hs[]
 ---------
 
-++++++++++
-</div>
-++++++++++
++++++++++
+include::toggleshow.js[]
++++++++++

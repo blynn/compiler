@@ -1,6 +1,5 @@
 = ChatFP =
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <div style="display:none;" id="Map.hs">
 include::inn/Map1.hs[]

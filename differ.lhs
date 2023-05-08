@@ -1,6 +1,5 @@
 = Differential Lambda Calculus =
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <p>
 <button id='example'>C to F</button>
@@ -22,21 +21,6 @@
 How do we convert Celsius to Farenheit? For the sake of argument, suppose
 we know to multiply by a constant `p` then add another constant `q`:
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("boilerplate");'>&#9654; Toggle boilerplate</a></p>
-<div id='boilerplate' style='display:none'>
-++++++++++
-
 \begin{code}
 module Main where
 import Base
@@ -48,13 +32,7 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 type Charser = Parsec () String
 -}
-\end{code}
 
-++++++++++
-</div>
-++++++++++
-
-\begin{code}
 type R = Double
 convert:: R -> R -> R -> R
 convert p q x = p * x + q
@@ -574,7 +552,6 @@ Automated theorem proving profits from turning this trick on its head. Early
 theorem provers exhaustively tried every possible value for every variable.
 Later provers improved on this by by computing with variables instead.
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script>
 function setup(name, t) {

@@ -55,45 +55,18 @@ our GC to carefully evacuate the whole stack.
 It's unclear if these changes are worth the effort, especially since Haskell
 code tends to avoid the IO monad as much as possible.
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("effectively");'>&#9654; Toggle `effectively.hs`.</a></p>
-<div id='effectively' style='display:none'>
-++++++++++
-
+[#effectively.toggleshow]
 ------------------------------------------------------------------------
 include::effectively.hs[]
 ------------------------------------------------------------------------
 
-++++++++++
-</div>
-++++++++++
-
 Rather than a bunch of numbers, our compiler generates C code that should be
 appended to the following C implementation of the VM:
 
-++++++++++
-<p><a onclick='hideshow("rts");'>&#9654; Toggle RTS.</a></p>
-<div id='rts'>
-++++++++++
-
-[source,c]
+[.toggleshow,source,c,id=rts.c]
 ------------------------------------------------------------------------
 include::rts.c[]
 ------------------------------------------------------------------------
-
-++++++++++
-</div>
-++++++++++
 
 We employ a stop-the-world copying garbage collector. It turns out we should
 reduce projection functions (such as `fst` and `snd`) as we collect garbage.
@@ -122,15 +95,11 @@ representing VM memory contents.
 
 We also add support for `if` expressions and infix patterns in case expressions.
 
-++++++++++
-<p><a onclick='hideshow("lonely");'>&#9654; Toggle `lonely.hs`.</a></p>
-<div id='lonely' style='display:none'>
-++++++++++
-
+[#lonely.toggleshow]
 ------------------------------------------------------------------------
 include::lonely.hs[]
 ------------------------------------------------------------------------
 
 ++++++++++
-</div>
+include::toggleshow.js[]
 ++++++++++

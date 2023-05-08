@@ -64,28 +64,10 @@ I x (\a -> f a) (\ -> g) (\b c -> h b c)
 Our type checker is missing several features, such as kind checking and
 rejecting duplicate definitions.
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("typically");'>&#9654; Toggle Source</a></p>
-<div id='typically' style='display:none'>
-++++++++++
-
+[#typically.toggleshow]
 ---------
 include::typically.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Classy ==
 
@@ -216,18 +198,10 @@ for finding proofs may not terminate.
 Without garbage collection, this compiler requires unreasonable amounts of
 memory.
 
-++++++++++
-<p><a onclick='hideshow("classy");'>&#9654; Toggle Source</a></p>
-<div id='classy' style='display:none'>
-++++++++++
-
+[#classy.toggleshow]
 ---------
 include::classy.hs[]
 ---------
-
-++++++++++
-</div>
-++++++++++
 
 == Barely ==
 
@@ -261,15 +235,11 @@ it is troubling that `Data.Map` chose BB-3 trees.
 We also move the assembler from C to Haskell, that is, our compiler now outputs
 bare machine code rather than ION assembly.
 
-++++++++++
-<p><a onclick='hideshow("barely");'>&#9654; Toggle Source</a></p>
-<div id='barely' style='display:none'>
-++++++++++
-
+[#barely.toggleshow]
 ---------
 include::barely.hs[]
 ---------
 
 ++++++++++
-</div>
+include::toggleshow.js[]
 ++++++++++

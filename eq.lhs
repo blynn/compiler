@@ -1,6 +1,5 @@
 = Fighting for Equality =
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <script src='eq.js'></script>
 Demos:

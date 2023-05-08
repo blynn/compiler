@@ -39,28 +39,10 @@ sys     0m0.020s
 We translate it for our `assembly` compiler. We need much more code as we lack
 a standard library:
 
-++++++++++
-<script>
-function hideshow(s) {
-  var x = document.getElementById(s);
-  if (x.style.display === "none") {
-    x.style.display = "block";
-  } else {
-    x.style.display = "none";
-  }
-}
-</script>
-<p><a onclick='hideshow("q11");'>&#9654; Toggle `q11.hs`</a></p>
-<div id='q11' style='display:none'>
-++++++++++
-
-\begin{code}
+[#q11.toggleshow]
+---------
 include::q11.hs[]
-\end{code}
-
-++++++++++
-</div>
-++++++++++
+---------
 
 On my laptop:
 
@@ -89,11 +71,7 @@ But really its performance has little to do with my prowess. The credit goes to
 Oleg Kiselyov's bracket abstraction algorithm (with minor tweaks from a few
 syntactic rewrites).
 
-++++++++++
-<p><a onclick='hideshow("combo");'>&#9654; Toggle combinators</a></p>
-<div id='combo' style='display:none'>
-++++++++++
-
+[#q11-combinators.toggleshow]
 ------------------------------------------------------------------------
 % = Q %;
 / = Q /;
@@ -166,10 +144,6 @@ intersperse = B (C (T K)) (B (C (B B (:))) (R K (B foldr (B (B (++)) (R (R K (:)
 main = putStr (shows ({Shows ([] a)} ({Shows ([] a)} {Shows Int})) (queens 11) "");
 ------------------------------------------------------------------------
 
-++++++++++
-</div>
-++++++++++
-
 == A second opinion ==
 
 The difference is even more pronounced for another example that computes 'e' to
@@ -196,18 +170,10 @@ include::e4096.m[]
 
 Our version:
 
-++++++++++
-<p><a onclick='hideshow("e4096");'>&#9654; Toggle e4096.hs</a></p>
-<div id='e4096' style='display:none'>
-++++++++++
-
-\begin{code}
+[#e4096.toggleshow]
+---------
 include::e4096.hs[]
-\end{code}
-
-++++++++++
-</div>
-++++++++++
+---------
 
 == A rematch? ==
 
@@ -225,3 +191,7 @@ tips on updating C code written 30 years ago! I was pleased to hear that:
 
 But most of all, I'm pleased Miranda is alive again, and look forward to
 rematches with future releases.
+
++++++++++
+include::toggleshow.js[]
++++++++++

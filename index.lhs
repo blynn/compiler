@@ -2,7 +2,6 @@
 
 link:ioccc.html[An award-winning Haskell compiler], browser edition.
 
-[pass]
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <textarea id='mod_base' hidden>
 include::inn/BasePrecisely.hs[]
