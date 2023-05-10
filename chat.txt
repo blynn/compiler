@@ -21,6 +21,8 @@ background-color:yellow;
 font-weight:bold;
 }
 .output{
+font-family:monospace;
+white-space: pre-wrap;
 padding:1ex;
 background-color:lightgrey;
 }

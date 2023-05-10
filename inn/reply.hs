@@ -31,7 +31,7 @@ scratchObj lib ob = do
 
 mergeFragment neat frag = neat
   { typeclasses = foldr (uncurry insert) (typeclasses neat) $ toAscList $ typeclasses frag
-  , instances = foldr (uncurry insert) (instances neat) $ toAscList $ instances frag
+  , instances = foldr (uncurry $ insertWith (++)) (instances neat) $ toAscList $ instances frag
   , typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
   , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
   , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag

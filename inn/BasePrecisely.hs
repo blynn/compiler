@@ -523,7 +523,13 @@ instance Show Word64 where
   showsPrec p (Word64 x y) = showsPrec p $ Integer True [x, y]
 showLitChar__ '\n' = ("\\n"++)
 showLitChar__ '\\' = ("\\\\"++)
-showLitChar__ c = (c:)
+showLitChar__ c
+  | n < 32 || n > 127 = ('\\':) . protectDecEsc (shows n)
+  | otherwise = (c:)
+  where n = ord c
+protectDecEsc f s
+  | (c:_) <- s, '0' <= c, c <= '9' = f $ ("\\&"++) s
+  | otherwise = f s
 instance Show Char where
   showsPrec _ '\'' = ("'\\''"++)
   showsPrec _ c = ('\'':) . showLitChar__ c . ('\'':)

@@ -43,8 +43,8 @@ gtag("config", "G-G56YW5RFXN");
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>'
+echo '<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
 doctitle=$(grep '^==* ' $1 | sed 1q | sed 's/^==* *//' | sed 's/ *=*=$//')
 echo "<title>$doctitlepre$doctitle</title>"
 echo '</head><body>'$bodypre
