@@ -4,6 +4,7 @@ set -euo pipefail
 supdoc() {
   sed 's/^\\begin{code}/[.hs]\n--------/' \
   | sed 's/^\\end{code}/--------/' \
+  | sed 's/\\\[/[subs=specialchars]\n&/' \
   | asciidoctor -s -
 }
 
@@ -42,6 +43,7 @@ gtag("config", "G-G56YW5RFXN");
 </script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/~blynn/b.png" type="image/png">
 <link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>'
 echo '<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
