@@ -26,7 +26,7 @@ main = do
   objs' <- case sum $ length . _mem <$> elems objs' of
     0 -> pure objs'
     _ -> error "BUG!"
-  vmdump dat (topo, objs', ffiList)
+  vmDumpWith dat (topo, objs', ffiList)
   putStrLn "};"
 
 bytecodeDump lib ob = do

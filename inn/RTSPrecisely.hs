@@ -126,8 +126,9 @@ argList t = case t of
 cTypeName = \case
   TC "()" -> "void"
   TC "Word64" -> "uu"
-  TC "Word" -> "u"
-  _ -> "int"
+  TC "Int" -> "int"
+  TC "Char" -> "int"
+  _ -> "u"
 
 ffiDeclare opts (name, t) = (concat
   [cTypeName $ last tys, " ", name, "(", intercalate "," $ cTypeName <$> init tys, ")"]++) . attr name . (";\n"++)
@@ -140,8 +141,12 @@ ffiDeclare opts (name, t) = (concat
 
 ffiArgs n t = case t of
   TAp (TC "IO") u -> ("", ((False, u), n))
-  TAp (TAp (TC "->") _) y -> first ((if 3 <= n then (", "++) else id) . ("num("++) . shows n . (')':)) $ ffiArgs (n + 1) y
+  TAp (TAp (TC "->") x) y -> first ((if 3 <= n then (", "++) else id) . argify x n) $ ffiArgs (n + 1) y
   _ -> ("", ((True, t), n))
+  where
+  argify t n = case t of
+    TC c | elem c ["Char", "Int", "Word"] -> ("num("++) . shows n . (')':)
+    _ -> ("arg("++) . shows n . (')':)
 
 ffiDefine n (name, t) = ("case " ++) . shows n . (": " ++) . case ret of
   TC "()" -> longDistanceCall . cont ("_K"++) . ("); break;"++)
@@ -274,7 +279,9 @@ static u gc() {
     if (isAddr(x)) *--sp = mem[x]; else return usage + hp + 8 >= TOP;
   }
 }
-
+static u*global;
+u get_global(){return*global;}
+void set_global(u x){*global=x;}
 static u suspend_status;
 static inline u app(u f, u x) { mem[hp] = f; mem[hp + 1] = x; return (hp += 2) - 2; }
 static inline u arg(u n) { return mem[sp [n] + 1]; }
@@ -365,6 +372,7 @@ rtsInit opts
   hp = 128 + mem[127];
   spTop = mem + TOP - 1;
   for (rootend = root; *rootend; rootend++);
+  *(global = rootend++) = _K;
   vmroot = rootend;
   scratchpadend = scratchpad = altmem + TOP;
 }
@@ -385,6 +393,7 @@ rtsInit opts
     mem[hp++] = n;
   } while (hp - 128 < PROGSZ);
   spTop = mem + TOP - 1;
+  *(global = rootend++) = _K;
   vmroot = rootend;
 }
 |]++)

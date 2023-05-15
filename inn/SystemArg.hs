@@ -8,6 +8,8 @@ getArgs = do
     len <- argvlen n
     forM [0..len - 1] $ argvat n
 
+foreign import ccall "nextout" nextOut :: IO ()
+
 foreign import ccall "eval_put" eval_put :: Char -> IO ()
 foreign import ccall "eval_run" eval_run :: IO ()
 foreign import ccall "eval_size" eval_size :: IO Int
@@ -18,3 +20,6 @@ jsEval s = do
   eval_run
   n <- eval_size
   mapM eval_at [0..n-1]
+
+foreign import ccall "get_global" global :: IO a
+foreign import ccall "set_global" setGlobal :: a -> IO ()

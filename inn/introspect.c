@@ -54,8 +54,7 @@ static void unmark(u n) {
   if (x != _NUM && x != _NUM64) unmark(y);
 }
 
-void espy(u n) { pdump = 128; traverse(n); espy_unmark(n); putchar('\n');
-}
+void espy(u n) { pdump = 128; traverse(n); espy_unmark(n); putchar('\n'); }
 u vmdump(u n) {
   if (!isAddr(n)) return n;
   pdump = 128, traverse(n), unmark(n);
@@ -74,7 +73,7 @@ u unleb128(unsigned char **pp) {
   }
 }
 #ifdef PRECOMPILED
-int precompiled() {
+u precompiled() {
   unsigned char *p = precompiled_bytecode;
   for (u lim = unleb128(&p); lim; lim--) {
     u sym_count = unleb128(&p);
@@ -104,5 +103,5 @@ int precompiled() {
   return hp0;
 }
 #else
-int precompiled() { return 0; }
+u precompiled() { return 0; }
 #endif

@@ -42,7 +42,7 @@ reply.c: reply-precompile inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply
 reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs inn/introspect.c; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; cat inn/introspect.c) > $@
 
 DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs
-doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/NextOut.hs inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
+doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
 
 doh.html:doh.txt menu.html;./stitch book menu $<
 

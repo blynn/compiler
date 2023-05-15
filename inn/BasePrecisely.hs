@@ -16,7 +16,7 @@ infixl 1 >> , >>=
 infixr 1 =<<
 infixr 0 $
 
-class Semigroup  a where
+class Semigroup a where
   (<>) :: a -> a -> a
 class Monoid a where
   mempty :: a
