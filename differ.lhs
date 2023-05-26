@@ -157,34 +157,36 @@ think in terms of derivatives and not differentials. Faced with an expression,
 our first instinct is to single out a variable and take a derivative with
 respect to this variable. Why?
 
-The root cause is a myth perpetuated by generation after generation of teachers
-and textbooks, that claim the Leibniz notation $dy/dx$ is a mere mnemonic
-device. Woe betide those who dare to reason algebraically with it!
+The root cause is a myth perpetuated by generation after generation of
+teachers and textbooks, that claim the Leibniz notation \(dy/dx\) is a mere
+mnemonic device. Woe betide those who dare to reason algebraically with it!
 
-This is a lie. Below, we define the differential $d$ as a function from lambda
-terms to lambda terms, and $dy/dx$ is an algebraic expression like any other.
-As we'd expect, it means $d$ applied to $y$ divided by $d$ applied to $x$.
+This is a lie. Below, we define the differential \(d\) as a function from
+lambda terms to lambda terms, and \(dy/dx\) is an algebraic expression like
+any other. As we'd expect, it means \(d\) applied to \(y\) divided by \(d\)
+applied to \(x\).
 
 Knowing the truth lets us forget derivatives and study differentials such as:
 
-\[
+[latexmath]
++++++++++++
 d(3 x^2 + 2 y) = 6 x dx + 2 dy
-\]
++++++++++++
 
 A differential describes the effects of small changes in the inputs.
 More precisely, it is the best linear approximation to a given function at a
 given point. Unlike derivatives, no variable gets special treatment.
 Differentials respect all variables equally.
 
-Above, we see changing $x$ by $dx$ leads to a change of approximately $6x dx$
-in the output value, and similarly changing $y$ by $dy$ leads to an change of
-approximately $2 dy$. The plane through $(x, y)$ with slope $6x$ in the
-$x$-direction and $2$ in the $y$-direction lies tangent to the surface
-represented by this function.
+Above, we see changing \(x\) by \(dx\) leads to a change of approximately \(6x
+dx\) in the output value, and similarly changing \(y\) by \(dy\) leads to an
+change of approximately \(2 dy\). The plane through \((x, y)\) with slope
+\(6x\) in the \(x\)-direction and \(2\) in the \(y\)-direction lies tangent to
+the surface represented by this function.
 
-If we discover $y$ depends on $x$, say $y = x^3$, then we can compute the
-differential $dy = 3x^2 dx$ and substitute into the above to get
-$(6x + 6x^2) dx$ using plain algebra.
+If we discover \(y\) depends on \(x\), say \(y = x^3\), then we can compute
+the differential \(dy = 3x^2 dx\) and substitute into the above to get
+\((6x + 6x^2) dx\) using plain algebra.
 
 After years of heavy use of derivatives, taking differentials may seem alien.
 Fortunately, a few lines saves us from figuring them out ourselves.
@@ -230,7 +232,7 @@ variable can be a run-of-the-mill variable like `x`, but it can also be a
 differential of a variable, such as `d x`. We may take differentials
 recursively, so if `x` is a variable, then so is `d x, d d x, d d d x, ...`
 (perhaps we should call these Peano variables).
-Instead of $dddx$, for example, mathematicians customarily write $d^3 x$.
+Instead of \(dddx\), for example, mathematicians customarily write \(d^3 x\).
 
 We define functions to pretty-print our expressions, or at least make them less
 ugly than the default.
@@ -297,10 +299,10 @@ line = expr <* eof where
 
 Our user interface is peculiar. Function application is left-associative (to
 match the conventions of lambda calculus and combinatory logic), while `d` is
-right-associative (so that `d d d x` means $dddx = d^3 x$).
-Unlike Haskell, lambdas bind exactly one variable, so that we can more easily
-parse `\d x` as the lambda binding the differentiable variable $dx$. There is
-no unary minus, so we write negative integers as, for example, `0 - 42`.
+right-associative (so that `d d d x` means \(dddx = d^3 x\)). Unlike Haskell,
+lambdas bind exactly one variable, so that we can more easily parse `\d x` as
+the lambda binding the differentiable variable \(dx\). There is no unary
+minus, so we write negative integers as, for example, `0 - 42`.
 
 We add a few basic simplification rules:
 
@@ -342,8 +344,8 @@ main = interact go
 
 == A second opinion ==
 
-We first test our code by computing the second derivative of some variable $y$
-with respect to a variable $x$:
+We first test our code by computing the second derivative of some variable
+\(y\) with respect to a variable \(x\):
 
 ------------------------------------------------------------------------
 go "d (d y / d x) / d x"
@@ -358,20 +360,20 @@ We get:
 Our program isn't quite ready to take over our calculus homework because our
 simplification function is too simple. However, we can manually figure out:
 
-\[
+[latexmath]
++++++++++++
 \frac{d(\frac{dy}{dx})}{dx} = \frac{ddy}{dx^2} - \frac{dy}{dx} \frac{ddx}{dx^2}
-\]
++++++++++++
 
 This is the correct way to write the second derivative.
 
-The incorrect but widespread $d^2 y / dx^2$ notation for the second derivative
-with respect to $x$ is another pernicious consequence of failing to properly
-appreciate Leibniz notation.
+The incorrect but widespread \(d^2 y / dx^2\) notation for the second
+derivative with respect to \(x\) is another pernicious consequence of failing
+to properly appreciate Leibniz notation.
 
-Some might complain that the truth is too verbose. This is no justification for
-propagating falsehoods.
-If brevity is paramount, we can always write the unexpanded $d(dy/dx)/dx$
-or use Arbogast's notation $D^2_x y$.
+Some might complain that the truth is too verbose. This is no justification
+for propagating falsehoods. If brevity is paramount, we can always write the
+unexpanded \(d(dy/dx)/dx\) or use Arbogast's notation \(D^2_x y\).
 
 It makes no sense to half-heartedly write pseudo-Leibniz terms. It is useless
 as a mnemonic because it is wrong, and because it is wrong it reinforces the
@@ -381,18 +383,20 @@ myth that differentials cannot be algebraically reasoned with.
 
 Our code shows that:
 
-\[
+[latexmath]
++++++++++++
 d ((p * 100 + q - 212)^2)
-\]
++++++++++++
 
 evaluates to (after simplification):
 
-\[
+[latexmath]
++++++++++++
 \begin{align}
 & & 200 * p * (p * 100 + q - 212) * dp \\
 &+& 2 * p * (p * 100 + q - 212) * dq
 \end{align}
-\]
++++++++++++
 
 confirming our claims about the coefficients of `dp` and `dq`.
 
@@ -431,26 +435,27 @@ https://en.wikipedia.org/wiki/Quadrifolium[the quadrifolium].
 See also https://arxiv.org/pdf/1811.03459.pdf[another paper by Bartlett],
 which discusses partial derivatives, and gives a shoutout to the rule:
 
-\[
+[latexmath]
++++++++++++
 d(u^v) = v u^{v-1} du + \log(u) u^v dv
-\]
++++++++++++
 
 which our code supports.
 
 I suspect
 http://bcl.hamilton.ie/~barak/papers/ifl2005.ps.gz["perturbation confusion"]
 is another casualty of the undeserved status of derivatives over differentials.
-An example in the paper goes straight for the derivative, asking
-for $\frac{d}{dx} (x + y)$. Similarly, they define a "derivative-taking operator"
-that we'll write as `D`.
+An example in the paper goes straight for the derivative, asking for
+\(\frac{d}{dx} (x + y)\). Similarly, they define a "derivative-taking
+operator" that we'll write as `D`.
 
-If we think with differentials instead, we have $d(x + y) = dx + dy$, and
-dividing by $dx$ gives $1 + dy/dx$, which doesn't seem to be what they want.
-I believe they really meant $\partial_x (x + y) = 1$. Similarly, I believe
-they really meant `D` to be a "partial-derivative-taking operator", that is
-`D (\x -> e)` means `\x -> partial x (d e)`, where `partial x` sets all
-differential variables to zero except for `d x`. With these
-definitions, there are no surprises; the example evaluates to what we expect.
+If we think with differentials instead, we have \(d(x + y) = dx + dy\), and
+dividing by \(dx\) gives \(1 + dy/dx\), which doesn't seem to be what they
+want. I believe they really meant \(\partial_x (x + y) = 1\). Similarly, I
+believe they really meant `D` to be a "partial-derivative-taking operator",
+that is `D (\x -> e)` means `\x -> partial x (d e)`, where `partial x` sets
+all differential variables to zero except for `d x`. With these definitions,
+there are no surprises; the example evaluates to what we expect.
 
 https://www.microsoft.com/en-us/research/uploads/prod/2019/07/autodiff-icfp-2019.pdf[A more modern paper] agrees with my interpretation (see Section 4.3).
 
@@ -464,37 +469,41 @@ Better is
 https://en.wikipedia.org/wiki/Automatic_differentiation[automatic
 differentiation], a vague-sounding term that encompasses two tricks:
 
-  1. Memoization. For every sub-expression $f$, we keep around $(f, df)$, so we
-  avoid recomputing the same sub-expressions over and over again.
+  1. Memoization. For every sub-expression \(f\), we keep around \((f, df)\),
+  so we avoid recomputing the same sub-expressions over and over again.
 
   2. Using values instead of symbols. Rather than compute a formula for a
   differential that we later apply to particular values, we just compute with
   values all the time.
 
-An example of the first trick: suppose we wish to compute $d(f g h)$.
-The naive method requires us to compute:
+An example of the first trick: suppose we wish to compute \(d(f g h)\). The
+naive method requires us to compute:
 
-\[
+[latexmath]
++++++++++++
 (df) g h + f (dg) h + f g (dh)
-\]
++++++++++++
 
 With memoization, we first compute and remember:
 
-\[
+[latexmath]
++++++++++++
 (g h, d(g h)) = (g h, g (dh) + (dg) h)
-\]
++++++++++++
 
 which we later use to compute:
 
-\[
+[latexmath]
++++++++++++
 d(f g h) = (df) g h + f d(g h)
-\]
++++++++++++
 
 The more functions in our product, the more memoization saves.
 
-An example of the second trick: if we know $(f, df) = (1, 2 dx)$ and $(g, dg) =
-(3, 4 dx)$ then the product rule gives $(f g, d(f g)) = (3, 10 dx)$. Algebra
-is great, but sticking with values sure is easier than manipulating symbols.
+An example of the second trick: if we know \((f, df) = (1, 2 dx)\) and \((g,
+dg) = (3, 4 dx)\) then the product rule gives \((f g, d(f g)) = (3, 10 dx)\).
+Algebra is great, but sticking with values sure is easier than manipulating
+symbols.
 
 Automatic differentiation has a _forward mode_ and a _reverse mode_.
 The latter is also called _backpropagation_ in some contexts.
@@ -502,33 +511,36 @@ These modes relate to the chain rule, which in our implementation is hidden in
 lambdas and applications. Working through the details, we find the chain rule
 leads to expressions like:
 
-\[
+[latexmath]
++++++++++++
 3 \times 4 \times 5 \times (dp + 2 dq + 4 dr)
-\]
++++++++++++
 
 My understanding is that in forward mode, the multiplications associate to
 the right:
 
-\[
+[latexmath]
++++++++++++
 \begin{align}
 & & 3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) \\
 &=& 3 \times 4 \times (5 dp + 10 dq + 20 dr) \\
 &=& 3 \times (20 dp + 40 dq + 80 dr) \\
 &=& 60 dp + 120 dq + 240 dr
 \end{align}
-\]
++++++++++++
 
 while in reverse mode the multiplications associate to the left, which is more
 efficient:
 
-\[
+[latexmath]
++++++++++++
 \begin{align}
 & & 3 \times 4 \times 5 \times (dp + 2 dq + 4 dr) \\
 &=& 12 \times 5 \times (dp + 2 dq + 4 dr) \\
 &=& 60 \times (dp + 2 dq + 4 dr) \\
 &=& 60 dp + 120 dq + 240 dr
 \end{align}
-\]
++++++++++++
 
 We can view the right-most factor as a list `[1,2,4]`, in which case reverse
 mode is the result of applying a fusion law to forward mode:
@@ -541,7 +553,7 @@ By the way, the second trick shows up elsewhere. In certain areas of
 cryptography, we need to compute a function related to
 https://en.wikipedia.org/wiki/Weil_pairing[the Weil pairing]. The numbers
 involved are so large that it's infeasible to write the function in terms of
-two input points given symbolically, say $(x_1, y_1)$ and $(x_2, y_2)$.
+two input points given symbolically, say \((x_1, y_1)\) and \((x_2, y_2)\).
 
 Thus in practice, to compute this function on two given points, we roughly act
 as if were trying to derive a formula, but always use values instead of

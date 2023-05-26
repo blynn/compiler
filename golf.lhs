@@ -20,17 +20,19 @@ if Maxwell had used link:../haskell/ga.html[geometric algebra] instead of
 vector algebra, he could have been less verbose and we would be celebrating
 Maxwell's _equation_, that is, one equation instead of four:
 
-\[
+[latexmath]
++++++++++++
 (\partial_t + \nabla)(\mathbf{e} + \mathbf{B}) = 0
-\]
++++++++++++
 
 in a vacuum, and more generally:
 
-\[
+[latexmath]
++++++++++++
 (\partial_t + \nabla)(\mathbf{e} + \mathbf{B}) = \rho + \mathbf{j}
-\]
++++++++++++
 
-where bivectors represent the magnetic field $\mathbf{B}$.)
+where bivectors represent the magnetic field \(\mathbf{B}\).)
 
 https://tromp.github.io/cl/LC.pdf[John Tromp's reworking of Chaitin's ideas in
 lambda calculus and combinatory logic] is a fascinating read. Much of the fun

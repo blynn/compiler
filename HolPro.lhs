@@ -21,22 +21,23 @@ import Hol
 \end{code}
 
 HOL Light is a simply typed lambda calculus that predefines the primitive type
-$\mathbb{B}$ of Booleans and an equality function $(=) : a \rightarrow a
-\rightarrow \mathbb{B}$ satisfying certain rules.
+\(\mathbb{B}\) of Booleans and an equality function \((=) : a \rightarrow a
+\rightarrow \mathbb{B}\) satisfying certain rules.
 All the logic symbols we know and love must be built on top.
 
 To define truth, inspired by the `refl` rule, we pick the identity function on
-booleans $\lambda p : \mathbb{B} . p$ and equate it to itself.
+booleans \(\lambda p : \mathbb{B} . p\) and equate it to itself.
 
-The universal quantifier `(!)` takes a term $p$ of type $a \rightarrow
-\mathbb{B}$ and states $p = \lambda x . T$, that is, we say $p$ is equivalent
-to the lambda abstraction that maps all values of type $a$ to truth. We've
-arranged the parser so that `(!)` is a binder, that is, it first acts as a
-lambda before applying itself to the resulting abstraction.
+The universal quantifier `(!)` takes a term \(p\) of type \(a \rightarrow
+\mathbb{B}\) and states \(p = \lambda x . T\), that is, we say \(p\) is
+equivalent to the lambda abstraction that maps all values of type \(a\) to
+truth. We've arranged the parser so that `(!)` is a binder, that is, it first
+acts as a lambda before applying itself to the resulting abstraction.
 
-For falsehood, we use $\forall p : \mathbb{B} . p$, that is, roughly speaking,
-"everything is true". This embodies the principle of explosion, or ex falso
-quodlibet; if we can prove falsehood, then we can prove any given theorem.
+For falsehood, we use \(\forall p : \mathbb{B} . p\), that is, roughly
+speaking, "everything is true". This embodies the principle of explosion, or
+ex falso quodlibet; if we can prove falsehood, then we can prove any given
+theorem.
 
 We define conjunction with the aid of currying. And soon we get the whole
 gang. Perhaps the least comprehensible is the existential quantifier `(?)`, but

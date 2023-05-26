@@ -19,9 +19,10 @@
 
 Prove that for any propositions P and Q:
 
-\[
+[latexmath]
++++++++++++
 (\neg P \vee Q) \rightarrow (P \rightarrow Q)
-\]
++++++++++++
 
 Easy, right? Just enumerate all possibilities \(P = 0, 1\) and \(Q = 0, 1\),
 and check we always get \(1\).
@@ -120,7 +121,10 @@ A sequent consists of:
 
 and is written:
 
-\[ A_1, ..., A_n \Rightarrow B \]
+[latexmath]
++++++++++++
+A_1, ..., A_n \Rightarrow B
++++++++++++
 
 This sequent means: "given proofs of the antecedent propositions
 \(A_1, ..., A_n\), we can produce a proof of \(B\)".
@@ -128,9 +132,10 @@ This sequent means: "given proofs of the antecedent propositions
 Given a proposition \(B\) to prove, we start with a sequent meaning we can
 prove \(B\) with no assumptions:
 
-\[
+[latexmath]
++++++++++++
 \Rightarrow B
-\]
++++++++++++
 
 Then we apply one of the rules described below to transform it into one or
 more sequents that logically lead to this sequent.
@@ -139,16 +144,18 @@ We recursively apply rules on these new sequents until we reach a self-evident
 sequent. There are two kinds of such sequents. Either we have an _initial
 sequent_:
 
-\[
+[latexmath]
++++++++++++
 ..., P, ... \Rightarrow P
-\]
++++++++++++
 
 which means we can produce a proof of \(P\) if given a proof of \(P\) (and
 possibly other proofs), or we have a sequent with \(\bot\) as an antecedent:
 
-\[
+[latexmath]
++++++++++++
 ..., \bot, ... \Rightarrow P
-\]
++++++++++++
 
 which is an incarnation of ex falso quodlibet.
 
@@ -192,41 +199,48 @@ We fix this later.
 
 Let's walk through a proof of our first example.
 
-\[
+[latexmath]
++++++++++++
 \Rightarrow ((P \rightarrow\bot) \vee Q) \rightarrow (P \rightarrow Q)
-\]
++++++++++++
 
 The succedent is an implication, so the corresponding rule yields:
 
-\[
+[latexmath]
++++++++++++
 (P\rightarrow\bot) \vee Q \Rightarrow P \rightarrow Q
-\]
++++++++++++
 
 The succedent is an implication again, so we get:
 
-\[
+[latexmath]
++++++++++++
 (P\rightarrow\bot) \vee Q, P \Rightarrow Q
-\]
++++++++++++
 
 The antecedent disjunction leads to the two sequents:
 
-\[
+[latexmath]
++++++++++++
 P \rightarrow \bot , P \Rightarrow Q
-\]
-\[
++++++++++++
+[latexmath]
++++++++++++
 Q, P \Rightarrow Q
-\]
++++++++++++
 
 The second sequent is an initial sequent, while the only way to progress from
 the first sequent is to apply a non-invertible rule to the antecedent
 implication, yielding two sequents:
 
-\[
+[latexmath]
++++++++++++
 \bot , P \Rightarrow Q
-\]
-\[
++++++++++++
+[latexmath]
++++++++++++
 P \Rightarrow P
-\]
++++++++++++
 
 The first sequent has a \(\bot\) antecedent, while the second is initial.
 We have successfully found a proof.
@@ -235,21 +249,31 @@ Below, the `incompleteOracle` function determines if a proof exists via a
 depth-first search. Hopefully our code alone is enough to explain the rules.
 For example, the first rule states if the sequent has the form:
 
-\[ A_1, ..., A_n \Rightarrow P \wedge Q \]
+[latexmath]
++++++++++++
+A_1, ..., A_n \Rightarrow P \wedge Q
++++++++++++
 
 then we recurse on:
 
-\[ A_1, ..., A_n \Rightarrow P \]
+[latexmath]
++++++++++++
+A_1, ..., A_n \Rightarrow P
++++++++++++
 
 and:
 
-\[ A_1, ..., A_n \Rightarrow Q \]
+[latexmath]
++++++++++++
+A_1, ..., A_n \Rightarrow Q
++++++++++++
 
 A logician might summarize this as:
 
-\[
+[latexmath]
++++++++++++
 \frac{\Gamma \Rightarrow P \quad \Gamma \Rightarrow Q} { \Gamma \Rightarrow P \wedge Q }
-\]
++++++++++++
 
 where \(\Gamma\) is a list of antecedent propositions. Roughly speaking, this
 notation says that to prove the thing below the horizontal line, we can prove
@@ -369,38 +393,43 @@ term representing its proof.
 
 We take this opportunity to properly fix our problematic implication rule:
 
-\[
+[latexmath]
++++++++++++
 \frac
   {A \rightarrow B,\Gamma\Rightarrow A \quad B,\Gamma\Rightarrow G }
   {A \rightarrow B,\Gamma\Rightarrow G}
-\]
++++++++++++
 
 It turns out our prover is sound and complete if we replace it with these 4
 rules:
 
-\[
+[latexmath]
++++++++++++
 \frac
   {B,A,\Gamma\Rightarrow G \quad \text{atomic }A }
   {A \rightarrow B,A,\Gamma\Rightarrow G}
-\]
++++++++++++
 
-\[
+[latexmath]
++++++++++++
 \frac
   {A\rightarrow (B\rightarrow C),\Gamma\Rightarrow G}
   {(A\wedge B)\rightarrow C,\Gamma\Rightarrow G}
-\]
++++++++++++
 
-\[
+[latexmath]
++++++++++++
 \frac
   {A\rightarrow C, B\rightarrow C,\Gamma\Rightarrow G}
   {(A\vee B)\rightarrow C,\Gamma\Rightarrow G}
-\]
++++++++++++
 
-\[
+[latexmath]
++++++++++++
 \frac
   {B\rightarrow C,\Gamma\Rightarrow A\rightarrow B \quad C,\Gamma\Rightarrow G}
   {(A\rightarrow B)\rightarrow C,\Gamma\Rightarrow G}
-\]
++++++++++++
 
 The `prove` function below performs a depth-first search to find programs of a
 given type.
@@ -480,12 +509,13 @@ It remains to describe the non-invertible rules:
 We've saved the the non-invertible implication rule for last. It relies on the
 theorem:
 
-\[
+[latexmath]
++++++++++++
 \begin{align}
 ((A \rightarrow B) \rightarrow C) \rightarrow (A \rightarrow B) \\
 \iff (B \rightarrow C) \rightarrow (A \rightarrow B)
 \end{align}
-\]
++++++++++++
 
 I had trouble finding the program corresponding to this rule, so I first coded
 our incomplete search from above:

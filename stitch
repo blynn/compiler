@@ -4,7 +4,6 @@ set -euo pipefail
 supdoc() {
   sed 's/^\\begin{code}/[.hs]\n--------/' \
   | sed 's/^\\end{code}/--------/' \
-  | sed 's/\\\[/[subs=specialchars]\n&/' \
   | asciidoctor -s -
 }
 

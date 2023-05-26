@@ -501,9 +501,10 @@ no constants appear, then we invent one to avoid an empty universe.
 
 For example, the Herbrand universe of:
 
-\[
+[latexmath]
++++++++++++
 (P(y) \implies Q(F(z))) \wedge (P(G(x)) \vee Q(x))
-\]
++++++++++++
 
 is:
 
@@ -554,9 +555,10 @@ eq _ = True
 For our next example we take a formula that holds under interpretations such as
 integer arithmetic:
 
-\[
+[latexmath]
++++++++++++
 \forall x . Odd(x) \iff \neg Odd(Succ(x))
-\]
++++++++++++
 
 Here's a Herbrand interpretation:
 
@@ -603,9 +605,10 @@ possibility. This is the case for our `groundTuples` function.
 It remains to detect unsatisfiability. One of the earliest approaches (Gilmore
 1960) transforms a given formula to _disjunctive normal form_ (DNF):
 
-\[
+[latexmath]
++++++++++++
 \bigvee_i \bigwedge_j x_{ij}
-\]
++++++++++++
 
 where the \(x_{ij}\) are literals. For example:
 \((\neg a\wedge b\wedge c) \vee (d \wedge \neg e) \vee (f)\).
@@ -705,9 +708,10 @@ gilmore = herbrand conjDNF S.null simpDNF where
 The DPLL algorithm uses the _conjunctive normal form_ (CNF), which is the dual
 of DNF:
 
-\[
+[latexmath]
++++++++++++
 \bigwedge_i \bigvee_j x_{ij}
-\]
++++++++++++
 
 \begin{code}
 pureCNF = S.map (S.map nono) . pureDNF . nnf . nono
