@@ -6,10 +6,10 @@
 or f g x y = f x (g x y);
 and f g x y = @C f y (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
-append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
 pair x y f = f x y;
 just x f g = g x;
 foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+append = @C (foldr @:);
 
 lcr s   = \a b c d -> a s;
 lcv v   = \a b c d -> b v;

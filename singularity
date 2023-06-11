@@ -8,7 +8,8 @@
 
 or f g x y = f x (g x y);
 lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
-append = @Y \r xs ys -> xs ys (\x xt -> @: x (r xt ys));
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+append = @C (foldr @:);
 pair x y f = f x y;
 just x f g = g x;
 pure x inp = just (pair x inp);
@@ -18,7 +19,6 @@ ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 fmap f x = ap (pure f) x;
 alt x y = \inp -> (x inp) (y inp) just;
 
-foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
 some p = liftaa @: p (many p);

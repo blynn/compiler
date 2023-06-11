@@ -6,7 +6,6 @@
 (||) f g x y = f x (g x y);
 (&&) f g x y = @C f y (g x y);
 lstEq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> (x == y) (r xt yt a b) b));
-(++) = @Y \r xs ys -> xs ys (\x xt -> x:r xt ys);
 pair x y f = f x y;
 fst p = p (\x y -> x);
 snd p = p (\x y -> y);
@@ -16,6 +15,7 @@ foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 foldl = \f a bs -> foldr (\b g x -> g (f x b)) @I bs a;
 foldl1 f bs = bs @? (\h t -> foldl f h t);
 elem k xs = \a b -> foldr (\x t -> (x == k) a t) b xs;
+(++) = @C (foldr @:);
 concat = foldr (++) [];
 wrap c = c:[];
 

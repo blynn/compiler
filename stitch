@@ -71,6 +71,19 @@ checklights();
 echo $bodypost'</body></html>'
 }
 
+slidedoc() {
+echo '<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>'
+doctitle=$(grep '^==* ' $1 | sed 1q | sed 's/^==* *//' | sed 's/ *=*=$//')
+echo "<title>$doctitle</title>"
+echo '</head><body>'$bodypre
+cat $1 | supdoc
+echo $bodypost'</body></html>'
+}
+
 tohref() {
   if [[ $1 == "index" ]]
   then echo "."
@@ -82,6 +95,9 @@ if [[ -z ${1+x} ]]
 then supdoc
 else
   case $1 in
+    slide)
+      slidedoc $2 > ${2%.*}.html
+      ;;
     solo)
       cssfile=solo.css
       bodypost="<hr>"$footer

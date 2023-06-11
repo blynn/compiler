@@ -527,6 +527,18 @@ void lvlup_file_raw(char *filename) {
   *bufptr = 0;
 }
 
+void singout() {
+  strcpy(buf, "I;");
+  bufptr = buf + 2;
+  lvlup(parenthetically);
+  lvlup(exponentially);
+  lvlup(practically);
+  lvlup(singularity);
+  lvlup_file("singularity");
+  char *p = buf;
+  do putchar(*p); while (*++p);
+}
+
 void rpg() {
   strcpy(buf, "I;");
   bufptr = buf + 2;
@@ -638,6 +650,7 @@ int main(int argc, char **argv) {
       run(ioget, pc);
       return 0;
     }
+    if (!strcmp(argv[1], "sing")) return singout(), 0;
     return puts("bad command"), 0;
   }
   rpg();
