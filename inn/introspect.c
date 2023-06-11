@@ -30,20 +30,6 @@ static void traverse(u n) {
   if (x != _NUM && x != _NUM64) traverse(y);
   *p++ = x != _NUM && isAddr(y) ? altmem[y] : y;
 }
-static void espy_unmark(u n) {
-  if (!isAddr(n)) return (void)putu(n);
-  u x = mem[n];
-  if (!(x & (1 << 31))) return (void)putchar('*');
-  putchar('(');
-  x -= 1 << 31;
-  espy_unmark(mem[n] = x);
-  putchar(' ');
-  u y = mem[n+1];
-  if (x == _NUM) putu(y);
-  else if (x == _NUM64) putu(y), putchar(' '), putu(mem[n+2]), putchar(' '), putu(mem[n+3]), putchar(' ');
-  else espy_unmark(y);
-  putchar(')');
-}
 static void unmark(u n) {
   if (!isAddr(n)) return;
   u x = mem[n];
@@ -53,8 +39,6 @@ static void unmark(u n) {
   unmark(mem[n] = x);
   if (x != _NUM && x != _NUM64) unmark(y);
 }
-
-void espy(u n) { pdump = 128; traverse(n); espy_unmark(n); putchar('\n'); }
 u vmdump(u n) {
   if (!isAddr(n)) return n;
   pdump = 128, traverse(n), unmark(n);
