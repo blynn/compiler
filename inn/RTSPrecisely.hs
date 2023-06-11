@@ -332,6 +332,7 @@ void vmrun() {
   lazy2(2, x, arg(2));
 }
 void vmgcroot() {
+  gc();
   u *p = scratchpad;
   u sym_count = *p++;
   while (sym_count--) *rootend++ = tagcheck(*p++);
