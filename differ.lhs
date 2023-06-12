@@ -500,10 +500,10 @@ d(f g h) = (df) g h + f d(g h)
 
 The more functions in our product, the more memoization saves.
 
-An example of the second trick: if we know \((f, df) = (1, 2 dx)\) and \((g,
-dg) = (3, 4 dx)\) then the product rule gives \((f g, d(f g)) = (3, 10 dx)\).
-Algebra is great, but sticking with values sure is easier than manipulating
-symbols.
+An example of the second trick: if we know \( (f, df) = (1, 2 dx) \) and
+\( (g, dg) = (3, 4 dx) \) then the product rule gives
+\( (f g, d(f g)) = (3, 10 dx) \). Algebra is great, but sticking with values
+sure is easier than manipulating symbols.
 
 Automatic differentiation has a _forward mode_ and a _reverse mode_.
 The latter is also called _backpropagation_ in some contexts.
