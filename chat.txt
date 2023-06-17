@@ -259,18 +259,5 @@ function module_mv(t) {
   module_saved.delete(module_name);
   module_name = t;
 }
-
-function slides() {
-  const orig = document.body.innerHTML;
-  document.body.innerHTML = "<b>New!</b> <i>Press Esc?</i>";
-  function slidekey(event) {
-console.log(event.key);
-if (event.key == "Escape") {
-  document.body.innerHTML = orig;
-  document.body.removeEventListener("keydown", slidekey);
-}
-  }
-  document.body.addEventListener("keydown", slidekey);
-}
 </script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

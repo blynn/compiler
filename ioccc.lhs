@@ -45,9 +45,8 @@ An arithmetic operator, say `(+)`, compiles to the index of the combinator
 `(+)` plus 9, which is past the end of the jump table. The code detects this
 and acts as if it encountered `Q(+)`, where the `Q = B(BT)T`, that is, it
 reduces the term `Q(+)xy` to `y(x(+))`. This ad hoc scheme beats having an
-explicit `Q` combinator because it is less clear and it saves room.
-[I chose "Q" in honour of one of the combinators Smullyan writes with the help
-of the letter Q.]
+explicit `Q` combinator because it is less clear and it saves room. I chose `Q`
+because Smullyan calls this Q~4~, the "quacky" combinator (Chapter 11).
 
 Originally, I planned to represent the compiler as link:parse.html[ION
 assembly] in a C string. But soon it was obvious I needed more drastic

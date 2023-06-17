@@ -15,7 +15,7 @@ espy x = do
   if n < 128 then putStr $ tab!!fromIntegral n else do
     shared <- ($ []) <$> findShares [] 128
     putStrLn =<< ($ "") <$> go 0 shared True 128
-    print =<< mapM (\n -> (n,) . ($ "") <$> go 0 shared True n) shared
+    print =<< mapM (\n -> (n,) . ($ "") <$> go 0 shared True n) (filter (/= 128) shared)
   where
     tab = ["?", "F", "Y", "Q", "QQ", "S", "B", "BK", "C", "R", "V", "T", "K", "KI", "I", "LEFT", "(:)", "NUM", "NUM64", "FLO", "FLW", "OLF", "FADD", "FSUB", "FMUL", "FDIV", "FLE", "FEQ", "FSQRT", "PAIR64", "DADD", "DSUB", "DMUL", "DDIV", "DMOD", "DSHL", "DSHR", "ADD", "SUB", "MUL", "QUOT", "REM", "DIV", "MOD", "XOR", "AND", "OR", "SHL", "SHR", "U_SHR", "EQ", "LE", "U_DIV", "U_MOD", "U_LE", "REF", "NEWREF", "READREF", "WRITEREF", "END", "ERR", "ERR2", "ERROUT", "ERREND", "VMRUN", "VMPTR", "SUSPEND"]
     findShares m n
@@ -30,6 +30,7 @@ espy x = do
           pure $ f . g
     go prec shared force n
       | n < 128 = pure ((tab!!fromIntegral n)++)
+      | n == 128, not force = pure ("*"++)
       | n `elem` shared, not force = pure $ shows n
       | otherwise = do
         x <- scratchAt (n - 128)
