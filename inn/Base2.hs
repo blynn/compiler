@@ -329,25 +329,6 @@ instance Integral Word where
 instance Eq Word where (==) = wordEq
 instance Ord Word where (<=) = wordLE
 
-data Word64 = Word64 Word Word deriving Eq
-instance Ring Word64 where
-  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
-  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
-  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub zeroWord zeroWord x y where
-    (x, xt) = mpView xs
-    (y, _) = mpView xt
-instance Ord Word64 where
-  Word64 a b <= Word64 c d
-    | b == d = a <= c
-    | True = b <= d
-instance Integral Word64 where
-  div (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
-  mod (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
-  quot (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
-  rem (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
-  toInteger (Word64 a b) = Integer True [a, b]
-
 -- Multiprecision arithmetic.
 data Integer = Integer Bool [Word] deriving Eq
 instance Ring Integer where
@@ -445,7 +426,7 @@ mpDivModWord xs y = first (reverse . dropWhile (zeroWord ==)) $ go zeroWord $ re
   go r [] = ([], r)
   go n (x:xt) = first (q:) $ go r xt where
     q = fst $ word64Div x n y zeroWord
-    r = fst $ word64Mod x n y zeroWord
+    r = x - q*y  -- Only lower bits matter.
 
 mpDivMod xs ys = first (reverse . dropWhile (== zeroWord)) $ go us where
   s = mpDivScale $ last ys
@@ -519,8 +500,6 @@ instance Show Word where
   showsPrec _ n
     | zeroWord == n = ('0':)
     | True = showWord_ n
-instance Show Word64 where
-  showsPrec p (Word64 x y) = showsPrec p $ Integer True [x, y]
 showLitChar__ '\n' = ("\\n"++)
 showLitChar__ '\\' = ("\\\\"++)
 showLitChar__ c = (c:)

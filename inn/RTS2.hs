@@ -244,12 +244,8 @@ genExport ourType n = ("void f"++) . shows n . ("("++)
     TAp (TAp (TC "->") t) rest -> (t, ('x':) . shows n) : go (n + 1) rest
     _ -> []
   rt = ("root["++) . shows n . ("]"++)
-  declare (t, x) = case t of
-    TC "Word64" -> ("long long " ++) . x
-    _ -> ("u "++) . x
-  heapify (t, x) = case t of
-    TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
-    _ -> ("app(_NUM,"++) . x . (')':)
+  declare (t, x) = ("u "++) . x
+  heapify (t, x) = ("app(_NUM,"++) . x . (')':)
 
 genArg m a = case a of
   V s -> ("arg("++) . (maybe undefined shows $ lookup s m) . (')':)

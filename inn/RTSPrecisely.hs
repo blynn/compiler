@@ -454,11 +454,11 @@ enc t = case t of
       TAp (TC "[]") (TC "Char") -> enc $ foldr (\h t -> Nd (Nd (Lf "CONS") (LfExtra $ Basic [h])) t) (Lf "K") s
       TC "Double" -> let
         (as, _:bs) = break (== '.') s
-        Word64 lo hi = rawDouble $ (fromInteger $ readInteger $ as ++ bs)
+        d = fromInteger (readInteger $ as ++ bs)
           / foldr (\_ n -> doubleFromInt 10*n) (doubleFromInt 1) bs
         in do
           (tab, (hp, f)) <- get
-          put (tab, (hp + 4, f . (Right (comEnum "NUM64"):) . (Right 0:) . (Right (fromIntegral lo):) . (Right (fromIntegral hi):)))
+          rawDouble d \lo hi -> put (tab, (hp + 4, f . (Right (comEnum "NUM64"):) . (Right 0:) . (Right (fromIntegral lo):) . (Right (fromIntegral hi):)))
           pure $ Right hp
     Link m s -> pure $ Left (m, s)
     _ -> error $ "BUG! " ++ show x

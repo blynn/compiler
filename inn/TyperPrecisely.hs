@@ -485,7 +485,7 @@ prims = let
     , ("doubleEq", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FEQ"))
     , ("doubleLE", (arr (TC "Double") (arr (TC "Double") (TC "Bool")), bin "FLE"))
     , ("sqrt", (arr (TC "Double") (TC "Double"), A (ro "T") (ro "FSQRT")))
-    , ("rawDouble", (arr (TC "Double") (TC "Word64"), A (ro "T") (ro "PAIR64")))
+    , ("rawDouble", (arr (TC "Double") $ arr (arr (TC "Word") $ arr (TC "Word") $ TV "a") $ TV "a", A (ro "T") (ro "PAIR64")))
     , ("intEq", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "EQ"))
     , ("intLE", (arr (TC "Int") (arr (TC "Int") (TC "Bool")), bin "LE"))
     , ("wordLE", (arr (TC "Word") (arr (TC "Word") (TC "Bool")), bin "U_LE"))

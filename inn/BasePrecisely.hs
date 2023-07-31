@@ -445,7 +445,7 @@ mpDivModWord xs y = first (reverse . dropWhile (0 ==)) $ go 0 $ reverse xs where
   go r [] = ([], r)
   go n (x:xt) = first (q:) $ go r xt where
     q = fst $ word64Div x n y 0
-    r = fst $ word64Mod x n y 0
+    r = x - q*y  -- Only lower bits matter.
 
 mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
   s = mpDivScale $ last ys
