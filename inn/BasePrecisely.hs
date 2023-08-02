@@ -379,9 +379,7 @@ instance Integral Integer where
     where (qs, rs) = mpDivMod xs ys
   mod (Integer xsgn xs) (Integer ysgn ys) = if xsgn == ysgn
     then mpCanon0 xsgn rs
-    else case rs of
-      [] -> Integer True []
-      _  -> Integer ysgn $ mpSub ys rs
+    else mpCanon ysgn $ mpSub ys rs
     where rs = snd $ mpDivMod xs ys
   quot (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 (xsgn == ysgn) $ fst $ mpDivMod xs ys
   rem (Integer xsgn xs) (Integer ysgn ys) = mpCanon0 xsgn $ snd $ mpDivMod xs ys
