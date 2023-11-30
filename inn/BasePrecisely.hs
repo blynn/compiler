@@ -590,6 +590,8 @@ class Field a where
 
 instance Field Double where (/) = doubleDiv
 
+floor = intFromDouble
+
 class Bits a where
   xor :: a -> a -> a
   (.&.) :: a -> a -> a

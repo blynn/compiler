@@ -2,7 +2,7 @@
 set -euo pipefail
 
 supdoc() {
-  sed 's/^\\begin{code}/[.hs]\n--------/' \
+  sed 's/^\\begin{code}/[.hs,haskell]\n--------/' \
   | sed 's/^\\end{code}/--------/' \
   | asciidoctor -s -
 }
