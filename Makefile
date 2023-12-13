@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm doh.wasm
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
@@ -23,6 +23,7 @@ menu.html: menu; ./stitch menu menu
 %:%.c;clang -O3 $^ -o $@
 webby:webby.c;clang -O3 $^ -o $@ -lm
 precisely:precisely.c;clang -O3 $^ -o $@ -lm
+check:check.c;clang -O3 $^ -o $@ -lm
 reply:reply.c;clang -O3 $^ -o $@ -lm
 reply-precompile:reply-precompile.c;clang -O3 $^ -o $@ -lm
 
@@ -72,7 +73,7 @@ $(call party,crossly.c,party2,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2
 $(call party,crossly1.c,crossly,Base2 System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 $(call party,precisely.c,crossly1,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,check.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely Kiselyov Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,check.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
 $(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
 $(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)

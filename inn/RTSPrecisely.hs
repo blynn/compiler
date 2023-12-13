@@ -591,7 +591,9 @@ agglomerate ffiMap objs lout name = lout
     Right n -> if n < 128 then n else n + (_offsets lout ! m)
     Left global -> follow global
   resolve (l:r:rest) = case l of
-    Right c | c == comEnum "NUM" -> (c:) . (either ((ffiMap !) . snd) id r:) . resolve rest
+    Right c
+      | c == comEnum "NUM" -> (c:) . (either ((ffiMap !) . snd) id r:) . resolve rest
+      | c == comEnum "NUM64", Right lo:Right hi:rest' <- rest -> (c:) . (either (error "bad NUM64") id r:) . (lo:) . (hi:) . resolve rest'
     _ -> (adj l:) . (adj r:) . resolve rest
   resolve [] = id
 
