@@ -151,7 +151,7 @@ digit = sat \x -> (x <= '9') && ('0' <= x)
 nameTailChar = small <|> large <|> digit <|> char '\''
 nameTailed p = liftA2 (:) p $ many nameTailChar
 
-nat = readInteger <$> some digit
+nat = readNatural <$> some digit
 hexInt = foldl (\n d -> 16*n + (hexValue d)) 0 <$> some hexit
 escape = char '\\' *> (oneOf "'\"\\" <|> char 'n' *> pure '\n' <|> (chr . fromInteger <$> nat) <|> char 'x' *> (chr <$> hexInt))
 tokOne delim = escape <|> rawSat (delim /=)

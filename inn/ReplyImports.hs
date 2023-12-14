@@ -17,7 +17,7 @@ espy x = do
     putStrLn =<< ($ "") <$> go 0 shared True 128
     print =<< mapM (\n -> (n,) . ($ "") <$> go 0 shared True n) (filter (/= 128) shared)
   where
-    tab = ["?", "F", "Y", "Q", "QQ", "S", "B", "BK", "C", "R", "V", "T", "K", "KI", "I", "LEFT", "(:)", "NUM", "NUM64", "FLO", "FLW", "OLF", "FADD", "FSUB", "FMUL", "FDIV", "FLE", "FEQ", "FSQRT", "PAIR64", "DADD", "DSUB", "DMUL", "DDIV", "DMOD", "DSHL", "DSHR", "ADD", "SUB", "MUL", "QUOT", "REM", "DIV", "MOD", "XOR", "AND", "OR", "SHL", "SHR", "U_SHR", "EQ", "LE", "U_DIV", "U_MOD", "U_LE", "REF", "NEWREF", "READREF", "WRITEREF", "END", "ERR", "ERR2", "ERROUT", "ERREND", "VMRUN", "VMPTR", "SUSPEND"]
+    tab = ["?", "F", "Y", "Q", "QQ", "S", "B", "BK", "C", "R", "V", "T", "K", "KI", "I", "LEFT", "(:)", "NUM", "NUM64", "FLO", "FLW", "OLF", "FADD", "FSUB", "FMUL", "FDIV", "FLE", "FEQ", "FFLOOR", "FSQRT", "PAIR64", "DADD", "DSUB", "DMUL", "DDIV", "DMOD", "DSHL", "DSHR", "ADD", "SUB", "MUL", "QUOT", "REM", "DIV", "MOD", "XOR", "AND", "OR", "SHL", "SHR", "U_SHR", "EQ", "LE", "U_DIV", "U_MOD", "U_LE", "REF", "NEWREF", "READREF", "WRITEREF", "END", "ERR", "ERR2", "ERROUT", "ERREND", "VMRUN", "VMPTR", "SUSPEND"]
     findShares m n
       | n < 128 = pure id
       | n `elem` m = pure $ \xs -> if elem n xs then xs else n:xs

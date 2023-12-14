@@ -528,7 +528,9 @@ product = foldr (*) 1
 max a b = if a <= b then b else a
 min a b = if a <= b then a else b
 
-readInteger = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
+readNatural = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
+readInteger ('-':t) = negate $ readNatural t
+readInteger s = readNatural s
 
 instance Ring Double where
   (+) = doubleAdd
