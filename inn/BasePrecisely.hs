@@ -127,6 +127,12 @@ undefined = error "undefined"
 foldr1 c l@(h:t) = maybe undefined id $ foldr (\x m -> Just $ maybe x (c x) m) Nothing l
 foldl f a bs = foldr (\b g x -> g (f x b)) (\x -> x) bs a
 foldl1 f (h:t) = foldl f h t
+scanl f q ls = q : (case ls of
+  []   -> []
+  x:xs -> scanl f (f q x) xs)
+scanl1 f (x:xs) =  scanl f x xs
+scanl1 _ []     =  []
+
 elem k xs = foldr (\x t -> x == k || t) False xs
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
