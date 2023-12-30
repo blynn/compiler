@@ -115,17 +115,17 @@ it with `IK`.
 == The numbers game ==
 
 For primitive functions, we use a trick described in depth by Naylor and
-Runciman, "The Reduceron reconfigured and re-evaluated": we introduce a
-combinator called `#` and reduce, say, `# 42 f` to `f(# 42)` for any `f`.
-For example, the term `(I#2)(K(#3)S)(+))` reduces to `(+)(#3)(#2)`.
+Runciman, _The Reduceron reconfigured and re-evaluated_: we introduce a
+combinator called `+#+` and reduce, say, `+# 42 f+` to `+f(# 42)+` for any `f`.
+For example, the term `+++(I#2)(K(#3)S)(+))+++` reduces to `+++(+)(#3)(#2)+++`.
 
 In this fashion, the first two arguments of `(+)` are always primitive
 integers, so our code for reducing `(+)(#m)(#n)` simply pulls out the words `m`
 and `n` from certain locations in memory and returns `#s` where `s == m + n`
-modulo 2^32.
+modulo 2^32^.
 
 This scheme resembles the approach described by Peyton Jones and Launchbury,
-"Unboxed values as first class citizens in a non-strict function language".
+_Unboxed values as first class citizens in a non-strict function language_.
 For example, they define integer subtraction as follows:
 
 ------------------------------------------------------------------------
@@ -148,7 +148,7 @@ off boxing, though it likely means introducing supercombinators to reap the
 benefits.
 
 We support the operations `+ - / * % = L`. The first 5 have the same meaning
-they do in C, while the last 2 are equivalent to C's `(==)` and `(<=)`.
+they do in C, while the last 2 are equivalent to C's `+(==)+` and `+(<=)+`.
 
 We add a couple of useful macros: the `R` combinator (equivalent to `CC`) and
 the `(:)` combinator (equivalent to `B(BK)(BCT)`).
