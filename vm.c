@@ -560,6 +560,29 @@ void rpg() {
   lvlup_file_raw("barely.hs");
 }
 
+void untyped(char *filename) {
+  strcpy(buf, "I;");
+  bufptr = buf + 2;
+  lvlup(parenthetically);
+  lvlup(exponentially);
+  lvlup(practically);
+  lvlup(singularity);
+  lvlup_file("singularity");
+  lvlup_file("semantically");
+  lvlup_file("stringy");
+  lvlup_file("binary");
+  lvlup_file("algebraically");
+  lvlup_file("parity.hs");
+  lvlup_file("fixity.hs");
+  parse(buf);
+  buf_reset();
+  fp_reset(filename);
+  run(fp_get, buf_put);
+  *bufptr = 0;
+  parse(buf);
+  run(ioget, pc);
+}
+
 void dis(char *file) {
   fp_reset("raw");
   loadRaw(fp_get);
@@ -623,6 +646,7 @@ int main(int argc, char **argv) {
   spTop = mem + TOP - 1;
 
   if (argc > 1) {
+    if (!strcmp(argv[1], "untyped")) return untyped(argv[2]), 0;
     if (!strcmp(argv[1], "test")) return runTests(), 0;
     if (!strcmp(argv[1], "iotest")) return iotest(), 0;
     if (!strcmp(argv[1], "rawck")) {

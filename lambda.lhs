@@ -96,10 +96,7 @@ The `Ext String` field comes into play later, when we want to mix external
 functions with our combinators.
 
 The `rewrite` function below rewrites a closed LC term as a CL term, using an
-algorithm known as _bracket abstraction_. See
-https://en.wikipedia.org/wiki/To_Mock_a_Mockingbird[Smullyan's _To Mock a
-Mockingbird_] for a particularly enjoyable explanation of why this results in a
-combinatory logic term whose meaning matches that of the original lambda term.
+algorithm known as link:../lambda/cl.html[_bracket abstraction_].
 
 \begin{code}
 type VarId = String

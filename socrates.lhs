@@ -43,7 +43,7 @@ interpret :: Language -> (Value -> Value)
 interpretTarget :: TargetLanguage -> (Value -> Value)
 ------------------------------------------------------------------------
 
-By convention, the arrow `(->)` associates to the right, so we write:
+By convention, the arrow `+(->)+` associates to the right, so we write:
 
 ------------------------------------------------------------------------
 interpret :: Language -> Value -> Value
@@ -147,7 +147,7 @@ many states? Thus the number of states should be relatively small.
 We quickly find
 https://en.wikipedia.org/wiki/Pumping_lemma_for_regular_languages[DFAs are
 incapable of elementary tasks] such as checking if a bunch of parentheses are
-balanced, or if some number of As has been followed by an equal number of Bs.
+balanced, or if some number of As is followed by an equal number of Bs.
 
 By the way, we can extend the above to spit out characters as it computes. See
 https://en.wikipedia.org/wiki/Moore_machine[Moore machines] and
@@ -216,8 +216,8 @@ demoBalanced = runDpda balanced "(()())"
 \end{code}
 
 It turns out DPDAs are incapable of basic tasks such as checking if the input
-is a palindrome, or if some number of As has been followed by an equal
-number of Bs followed by an equal number of Cs.
+is a palindrome, or if some number of As is followed by an equal number of Bs
+followed by an equal number of Cs.
 
 == Turing Machines ==
 

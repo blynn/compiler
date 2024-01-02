@@ -62,7 +62,7 @@ eval c (encode m n) == c m n
 where:
 
 ------------------------------------------------------------------------
-data CL = App CL CL | S | K
+data CL = S | K | App CL CL
 encode m n = case m of
   x :@ y -> (True, (encode x (encode y n)))
   S -> (False, (False, n))
@@ -74,12 +74,13 @@ link:grind.html[Our "Fixity" compiler] accepts the following:
 
 ------------------------------------------------------------------------
 data Bool = True | False;
+data CL = S | K | App CL CL;
 id x = x;
 const x y = x;
 ap x y z = x z(y z);
 bool x y b = case b of { True -> y ; False -> x };
 uncurry f x = case x of { (,) a b -> f a b };
-(.) f g x  = f (g ( x));
+(.) f g x  = f (g x);
 encode m n = case m of
   { S -> (False, (False, n))
   ; K -> (False, (True , n))
@@ -89,7 +90,29 @@ eval c = uncurry (bool (uncurry (c . bool ap const)) (eval (eval . (c .))));
 go s = eval id (encode (App (App S K) K) s);
 ------------------------------------------------------------------------
 
-Since SKK is the identity, the above program just returns the input.
+Since SKK is the identity, the above program just returns the input. To try
+this at home, save the above to `tromp.hs` and run:
+
+------------------------------------------------------------------------
+$ echo Hello, World! | vm untyped tromp.hs
+------------------------------------------------------------------------
+
+In the presence of type-checking, we are forbidden from arbitrarily composing
+the `ap` and `const` functions. The following is accepted by GHC, but merely
+decodes the input into an SK term.
+
+------------------------------------------------------------------------
+infixr 5 :@
+data Stream a = a :@ Stream a
+data Expr = S | K | Expr :# Expr deriving Show
+
+bool x y p = if p then y else x
+un f (a :@ b) = f a b
+
+eval c = un (bool (un (c . bool S K)) (eval (eval . (c .) . (:#))))
+
+main = print (eval const (True :@ True :@ False :@ False :@ False :@ True :@ False :@ True :@ undefined))
+------------------------------------------------------------------------
 
 Kiselyov's bracket abstraction algorithm leads us to wonder: why limit
 ourselves to S and K? After all, in lambda calculus, we could prohibit terms
@@ -169,7 +192,7 @@ flip x y z = x z y;
 ap x y z = x z(y z);
 bool x y b = case b of { True -> y ; False -> x };
 uncurry f x = case x of { (,) a b -> f a b };
-(.) f g x  = f(g(x));
+(.) f g x  = f(g x);
 data CL = K | C | S | T | V | B | App CL CL;
 encode m n = case m of
   { K -> (False, (False, (False, (False, (False, n)))))
@@ -230,11 +253,12 @@ total = foldr (\(c, enc) n -> n + length enc * histo!c) 0 $ huff histo
 == Infinite regress ==
 
 Is mainstream mathematics mistaken in its handling of the infinite?
-https://web.math.princeton.edu/\~nelson/papers/warn.pdf[What does it mean,
+https://web.math.princeton.edu/~nelson/papers/warn.pdf[What does it mean,
 Edward Nelson asks, to treat the unfinished as finished]?
 We might get a theory that is internally consistent, but so what? Good stories
-that have no bearing on reality are also internally consistent. Perhaps
-http://sites.math.rutgers.edu/~zeilberg/Opinion125.html[undecidability is
+that have no bearing on reality are also internally consistent.
+Perhaps
+https://sites.math.rutgers.edu/~zeilberg/Opinion125.html[undecidability is
 meaningless, as Doron Zeilberger spiritedly opines].
 
 If this turns out to be the case, then I'll be annoyed because of the time I
