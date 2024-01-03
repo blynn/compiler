@@ -146,11 +146,15 @@ void parseMore(u (*get)()) {
 char *str;
 u str_get() { return *(unsigned char*)str++; }
 
-void parse(char *s) {
+void parseWith(u (*get)()) {
   hp = 128;
   tabn = 0;
+  parseMore(get);
+}
+
+void parse(char *s) {
   str = s;
-  parseMore(str_get);
+  parseWith(str_get);
 }
 
 void parseRaw(char *s) {
@@ -663,12 +667,18 @@ int main(int argc, char **argv) {
     if (!strcmp(argv[1], "testdis")) return dis("disassembly.hs"), 0;
     if (!strcmp(argv[1], "dis")) return dis(argv[2]), 0;
     if (!strcmp(argv[1], "asm")) {
-      fp_reset("raw");
-      loadRaw(fp_get);
+      parseWith(ioget);
+      printf("%u", root_memo);
+      for(u i=128; i<hp; i++) printf(",%u", mem[i]);
+      return 0;
+    }
+    if (!strcmp(argv[1], "runion")) {
+      fp_reset(argv[2]);
+      parseWith(fp_get);
       run(ioget, pc);
       return 0;
     }
-    if (!strcmp(argv[1], "asmWith")) {
+    if (!strcmp(argv[1], "runheap")) {
       fp_reset(argv[2]);
       loadRaw(fp_get);
       run(ioget, pc);

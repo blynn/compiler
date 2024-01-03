@@ -64,9 +64,9 @@ where:
 ------------------------------------------------------------------------
 data CL = S | K | App CL CL
 encode m n = case m of
-  x :@ y -> (True, (encode x (encode y n)))
   S -> (False, (False, n))
   K -> (False, (True , n))
+  App x y -> (True, (encode x (encode y n)))
 ------------------------------------------------------------------------
 
 Some of our type-challenged compilers will happily run this crazy code.
@@ -161,6 +161,14 @@ C 00001
 K 00000
 ------------------------------------------------------------------------
 
+Beware! For some reason I flipped the usual Church encodings of booleans in
+this example. That is, just for this section, we have:
+
+------------------------------------------------------------------------
+False = \x y -> x
+True  = \x y -> y
+------------------------------------------------------------------------
+
 Then the following is a binary self-interpreter:
 
 ------------------------------------------------------------------------
@@ -185,12 +193,11 @@ bits.
 The following demonstrates this self-interpreter in our "Fixity" compiler:
 
 ------------------------------------------------------------------------
-data Bool = True | False;
+data Bool = False | True;
 id x = x;
 const x y = x;
 flip x y z = x z y;
 ap x y z = x z(y z);
-bool x y b = case b of { True -> y ; False -> x };
 uncurry f x = case x of { (,) a b -> f a b };
 (.) f g x  = f(g x);
 data CL = K | C | S | T | V | B | App CL CL;
@@ -204,7 +211,7 @@ encode m n = case m of
   ; App x y -> (True, (encode x (encode y n)))
   };
 t = uncurry;
-v = bool;
+v x y z = z x y;
 eval c = t(v(t(v(t(t . v(v(t(c . v const flip))(c ap))(c . v t v)))(c(.)))) (eval(eval . (c .))));
 demo _ = eval id (encode (App T (App K (App (App S K) K))) ("one", "two"));
 ------------------------------------------------------------------------
