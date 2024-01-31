@@ -409,7 +409,7 @@ can be replaced by `x` and `y`. Alternatively, we can compute
 In the dark ages, generalizations of our self-taught temperature conversion
 program were called _neural networks_. More recently, we've been saying _deep
 learning_. Even more recently,
-https://techburst.io/deep-learning-est-mort-vive-differentiable-programming-5060d3c55074[this
+https://www.facebook.com/yann.lecun/posts/10155003011462143[this
 area seems to have been rebranded as _differentiable programming_].
 
 This reflects a shift in thinking. Although the underlying mathematics remains

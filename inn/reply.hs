@@ -59,33 +59,44 @@ addTyped (mos, (libStart, lib)) name mos' = let
     scratchObj lib fresh
     pure (mergedMos, (libStart', lib'))
 
-readInput mos name s = do
-  fragOrExpr <- fst <$> parse fmt s
-  case fragOrExpr of
-    Left frag -> Left <$> tryAddDefs frag
-    Right expr -> Right <$> tryExpr expr
+readInput mos name s = go mos . smoosh =<< fst <$> parse fmt s
   where
-  orig = _neat $ mos!name
-  fmt = Left <$> try fragment <|> Right <$> single
-  fragment = foldr id neatEmpty{moduleImports = moduleImports orig} . map snd <$> haskell
-  single = whitespace *> expr <* eof
-  importSelf neat = neat{moduleImports = insertWith (++) "" [(name, const True)] $ moduleImports neat}
-  tryAddDefs frag = do
-    mos1 <- compileModule mos (name, importSelf frag)
-    pure $ insert name (rmSelfImportModule $ mos1 ! name) mos1
-    where
-    rmSelfImportModule m = m {_neat = rmSelfImportNeat $ _neat m}
-    rmSelfImportNeat n = n {moduleImports = insert "" (tail $ moduleImports n ! "") (moduleImports n)}
-  tryExpr sugary = do
-    ast <- snd <$> patternCompile searcher sugary
-    (typ, typedAst) <- (! "") <$> inferDefs searcher [("", ([], ast))] Tip Tip
-    case typ of
-      Qual [] (TAp (TC "IO") _) -> let
-        combs = nolam . optiApp $ typedAst
-        (addr, (_, (hp', memF))) = runState (enc combs) (Tip, (128, id))
-        in pure (hp', memF [Right $ comEnum "I", addr])
-      _ -> tryExpr $ A (V "print") sugary
-  searcher = searcherNew name (_neat <$> mos) $ importSelf $ neatEmpty {moduleImports = moduleImports orig}
+  go mos = \case
+    [] -> pure []
+    Left f:rest -> do
+      mos' <- tryAddDefs mos name (f neatEmpty{moduleImports = moduleImports $ _neat $ mos!name})
+      (Left mos':) <$> go mos' rest
+    Right expr:rest -> do
+      runme <- tryExpr mos name expr
+      (Right runme:) <$> go mos rest
+  fmt = lexemePrelude *> mayModule *> braceSep (Left <$> topLevel <|> Right <$> expr) <* eof
+
+tryExpr mos name sugary = do
+  ast <- snd <$> patternCompile searcher sugary
+  (typ, typedAst) <- (! "") <$> inferDefs searcher [("", ([], ast))] Tip Tip
+  case typ of
+    Qual [] (TAp (TC "IO") _) -> let
+      combs = nolam . optiApp $ typedAst
+      (addr, (_, (hp', memF))) = runState (enc combs) (Tip, (128, id))
+      in pure (hp', memF [Right $ comEnum "I", addr])
+    _ -> tryExpr mos name $ A (V "print") sugary
+  where
+  searcher = searcherNew name (_neat <$> mos) $ importSelf name $ neatEmpty {moduleImports = moduleImports $ _neat $ mos!name}
+
+tryAddDefs mos name frag = do
+  mos1 <- compileModule mos (name, importSelf name frag)
+  pure $ insert name (rmSelfImportModule $ mos1 ! name) mos1
+  where
+  rmSelfImportModule m = m {_neat = rmSelfImportNeat $ _neat m}
+  rmSelfImportNeat n = n {moduleImports = insert "" (tail $ moduleImports n ! "") (moduleImports n)}
+
+importSelf name neat = neat{moduleImports = insertWith (++) "" [(name, const True)] $ moduleImports neat}
+
+smoosh = go (const id, id) where
+  go (leftStreakEnd, acc) = \case
+    [] -> leftStreakEnd acc []
+    Right x:rest -> leftStreakEnd acc $ Right x : smoosh rest
+    Left f:rest -> go ((:) . Left, acc . f) rest
 
 scratch lib = mapM \case
   Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ fromIntegral $ lib ! moduleName ! sym

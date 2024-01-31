@@ -20,6 +20,7 @@ eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compil
 menu.html: menu; ./stitch menu menu
 
 %.html: %.lhs menu.html; ./stitch book menu $<
+%.html: %.txt menu.html; ./stitch book menu $<
 %:%.c;clang -O3 $^ -o $@
 webby:webby.c;clang -O3 $^ -o $@ -lm
 precisely:precisely.c;clang -O3 $^ -o $@ -lm

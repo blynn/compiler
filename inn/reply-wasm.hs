@@ -2,21 +2,19 @@ foreign export ccall "chat" chat
 chat :: IO ()
 chat = do
   [name] <- getArgs
-  st@(mos, (libStart, lib)) <- readIORef ref
+  st@(mos, _) <- readIORef ref
   s <- getContents
+  let
+    interpret st@(_, (libStart, lib)) = \case
+      Left frag:rest -> do
+        st' <- addTyped st name frag
+        writeIORef ref st'
+        interpret st' rest
+      Right expr:rest -> exec lib expr >> interpret st rest
+      [] -> pure ()
   case readInput mos name s of
-    Left err -> do
-      putStr "error"
-      nextOut
-      putStrLn err
-    Right good -> case good of
-      Left frag -> do
-        putStr "ok"
-        nextOut
-        addTyped st name frag >>= writeIORef ref
-      Right expr -> do
-        nextOut
-        exec lib expr
+    Left err -> putStr "error" >> nextOut >> putStrLn err
+    Right good -> putStr "ok" >> nextOut >> interpret st good
 
 ref = unsafePerformIO $ newIORef =<< initialState
 
@@ -38,5 +36,5 @@ evalExpr = do
   (m:f:_) <- getArgs
   (mos, (libStart, lib)) <- readIORef ref
   case readInput mos m f of
-    Right (Right expr) -> nextOut *> exec lib expr
+    Right [Right expr] -> nextOut *> exec lib expr
     _ -> putStr "error" *> nextOut *> putStr "want expr"
