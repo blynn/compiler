@@ -9,8 +9,8 @@ loop st@(mos, _) = do
     Left err -> putStrLn err >> loop st
     Right good -> interpret st good
   interpret st@(_, (libStart, lib)) = \case
-    Left frag:rest -> do
-      st' <- addTyped st ">" frag
+    Left (merged, fresh):rest -> do
+      st' <- (merged,) <$> addTyped (libStart, lib) ">" fresh
       interpret st' rest
     Right expr:rest -> exec lib expr >> interpret st rest
     [] -> loop st

@@ -44,28 +44,23 @@ exec lib (addr, mem) = do
   scratch lib mem
   vmRunScratchpad addr
 
-addTyped (mos, (libStart, lib)) name mos' = let
-  orig = mos!name
-  fresh = mos'!name
-  mergedNeat = mergeFragment (_neat orig) (_neat fresh)
-  mergedSyms = foldr (uncurry insert) (_syms orig) $ toAscList $ _syms fresh
+addTyped (libStart, lib) name fresh = let
   syms = _syms fresh
   roots = maybe Tip id $ mlookup name lib
   roots' = foldr (uncurry insert) roots $ zip (keys syms) [libStart..]
   libStart' = libStart + size syms
   lib' = insert name roots' lib
-  mergedMos = insert name (Module mergedNeat mergedSyms []) mos'
   in do
     scratchObj lib fresh
-    pure (mergedMos, (libStart', lib'))
+    pure (libStart', lib')
 
 readInput mos name s = go mos . smoosh =<< fst <$> parse fmt s
   where
   go mos = \case
     [] -> pure []
     Left f:rest -> do
-      mos' <- tryAddDefs mos name (f neatEmpty{moduleImports = moduleImports $ _neat $ mos!name})
-      (Left mos':) <$> go mos' rest
+      (mos', fresh) <- tryAddDefs mos name (f neatEmpty{moduleImports = moduleImports $ _neat $ mos!name})
+      (Left (mos', fresh):) <$> go mos' rest
     Right expr:rest -> do
       runme <- tryExpr mos name expr
       (Right runme:) <$> go mos rest
@@ -85,7 +80,15 @@ tryExpr mos name sugary = do
 
 tryAddDefs mos name frag = do
   mos1 <- compileModule mos (name, importSelf name frag)
-  pure $ insert name (rmSelfImportModule $ mos1 ! name) mos1
+  let
+    fresh = rmSelfImportModule $ mos1!name
+    orig = mos!name
+    mergedNeat = mergeFragment (_neat orig) (_neat fresh)
+    mergedSyms = foldr (uncurry insert) (_syms orig) $ toAscList $ _syms fresh
+
+    mergedMos = insert name (Module mergedNeat mergedSyms []) mos1
+
+  pure (mergedMos, fresh)
   where
   rmSelfImportModule m = m {_neat = rmSelfImportNeat $ _neat m}
   rmSelfImportNeat n = n {moduleImports = insert "" (tail $ moduleImports n ! "") (moduleImports n)}

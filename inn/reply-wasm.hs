@@ -6,8 +6,8 @@ chat = do
   s <- getContents
   let
     interpret st@(_, (libStart, lib)) = \case
-      Left frag:rest -> do
-        st' <- addTyped st name frag
+      Left (merged, fresh):rest -> do
+        st' <- (merged,) <$> addTyped (libStart, lib) name fresh
         writeIORef ref st'
         interpret st' rest
       Right expr:rest -> exec lib expr >> interpret st rest
