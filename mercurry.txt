@@ -1,0 +1,113 @@
+= Mercurry =
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+<div><button id="runButton">Run</button></div>
+<style>
+.cell{
+margin:4px;
+font-family:monospace;
+border:solid transparent 1px;
+border-left:solid transparent 5px;
+padding:0.5ex;
+}
+.inlabel{
+padding:0.5ex;
+text-wrap:nowrap;
+}
+.incode{
+flex-grow:1;
+border:solid lightgrey 1px;
+padding:0.5ex;
+}
+.output{
+display:flex;
+}
+.outlabel{
+padding:0.5ex;
+text-wrap:nowrap;
+}
+.outtext{
+flex-grow:1;
+border:0;
+background-color:white;
+white-space:pre-wrap;
+word-wrap:break-word;
+min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-tag-width-inside-flex-container */
+}
+.errmsg{
+color:red;
+}
+.selectedcell{
+border:solid blue 1px;
+border-left:solid blue 5px;
+}
+</style>
+<div id="convo" class="convo"></div>
+<script>
+include::reply.js[]
+
+let cursor;
+let runCount = 0;
+
+function select(cell) {
+  if (cursor) cursor.classList.remove("selectedcell");
+  cursor = cell;
+  cursor.classList.add("selectedcell");
+}
+
+function newCell() {
+  const div = document.createElement("div");
+  div.classList.add("cell");
+  div.innerHTML =
+`<div style="display:flex;">
+<span class="inlabel">[<span class="runcounter"> </span>]:</span>
+<pre class="incode" contenteditable></pre>
+</div>`
+
+  div.addEventListener('click', function(ev){select(div);});
+  return div;
+}
+
+async function init() {
+  const repl = await mkRepl();
+  repl.run("chat_new", ["Main"], "");
+
+  convo.appendChild(newCell());
+  runButton.addEventListener('click', function(ev){
+    if (!cursor) return;
+    const s = cursor.getElementsByClassName("incode")[0].innerText;
+
+    const out = cursor.getElementsByClassName("output");
+    if (out.length != 0) out[0].remove();
+    if (s == "") return;
+    const r = repl.run("chat", ["Main"], s + "\n");
+
+    const div = document.createElement("div");
+    div.classList.add("output");
+    cursor.appendChild(div);
+
+    if (r.buf[0] == "error") {
+      div.classList.add("errmsg");
+      div.textContent = r.out;
+      cursor.getElementsByClassName("runcounter")[0].innerText = ' ';
+      return;
+    }
+
+    runCount++;
+    cursor.getElementsByClassName("runcounter")[0].innerText = runCount;
+
+    if (r.out != "") {
+      div.innerHTML =
+`<span class="outlabel">[` + runCount + `]:</span>
+<pre class="outtext"></pre>`;
+      div.getElementsByClassName("outtext")[0].innerText = r.out;
+    }
+    const next = cursor.nextSibling;
+    if (next) select(next); else cursor.after(newCell());
+
+  });
+}
+
+init();
+</script>
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
