@@ -6,8 +6,7 @@
 .cell{
 margin:4px;
 font-family:monospace;
-border:solid transparent 1px;
-border-left:solid transparent 5px;
+border-left:solid transparent 0.5em;
 padding:0.5ex;
 }
 .inlabel{
@@ -38,21 +37,102 @@ min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-ta
 color:red;
 }
 .selectedcell{
-border:solid blue 1px;
-border-left:solid blue 5px;
+border-left:solid blue 0.5em;
+}
+.cellbutton{
+color:dimgrey;
+width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.cellbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
 }
 </style>
 <div id="convo" class="convo"></div>
+
+<div style="display:none;" id="cellmenuclipboard">
+<!-- https://stackoverflow.com/questions/6040005/relatively-position-an-element-without-it-taking-up-space-in-document-flow -->
+<div style="float:right;height:0;" id="cellmenu">
+<div style="position:relative;right:0.5em;bottom:1.5em;
+background-color:white;padding:2px;
+border:1px solid lightgrey;border-radius:4px;
+font-family:'Open Sans',sans-serif;
+">
+<div id="cellmenubuttons"></div>
+</div>
+</div>
+</div>
+
 <script>
 include::reply.js[]
 
 let cursor;
 let runCount = 0;
 
+function addcellmenu(s, f) {
+  const span = document.createElement("span");
+  span.classList.add("cellbutton");
+  span.innerHTML = s;
+  cellmenubuttons.appendChild(span);
+  span.addEventListener("click", (ev) => { f(); ev.stopPropagation(); });
+}
+
+addcellmenu("&#x29c9;", (ev) => {
+  cellmenuclipboard.appendChild(cellmenu);
+  const n = newCell();
+  n.innerHTML = cursor.innerHTML;
+  cursor.after(n);
+  select(n);
+  document.activeElement.blur();
+});
+addcellmenu("&#x2b06;", (ev) => {
+const prev = cursor.previousSibling;
+if (prev) prev.before(cursor);
+});
+addcellmenu("&#x2b07;", (ev) => {
+const next = cursor.nextSibling;
+if (next) next.after(cursor);
+});
+addcellmenu("&#x1f446;", (ev) => {
+  const n = newCell();
+  cursor.before(n);
+  select(n);
+});
+addcellmenu("&#x1f447;", (ev) => appendCell());
+addcellmenu("&#x1f5d1;", (ev) => {
+  cellmenuclipboard.appendChild(cellmenu);
+  const next = cursor.nextSibling;
+  if (next) {
+    cursor.remove();
+    select(next);
+  } else {
+    const prev = cursor.previousSibling;
+    cursor.remove();
+    if (prev) {
+      select(prev);
+    } else {
+      select(newCell());
+      convo.appendChild(cursor);
+    }
+  }
+});
+
+function appendCell() {
+  const n = newCell();
+  cursor.after(n);
+  select(n);
+}
+
 function select(cell) {
   if (cursor) cursor.classList.remove("selectedcell");
   cursor = cell;
   cursor.classList.add("selectedcell");
+  cursor.prepend(cellmenu);
+  cursor.getElementsByClassName("incode")[0].focus();
 }
 
 function newCell() {
@@ -63,49 +143,76 @@ function newCell() {
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
 <pre class="incode" contenteditable></pre>
 </div>`
-
   div.addEventListener('click', function(ev){select(div);});
   return div;
 }
 
-async function init() {
-  const repl = await mkRepl();
-  repl.run("chat_new", ["Main"], "");
+let repl;
 
-  convo.appendChild(newCell());
-  runButton.addEventListener('click', function(ev){
-    if (!cursor) return;
-    const s = cursor.getElementsByClassName("incode")[0].innerText;
+function runOnly() {
+  if (!cursor) return;
+  const s = cursor.getElementsByClassName("incode")[0].innerText;
 
-    const out = cursor.getElementsByClassName("output");
-    if (out.length != 0) out[0].remove();
-    if (s == "") return;
-    const r = repl.run("chat", ["Main"], s + "\n");
+  const out = cursor.getElementsByClassName("output");
+  if (out.length != 0) out[0].remove();
+  if (s == "") return;
+  const r = repl.run("chat", ["Main"], s + "\n");
 
-    const div = document.createElement("div");
-    div.classList.add("output");
-    cursor.appendChild(div);
+  const div = document.createElement("div");
+  div.classList.add("output");
+  cursor.appendChild(div);
 
-    if (r.buf[0] == "error") {
-      div.classList.add("errmsg");
-      div.textContent = r.out;
-      cursor.getElementsByClassName("runcounter")[0].innerText = ' ';
-      return;
-    }
+  if (r.buf[0] == "error") {
+    div.classList.add("errmsg");
+    div.textContent = r.out;
+    cursor.getElementsByClassName("runcounter")[0].innerText = ' ';
+    return;
+  }
 
-    runCount++;
-    cursor.getElementsByClassName("runcounter")[0].innerText = runCount;
+  runCount++;
+  cursor.getElementsByClassName("runcounter")[0].innerText = runCount;
 
-    if (r.out != "") {
-      div.innerHTML =
+  if (r.out != "") {
+    div.innerHTML =
 `<span class="outlabel">[` + runCount + `]:</span>
 <pre class="outtext"></pre>`;
-      div.getElementsByClassName("outtext")[0].innerText = r.out;
-    }
-    const next = cursor.nextSibling;
-    if (next) select(next); else cursor.after(newCell());
+    div.getElementsByClassName("outtext")[0].innerText = r.out;
+  }
+}
 
+async function init() {
+  repl = await mkRepl();
+  repl.run("chat_new", ["Main"], "");
+
+  select(newCell());
+  convo.appendChild(cursor);
+  runButton.addEventListener('click', function(ev){
+    runThenSelect();
+    ev.stopPropagation();
   });
+  document.addEventListener('keydown', (ev) => {
+    if (document.activeElement.classList.contains("incode")) {
+      if (ev.keyCode == 13) {
+        if (ev.ctrlKey) {
+          runOnly();
+          ev.preventDefault();
+          ev.stopPropagation();
+        } else if (ev.shiftKey) {
+          runOnly();
+          const next = cursor.nextSibling;
+          if (next) select(next); else appendCell();
+          ev.preventDefault();
+          ev.stopPropagation();
+        } else if (ev.altKey) {
+          runOnly();
+          appendCell();
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+      }
+    }
+  });
+
 }
 
 init();
