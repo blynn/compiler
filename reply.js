@@ -19,7 +19,7 @@ async function mkRepl() {
       }
     };
   repl.run = function(f, args, s) { return repl.runBlob(f, args, teen(s)); }
-  repl.instance = (await WebAssembly.instantiateStreaming(fetch('../compiler/doh.wasm'), {env:
+  const importObj = {env:
     { putchar: c  => repl.out.push(c)
     , eof    : () => repl.cursor == repl.inp.length
     , getchar: () => repl.inp[repl.cursor++]
@@ -35,8 +35,14 @@ async function mkRepl() {
       }
     , eval_size: () => repl.eval_out.length
     , eval_at:   i  => repl.eval_out[i]
-    }})).instance;
-
+    }};
+  const p = await WebAssembly.instantiateStreaming(fetch('../compiler/doh.wasm'), importObj);
+  repl.instance = p.instance;
+  repl.module = p.module;
+  repl.reset = async function() {
+    repl.instance = await WebAssembly.instantiate(repl.module, importObj);
+    repl.run("chat_new", ["Main"], "");
+  }
   repl.run("chat_new", ["Main"], "");
   return repl;
 }

@@ -4,6 +4,7 @@
 <div>
   <button id="saveButton">Save</button>
   <button id="loadButton">Load</button>
+  <button id="resetButton">Reset</button>
 </div>
 <style>
 .cell{
@@ -212,6 +213,7 @@ const tri = document.createElement("div");
 tri.innerHTML = "&#x25BE;";
 tri.style.float = "right";
 cellmenutype.appendChild(tri);
+
   cursor.prepend(cellmenu);
 }
 
@@ -281,12 +283,13 @@ function runThenSelect() {
 
 async function init() {
   repl = await mkRepl();
-  repl.run("chat_new", ["Main"], "");
-
   select(newCell());
   convo.appendChild(cursor);
   saveButton.addEventListener('click', function(ev){
+    const p = cellmenu.parentElement;
+    cellmenuclipboard.appendChild(cellmenu);
     localStorage.setItem("content", convo.innerHTML);
+    p.prepend(cellmenu);
   });
   loadButton.addEventListener('click', function(ev){
     cellmenuclipboard.appendChild(cellmenu);
@@ -294,7 +297,13 @@ async function init() {
     const cells = convo.getElementsByClassName("cell");
     for (const c of cells) {
       c.addEventListener('click', function(ev){select(c);});
+      if (c.classList.contains("selectedcell")) cursor = c;
     }
+    MathJax.typeset();
+  });
+  resetButton.addEventListener('click', async function(ev){
+    await repl.reset();
+    runCount = 0;
   });
   document.addEventListener('keydown', (ev) => {
     if (!cursor) return;
