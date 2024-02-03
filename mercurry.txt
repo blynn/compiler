@@ -1,31 +1,42 @@
 = Mercurry =
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<div><button id="runButton">Run</button></div>
+<div>
+  <button id="saveButton">Save</button>
+  <button id="loadButton">Load</button>
+</div>
 <style>
 .cell{
 margin:4px;
-font-family:monospace;
 border-left:solid transparent 0.5em;
 padding:0.5ex;
 }
 .inlabel{
+font-family:'Inconsolata',monospace;
 padding:0.5ex;
-text-wrap:nowrap;
+min-width:4em;
+text-align:right;
 }
 .incode{
+font-family:'Inconsolata',monospace;
 flex-grow:1;
 border:solid lightgrey 1px;
 padding:0.5ex;
+}
+.incode:focus{
+background-color:white;
 }
 .output{
 display:flex;
 }
 .outlabel{
+font-family:'Inconsolata',monospace;
 padding:0.5ex;
-text-wrap:nowrap;
+min-width:4em;
+text-align:right;
 }
 .outtext{
+font-family:'Inconsolata',monospace;
 flex-grow:1;
 border:0;
 background-color:white;
@@ -51,6 +62,18 @@ color:black;
 background-color:whitesmoke;
 cursor:pointer;
 }
+.popup{
+position:absolute;
+text-align: left;
+background-color:white;
+padding:0.5em;
+border:1px solid black;
+display:none;
+}
+.typemenuitem:hover{
+background-color:blue;
+color:white;
+}
 </style>
 <div id="convo" class="convo"></div>
 
@@ -63,12 +86,24 @@ border:1px solid lightgrey;border-radius:4px;
 font-family:'Open Sans',sans-serif;
 ">
 <div id="cellmenubuttons"></div>
+
+<div id="popuptypemenu" class="popup">
+Select type:
+<hr>
+</div>
+
 </div>
 </div>
 </div>
 
+<!-- https://github.com/asciidoctor/asciidoctor.js/releases -->
+<script src="../asciidoctor.min.js"></script>
+
 <script>
 include::reply.js[]
+
+// Why must I run this? What does it do?
+Asciidoctor$$module$build$asciidoctor_browser();
 
 let cursor;
 let runCount = 0;
@@ -81,6 +116,45 @@ function addcellmenu(s, f) {
   span.addEventListener("click", (ev) => { f(); ev.stopPropagation(); });
 }
 
+addcellmenu("?", (ev) => {
+  popuptypemenu.style.display = "block";
+  document.body.addEventListener("click", (ev) => {
+    popuptypemenu.style.display = "none";
+    ev.preventDefault();
+  }, {once:true});
+});
+const cellmenutype = cellmenubuttons.lastChild;
+cellmenutype.style["text-align"] = "left";
+cellmenutype.style.width = "6em";
+
+const tyCode = "Code";
+const tyRaw = "Raw"
+const tyQuack = "AsciiDoc";
+
+function setType(x, t) {
+  if (t == x.getAttribute("data-type")) return;
+  x.setAttribute("data-type", t);
+  if (t == tyRaw || t == tyQuack) {
+    x.getElementsByClassName("inlabel")[0].innerHTML = "";
+    const out = x.getElementsByClassName("output")[0];
+    if (out) out.remove();
+  } else if (t == tyCode) {
+    x.getElementsByClassName("inlabel")[0].innerHTML = `[<span class="runcounter"> </span>]:`;
+  }
+}
+
+function addType(t) {
+  const div = document.createElement("div");
+  div.classList.add("typemenuitem");
+  div.innerHTML = t;
+  div.addEventListener("click", (ev) => setType(cursor, t));
+  popuptypemenu.appendChild(div);
+}
+
+addType(tyCode);
+addType(tyRaw);
+addType(tyQuack);
+
 addcellmenu("&#x29c9;", (ev) => {
   cellmenuclipboard.appendChild(cellmenu);
   const n = newCell();
@@ -90,20 +164,17 @@ addcellmenu("&#x29c9;", (ev) => {
   document.activeElement.blur();
 });
 addcellmenu("&#x2b06;", (ev) => {
-const prev = cursor.previousSibling;
-if (prev) prev.before(cursor);
+  const prev = cursor.previousSibling;
+  if (prev) prev.before(cursor);
 });
 addcellmenu("&#x2b07;", (ev) => {
-const next = cursor.nextSibling;
-if (next) next.after(cursor);
+  const next = cursor.nextSibling;
+  if (next) next.after(cursor);
 });
-addcellmenu("&#x1f446;", (ev) => {
-  const n = newCell();
-  cursor.before(n);
-  select(n);
-});
+addcellmenu("&#x1f446;", (ev) => insertCell());
 addcellmenu("&#x1f447;", (ev) => appendCell());
-addcellmenu("&#x1f5d1;", (ev) => {
+// &#x1f5d1; is long.
+addcellmenu("&#10006;", (ev) => {
   cellmenuclipboard.appendChild(cellmenu);
   const next = cursor.nextSibling;
   if (next) {
@@ -121,6 +192,11 @@ addcellmenu("&#x1f5d1;", (ev) => {
   }
 });
 
+function insertCell() {
+  const n = newCell();
+  cursor.before(n);
+  select(n);
+}
 function appendCell() {
   const n = newCell();
   cursor.after(n);
@@ -131,13 +207,18 @@ function select(cell) {
   if (cursor) cursor.classList.remove("selectedcell");
   cursor = cell;
   cursor.classList.add("selectedcell");
+  cellmenutype.innerHTML = cursor.getAttribute("data-type");
+const tri = document.createElement("div");
+tri.innerHTML = "&#x25BE;";
+tri.style.float = "right";
+cellmenutype.appendChild(tri);
   cursor.prepend(cellmenu);
-  cursor.getElementsByClassName("incode")[0].focus();
 }
 
 function newCell() {
   const div = document.createElement("div");
   div.classList.add("cell");
+  div.setAttribute("data-type", tyCode);
   div.innerHTML =
 `<div style="display:flex;">
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
@@ -151,27 +232,39 @@ let repl;
 
 function runOnly() {
   if (!cursor) return;
-  const s = cursor.getElementsByClassName("incode")[0].innerText;
-
+  const ty = cursor.getAttribute("data-type");
+  if (ty == tyRaw) return;
+  const incode = cursor.getElementsByClassName("incode")[0];
+  const s = incode.innerText;
   const out = cursor.getElementsByClassName("output");
   if (out.length != 0) out[0].remove();
   if (s == "") return;
-  const r = repl.run("chat", ["Main"], s + "\n");
 
   const div = document.createElement("div");
   div.classList.add("output");
   cursor.appendChild(div);
 
-  if (r.buf[0] == "error") {
-    div.classList.add("errmsg");
-    div.textContent = r.out;
-    cursor.getElementsByClassName("runcounter")[0].innerText = ' ';
+  if (ty == tyQuack) {
+    // https://mrduguo.github.io/asciidoctor.org/docs/install-and-use-asciidoctorjs/
+    div.innerHTML = `<span class="outlabel"></span>`;
+    const adoc = document.createElement("div");
+    adoc.classList.add("adoc");
+    adoc.innerHTML = Opal.Asciidoctor.$convert(s, Opal.hash2(['attributes'], {'attributes': ['showtitle']}));
+    MathJax.typeset([adoc]);
+    div.appendChild(adoc);
+    incode.style.display = "none";
     return;
   }
 
+  const r = repl.run("chat", ["Main"], s + "\n");
   runCount++;
   cursor.getElementsByClassName("runcounter")[0].innerText = runCount;
-
+  document.activeElement.blur();
+  if (r.buf[0] == "error") {
+    div.classList.add("errmsg");
+    div.textContent = r.out;
+    return;
+  }
   if (r.out != "") {
     div.innerHTML =
 `<span class="outlabel">[` + runCount + `]:</span>
@@ -180,39 +273,101 @@ function runOnly() {
   }
 }
 
+function runThenSelect() {
+  runOnly();
+  const next = cursor.nextSibling;
+  if (next) select(next); else appendCell();
+}
+
 async function init() {
   repl = await mkRepl();
   repl.run("chat_new", ["Main"], "");
 
   select(newCell());
   convo.appendChild(cursor);
-  runButton.addEventListener('click', function(ev){
-    runThenSelect();
-    ev.stopPropagation();
+  saveButton.addEventListener('click', function(ev){
+    localStorage.setItem("content", convo.innerHTML);
   });
-  document.addEventListener('keydown', (ev) => {
-    if (document.activeElement.classList.contains("incode")) {
-      if (ev.keyCode == 13) {
-        if (ev.ctrlKey) {
-          runOnly();
-          ev.preventDefault();
-          ev.stopPropagation();
-        } else if (ev.shiftKey) {
-          runOnly();
-          const next = cursor.nextSibling;
-          if (next) select(next); else appendCell();
-          ev.preventDefault();
-          ev.stopPropagation();
-        } else if (ev.altKey) {
-          runOnly();
-          appendCell();
-          ev.preventDefault();
-          ev.stopPropagation();
-        }
-      }
+  loadButton.addEventListener('click', function(ev){
+    cellmenuclipboard.appendChild(cellmenu);
+    convo.innerHTML = localStorage.getItem("content");
+    const cells = convo.getElementsByClassName("cell");
+    for (const c of cells) {
+      c.addEventListener('click', function(ev){select(c);});
     }
   });
-
+  document.addEventListener('keydown', (ev) => {
+    if (!cursor) return;
+    switch(ev.keyCode) {
+    case 13:
+      if (ev.ctrlKey) {
+        runOnly();
+        ev.preventDefault();
+      } else if (ev.shiftKey) {
+        runThenSelect();
+        ev.preventDefault();
+      } else if (ev.altKey) {
+        runOnly();
+        appendCell();
+        ev.preventDefault();
+      } else {
+        if (document.activeElement === document.body) {
+          const incode = cursor.getElementsByClassName("incode")[0];
+          if (cursor.getAttribute("data-type") == tyQuack) {
+            cursor.getElementsByClassName("output")[0].remove();
+            incode.style.display = "block";
+          }
+          incode.focus();
+          ev.preventDefault();
+        }
+      }
+      break;
+    case 27:
+      if (document.activeElement !== document.body) {
+        document.activeElement.blur();
+        ev.preventDefault();
+      }
+      break;
+    case 38:
+      if (document.activeElement === document.body) {
+        const prev = cursor.previousSibling;
+        if (prev) {
+          if (ev.ctrlKey && ev.shiftKey) {
+            prev.before(cursor);
+          } else {
+            select(prev);
+          }
+        }
+        ev.preventDefault();
+      }
+      break;
+    case 40:
+      if (document.activeElement === document.body) {
+        const next = cursor.nextSibling;
+        if (next) {
+          if (ev.ctrlKey && ev.shiftKey) {
+            next.after(cursor);
+          } else {
+            select(next);
+          }
+        }
+        ev.preventDefault();
+      }
+      break;
+    case 65:
+      if (document.activeElement === document.body) {
+        insertCell();
+        ev.preventDefault();
+      }
+      break;
+    case 66:
+      if (document.activeElement === document.body) {
+        appendCell();
+        ev.preventDefault();
+      }
+      break;
+    }
+  });
 }
 
 init();
