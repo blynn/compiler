@@ -1,0 +1,9 @@
+async function init() {
+  mercInit
+    ( ev => { loadConvo(localStorage.getItem("content")); }
+    , ev => { localStorage.setItem("content", saveConvo()); }
+    );
+}
+init();
+</script>
+</body></html>

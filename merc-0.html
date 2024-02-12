@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+html { background-color: white; color: black; }
+body { font-family: 'Open Sans', sans-serif; }
+a { text-decoration: none; color: #3366cc; }
+a:visited { color: gray; }
+a:hover { text-decoration: underline; color: #3399ff; }
+a:visited:hover { text-decoration: underline; color: #3399ff; }
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Muli', sans-serif;
+  font-weight: 500;
+  margin: 0;
+}
+textarea, code, kbd, samp, .monospaced { font-family: 'Inconsolata', monospace; }
+pre {
+  font-family: 'Inconsolata', monospace;
+  margin: 0;
+  margin-bottom: 1em;
+  padding: 2px;
+  border: 1px dotted #aaaaaa;
+  background-color: #f9f9f9;
+  white-space: pre-wrap;
+}
+img { border: 0; }
+ul { list-style-type: square; }
+
+.disabledlink {
+  text-decoration: none;
+  font-weight: bold;
+  font-size: 95%;
+}
+
+@media (max-width: 500px) { #featured .sect1 { width: 100% } }
+
+@media (min-width: 640px) {
+  body {
+    max-width: 40em;
+    margin: 0 auto;
+  }
+  .main {
+    padding-left: 1em;
+    padding-right: 1em;
+  }
+}
+
+@media (min-width: 896px) {
+  .skinny { display: none; }
+  .link-contents { visibility: hidden; }
+  .rside { margin-left: 16em; }
+  .plump {
+    font-size: 85%;
+    float: left;
+    width: 15em;
+    display: block;
+    margin:0.5em;
+    padding:0.5em;
+  }
+  body {
+    max-width: 55em;
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+</style>
+<title>Mercurry</title>
+</head><body>
+<div id="topmenu">
+  <button id="saveButton">Save</button>
+  <button id="loadButton">Load</button>
+  <button id="importButton">Import</button>
+  <button id="exportButton">Export</button>
+  <button id="resetButton">Reset</button>
+<dialog id="importdialog" style="padding:1em;background-color:whitesmoke;border:1px solid black;position:fixed;z-index:1;">
+  Import:
+  <input id="importfile" type="file" /><button id="importOKButton">OK</button>
+</dialog>
+</div>
+<style>
+.cell{
+margin:4px;
+border-left:solid transparent 0.5em;
+padding:0.5ex;
+}
+.inlabel{
+font-family:'Inconsolata',monospace;
+padding:0.5ex;
+min-width:4em;
+text-align:right;
+}
+.incode{
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:solid lightgrey 1px;
+padding:0.5ex;
+}
+.incode:focus{
+background-color:white;
+}
+.output{
+display:flex;
+}
+.outlabel{
+font-family:'Inconsolata',monospace;
+padding:0.5ex;
+min-width:4em;
+text-align:right;
+}
+.outtext{
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:0;
+background-color:white;
+white-space:pre-wrap;
+word-wrap:break-word;
+min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-tag-width-inside-flex-container */
+}
+.errmsg{
+color:red;
+}
+.selectedcell{
+border-left:solid blue 0.5em;
+}
+.cellbutton{
+color:dimgrey;
+width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.cellbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
+}
+.popup{
+position:absolute;
+text-align: left;
+background-color:white;
+padding:0.5em;
+border:1px solid black;
+display:none;
+}
+.typemenuitem:hover{
+background-color:blue;
+color:white;
+}
+</style>
+<div id="convo" class="convo"></div>
+
+<div style="display:none;" id="cellmenuclipboard">
+<!-- https://stackoverflow.com/questions/6040005/relatively-position-an-element-without-it-taking-up-space-in-document-flow -->
+<div style="float:right;height:0;" id="cellmenu">
+<div style="position:relative;right:0.5em;bottom:1.5em;
+background-color:white;padding:2px;
+border:1px solid lightgrey;border-radius:4px;
+font-family:'Open Sans',sans-serif;
+">
+<div id="cellmenubuttons"></div>
+
+<div id="popuptypemenu" class="popup">
+Select type:
+<hr>
+</div>
+
+</div>
+</div>
+</div>
+
+<script>

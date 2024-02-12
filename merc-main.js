@@ -1,114 +1,3 @@
-= Mercurry =
-
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<div id="topmenu">
-  <button id="saveButton">Save</button>
-  <button id="loadButton">Load</button>
-  <button id="importButton">Import</button>
-  <button id="exportButton">Export</button>
-  <button id="resetButton">Reset</button>
-<dialog id="importdialog" style="padding:1em;background-color:whitesmoke;border:1px solid black;position:fixed;z-index:1;">
-  Import:
-  <input id="importfile" type="file" /><button id="importOKButton">OK</button>
-</dialog>
-</div>
-<style>
-.cell{
-margin:4px;
-border-left:solid transparent 0.5em;
-padding:0.5ex;
-}
-.inlabel{
-font-family:'Inconsolata',monospace;
-padding:0.5ex;
-min-width:4em;
-text-align:right;
-}
-.incode{
-font-family:'Inconsolata',monospace;
-flex-grow:1;
-border:solid lightgrey 1px;
-padding:0.5ex;
-}
-.incode:focus{
-background-color:white;
-}
-.output{
-display:flex;
-}
-.outlabel{
-font-family:'Inconsolata',monospace;
-padding:0.5ex;
-min-width:4em;
-text-align:right;
-}
-.outtext{
-font-family:'Inconsolata',monospace;
-flex-grow:1;
-border:0;
-background-color:white;
-white-space:pre-wrap;
-word-wrap:break-word;
-min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-tag-width-inside-flex-container */
-}
-.errmsg{
-color:red;
-}
-.selectedcell{
-border-left:solid blue 0.5em;
-}
-.cellbutton{
-color:dimgrey;
-width: 1.5em;
-display: inline-block;
-border-radius: 5px;
-text-align: center;
-}
-.cellbutton:hover{
-color:black;
-background-color:whitesmoke;
-cursor:pointer;
-}
-.popup{
-position:absolute;
-text-align: left;
-background-color:white;
-padding:0.5em;
-border:1px solid black;
-display:none;
-}
-.typemenuitem:hover{
-background-color:blue;
-color:white;
-}
-</style>
-<div id="convo" class="convo"></div>
-
-<div style="display:none;" id="cellmenuclipboard">
-<!-- https://stackoverflow.com/questions/6040005/relatively-position-an-element-without-it-taking-up-space-in-document-flow -->
-<div style="float:right;height:0;" id="cellmenu">
-<div style="position:relative;right:0.5em;bottom:1.5em;
-background-color:white;padding:2px;
-border:1px solid lightgrey;border-radius:4px;
-font-family:'Open Sans',sans-serif;
-">
-<div id="cellmenubuttons"></div>
-
-<div id="popuptypemenu" class="popup">
-Select type:
-<hr>
-</div>
-
-</div>
-</div>
-</div>
-
-<!-- https://github.com/asciidoctor/asciidoctor.js/releases -->
-
-<script>
-include::../asciidoctor.min.js[]
-include::reply.js[]
-
 // Why must I run this? What does it do?
 Asciidoctor$$module$build$asciidoctor_browser();
 
@@ -287,34 +176,30 @@ function runThenSelect() {
   const next = cursor.nextSibling;
   if (next) select(next); else appendCell();
 }
+function saveConvo() {
+  const p = cellmenu.parentElement;
+  cellmenuclipboard.appendChild(cellmenu);
+  const s = convo.innerHTML;
+  p.prepend(cellmenu);
+  return s;
+}
+function loadConvo(s) {
+  cellmenuclipboard.appendChild(cellmenu);
+  convo.innerHTML = s;
+  const cells = convo.getElementsByClassName("cell");
+  for (const c of cells) {
+    c.addEventListener('click', function(ev){select(c);});
+    if (c.classList.contains("selectedcell")) cursor = c;
+  }
+  MathJax.typeset();
+}
 
-async function init() {
+async function mercInit(loadFun, saveFun) {
   repl = await mkRepl();
   select(newCell());
   convo.appendChild(cursor);
-  function saveConvo() {
-    const p = cellmenu.parentElement;
-    cellmenuclipboard.appendChild(cellmenu);
-    const s = convo.innerHTML;
-    p.prepend(cellmenu);
-    return s;
-  }
-  function loadConvo(s) {
-    cellmenuclipboard.appendChild(cellmenu);
-    convo.innerHTML = s;
-    const cells = convo.getElementsByClassName("cell");
-    for (const c of cells) {
-      c.addEventListener('click', function(ev){select(c);});
-      if (c.classList.contains("selectedcell")) cursor = c;
-    }
-    MathJax.typeset();
-  }
-  saveButton.addEventListener('click', function(ev){
-    localStorage.setItem("content", saveConvo());
-  });
-  loadButton.addEventListener('click', function(ev){
-    loadConvo(localStorage.getItem("content"));
-  });
+  saveButton.addEventListener('click', saveFun);
+  loadButton.addEventListener('click', loadFun);
   resetButton.addEventListener('click', async function(ev){
     await repl.reset();
     runCount = 0;
@@ -420,7 +305,3 @@ async function init() {
     importdialog.close();
   });
 }
-
-init();
-</script>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

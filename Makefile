@@ -121,3 +121,7 @@ fol.js fol.wasm: fol.lhs
 	cd fol-asterius && cp fol.js fol.wasm ..
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
+
+# Get asciidoctor.min.js from:
+#   https://github.com/asciidoctor/asciidoctor.js/releases
+mercurry.html:merc-0.html ../../z/asciidoctor.min.js reply.js merc-main.js merc-1.html; cat $^ > $@
