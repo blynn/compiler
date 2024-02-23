@@ -119,7 +119,7 @@ function newCell() {
   div.innerHTML =
 `<div style="display:flex;">
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
-<pre class="incode" spellcheck=false contenteditable></pre>
+<pre class="incode" spellcheck=false contenteditable="plaintext-only"></pre>
 </div>`
   div.addEventListener('click', ev => {select(div);});
   return div;
@@ -127,18 +127,25 @@ function newCell() {
 
 let repl;
 
+function outhtml(s) {
+  const div = document.createElement("div");
+  div.style["margin-left"] = "4em";
+  div.innerHTML = s;
+  repl.outdiv.appendChild(div);
+}
+
 function runOnly() {
   if (!cursor) return;
   const ty = cursor.getAttribute("data-type");
   if (ty == tyRaw) return;
   const incode = cursor.getElementsByClassName("incode")[0];
-  incode.style.display = "block";
   const s = incode.innerText;
   const out = cursor.getElementsByClassName("output");
   if (out.length != 0) out[0].remove();
   if (s == "") return;
 
   const div = document.createElement("div");
+  repl.outdiv = div;
   div.classList.add("output");
   cursor.appendChild(div);
 
@@ -185,7 +192,7 @@ function saveConvo() {
 }
 function loadConvo(s) {
   cellmenuclipboard.appendChild(cellmenu);
-  convo.innerHTML = s;
+  convo.innerHTML = s.trim();
   const cells = convo.getElementsByClassName("cell");
   for (const c of cells) {
     c.addEventListener('click', function(ev){select(c);});
@@ -194,15 +201,50 @@ function loadConvo(s) {
   MathJax.typeset();
 }
 
+function addTopButton(s, f) {
+  const b = document.createElement("span");
+  b.classList.add("topbutton");
+  b.innerHTML = s;
+  b.addEventListener('click', f);
+  topmenu.appendChild(b);
+  return b;
+}
+
 async function mercInit(loadFun, saveFun) {
   repl = await mkRepl();
   select(newCell());
   convo.appendChild(cursor);
-  saveButton.addEventListener('click', saveFun);
-  loadButton.addEventListener('click', loadFun);
-  resetButton.addEventListener('click', async function(ev){
+  addTopButton("&#x1F4BE;", saveFun);
+  addTopButton("&#x1F4C2;", loadFun);
+  addTopButton("&#x21BA;", async function(ev){
     await repl.reset();
     runCount = 0;
+  });
+  addTopButton("&#x2b71;", ev => {
+    importdialog.showModal();
+    ev.stopPropagation();
+    document.addEventListener("click", ev => {
+      if (ev.target == importdialog) {
+        importdialog.close();
+      }
+    });
+  });
+  importOKButton.addEventListener('click', async function(ev) {
+    const [file] = importfile.files;
+    if (file) loadConvo(await file.text());
+    importdialog.close();
+  });
+  addTopButton("&#x2b73;", ev => {
+    const file = new Blob([saveConvo()], {type: "application/octet-stream"});
+    const a = document.createElement("a"), url = URL.createObjectURL(file);
+    a.href = url;
+    a.download = "export.merc";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 0);
   });
   document.addEventListener('keydown', ev => {
     if (!cursor) return;
@@ -223,7 +265,7 @@ async function mercInit(loadFun, saveFun) {
           const incode = cursor.getElementsByClassName("incode")[0];
           if (cursor.getAttribute("data-type") == tyQuack) {
             cursor.getElementsByClassName("output")[0].remove();
-            incode.style.display = "block";
+            incode.style.display = "inline-block";
           }
           incode.focus();
           ev.preventDefault();
@@ -275,33 +317,5 @@ async function mercInit(loadFun, saveFun) {
       }
       break;
     }
-  });
-  exportButton.addEventListener('click', ev => {
-    const file = new Blob([saveConvo()], {type: "application/octet-stream"});
-    const a = document.createElement("a"), url = URL.createObjectURL(file);
-    a.href = url;
-    a.download = "export.merc";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }, 0);
-  });
-
-  importButton.addEventListener('click', ev => {
-    importdialog.showModal();
-    ev.stopPropagation();
-    document.addEventListener("click", ev => {
-      if (ev.target == importdialog) {
-        importdialog.close();
-      }
-    });
-  });
-
-  importOKButton.addEventListener('click', async function(ev) {
-    const [file] = importfile.files;
-    if (file) loadConvo(await file.text());
-    importdialog.close();
   });
 }

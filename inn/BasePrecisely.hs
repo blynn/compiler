@@ -174,7 +174,8 @@ instance Monad [] where return = (:[]); (>>=) = flip concatMap
 instance Alternative [] where empty = [] ; (<|>) = (++)
 concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
-filter f = foldr (\x xs -> if f x then x:xs else xs) []
+filter p = foldr (\x -> bool id (x:) $ p x) []
+filterM p = foldr (\x -> liftA2 (bool id (x:)) $ p x) $ pure []
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
 xs \\ ys = filter (not . (`elem` ys)) xs

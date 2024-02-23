@@ -35,7 +35,6 @@ ul { list-style-type: square; }
 }
 
 @media (max-width: 500px) { #featured .sect1 { width: 100% } }
-
 @media (min-width: 640px) {
   body {
     max-width: 40em;
@@ -46,7 +45,6 @@ ul { list-style-type: square; }
     padding-right: 1em;
   }
 }
-
 @media (min-width: 896px) {
   .skinny { display: none; }
   .link-contents { visibility: hidden; }
@@ -67,21 +65,7 @@ ul { list-style-type: square; }
     margin-right: auto;
   }
 }
-</style>
-<title>Mercurry</title>
-</head><body>
-<div id="topmenu">
-  <button id="saveButton">Save</button>
-  <button id="loadButton">Load</button>
-  <button id="importButton">Import</button>
-  <button id="exportButton">Export</button>
-  <button id="resetButton">Reset</button>
-<dialog id="importdialog" style="padding:1em;background-color:whitesmoke;border:1px solid black;position:fixed;z-index:1;">
-  Import:
-  <input id="importfile" type="file" /><button id="importOKButton">OK</button>
-</dialog>
-</div>
-<style>
+
 .cell{
 margin:4px;
 border-left:solid transparent 0.5em;
@@ -128,7 +112,7 @@ border-left:solid blue 0.5em;
 }
 .cellbutton{
 color:dimgrey;
-width: 1.5em;
+min-width: 1.5em;
 display: inline-block;
 border-radius: 5px;
 text-align: center;
@@ -150,7 +134,31 @@ display:none;
 background-color:blue;
 color:white;
 }
+.topbutton{
+padding-left:0.5em;
+padding-right:0.5em;
+color:dimgrey;
+min-width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.topbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
+}
+.topdialog{
+padding:1em;background-color:whitesmoke;border:1px solid black;position:fixed;z-index:1;
+}
 </style>
+<title>Mercurry</title>
+</head><body>
+<div id="topmenu" style="border-bottom: solid 1px black;">
+<dialog id="importdialog" class="topdialog">Import:
+  <input id="importfile" type="file" /><button id="importOKButton">OK</button>
+</dialog>
+</div>
 <div id="convo" class="convo"></div>
 
 <div style="display:none;" id="cellmenuclipboard">
