@@ -250,9 +250,10 @@ infer' msg typed loc ast = case ast of
   E x -> case x of
     Lit (t, _) -> pure (t, ast)
     bug -> error $ show bug
-  V s -> case lookup s loc <|> Right . fst <$> mlookup s typed of
-    Nothing -> Infer $ const $ Left $ "undefined: " ++ s
-    Just t -> either (pure . (, ast)) (insta ast) t
+  V s
+    | Just t <- lookup s loc <|> Right . fst <$> mlookup s typed ->
+      either (pure . (, ast)) (insta ast) t
+    | otherwise -> Infer $ const $ Left $ "undefined: " ++ s
   A x y -> do
     (tx, ax) <- rec loc x
     (ty, ay) <- rec loc y
@@ -300,8 +301,8 @@ infer' msg typed loc ast = case ast of
   where
   rec = infer' msg typed
   insta x q = do
-    Qual preds q <- inferInstantiate q
-    pure (q, foldl A x (map Proof preds))
+    Qual preds t <- inferInstantiate q
+    pure (t, foldl A x (map Proof preds))
 
 infer msg typed loc ast csn = unInfer (infer' msg typed loc ast) csn
 
@@ -398,9 +399,10 @@ inferno searcher decls typed defmap syms = let
     let ps = zip preds $ ("anno*"++) . show <$> [0..]
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
     (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
+    -- Annotated types are tricky.
     let
       applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t, foldr L (fill (subs ++ tab) a) dicts))
-        where tab = map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms
+        where tab = maybe (map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms) (const []) $ mlookup s decls
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
 defaultRing searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where

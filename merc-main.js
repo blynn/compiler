@@ -119,7 +119,7 @@ function newCell() {
   div.innerHTML =
 `<div style="display:flex;">
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
-<pre class="incode" spellcheck=false contenteditable="plaintext-only"></pre>
+<pre class="incode" spellcheck=false contenteditable></pre>
 </div>`
   div.addEventListener('click', ev => {select(div);});
   return div;
