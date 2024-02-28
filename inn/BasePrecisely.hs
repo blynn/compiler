@@ -254,39 +254,35 @@ class Enum a where
   fromEnum       :: a -> Int
   enumFrom       :: a -> [a]
   enumFromTo     :: a -> a -> [a]
+  enumFromThen   :: a -> a -> [a]
+  enumFromThenTo :: a -> a -> a -> [a]
+  succ = toEnum . (+ 1) . fromEnum
+  pred = toEnum . (- 1) . fromEnum
+  enumFrom x = map toEnum [fromEnum x ..]
+  enumFromThen x y = map toEnum [fromEnum x, fromEnum y ..]
+  enumFromTo x y = map toEnum [fromEnum x .. fromEnum y]
+  enumFromThenTo x1 x2 y = map toEnum [fromEnum x1, fromEnum x2 .. fromEnum y]
+
 instance Enum Int where
   succ = (+ 1)
   pred = (- 1)
   toEnum = id
   fromEnum = id
   enumFrom = iterate succ
+  enumFromThen x y = iterate (+(y - x)) x
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+  enumFromThenTo x y lim = takeWhile ((if y < x then (<=) else (>=)) lim) $ enumFromThen x y
 instance Enum Bool where
-  succ False = True
-  pred True = False
   toEnum 0 = False
   toEnum 1 = True
   fromEnum False = 0
   fromEnum True = 1
-  enumFrom False = [False, True]
-  enumFrom True = [True]
-  enumFromTo False True = [False, True]
-  enumFromTo False False = [False]
-  enumFromTo True True = [True]
 instance Enum Char where
-  succ = chr . (+ 1) . ord
-  pred = chr . (- 1) . ord
   toEnum = chr
   fromEnum = ord
-  enumFrom = iterate succ
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 instance Enum Word where
-  succ = (+ 1)
-  pred = (- 1)
   toEnum = wordFromInt
   fromEnum = intFromWord
-  enumFrom = iterate succ
-  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
 
 fromIntegral = fromInteger . toInteger
 

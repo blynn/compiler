@@ -449,18 +449,17 @@ compQual =
     ds <- res "let" *> braceDef
     cond <$> (res "in" *> expr) <|> pure (addLets ds)
 
-sqExpr = between lSquare rSquare $
-  ((&) <$> expr <*>
-    (   res ".." *>
-      (   (\hi lo -> (A (A (V "enumFromTo") lo) hi)) <$> expr
-      <|> pure (A (V "enumFrom"))
-      )
-    <|> res "|" *>
-      ((. A (V "pure")) . foldr (.) id <$> sepBy1 compQual comma)
-    <|> (\t h -> listify (h:t)) <$> many (comma *> expr)
-    )
-  )
-  <|> pure (V "[]")
+sqExpr2 x y =
+      res ".." *> (A (A (A (V "enumFromThenTo") x) y) <$> expr <|> pure (A (A (V "enumFromThen") x) y))
+  <|> listify . (x:) . (y:) <$> many (comma *> expr)
+
+sqExpr1 x =
+      res ".." *> (A (A (V "enumFromTo") x) <$> expr <|> pure (A (V "enumFrom") x))
+  <|> res "|" *> (foldr ($) (A (V "pure") x) <$> sepBy1 compQual comma)
+  <|> (sqExpr2 x =<< comma *> expr)
+  <|> pure (A (V "pure") x)
+
+sqExpr = between lSquare rSquare $ (sqExpr1 =<< expr) <|> pure (V "[]")
 
 fbind = A <$> (V <$> var) <*> (res "=" *> expr)
 

@@ -122,6 +122,12 @@ function newCell() {
 <pre class="incode" spellcheck=false contenteditable></pre>
 </div>`
   div.addEventListener('click', ev => {select(div);});
+  const incode = div.getElementsByClassName("incode")[0];
+
+  incode.addEventListener('copy', function(e){
+  e.clipboardData.setData('text/plain', window.getSelection().toString());
+  e.preventDefault();
+});
   return div;
 }
 
@@ -140,6 +146,7 @@ function runOnly() {
   if (ty == tyRaw) return;
   const incode = cursor.getElementsByClassName("incode")[0];
   const s = incode.innerText;
+  incode.textContent = s;
   const out = cursor.getElementsByClassName("output");
   if (out.length != 0) out[0].remove();
   if (s == "") return;
@@ -220,6 +227,15 @@ async function mercInit(loadFun, saveFun) {
     await repl.reset();
     runCount = 0;
   });
+  addTopButton("&#x23f5;", ev => {
+    const bak = cursor;
+    const cells = convo.getElementsByClassName("cell");
+    for (const c of cells) {
+      cursor = c;
+      runOnly();
+    }
+    cursor = bak;
+  });
   addTopButton("&#x2b71;", ev => {
     importdialog.showModal();
     ev.stopPropagation();
@@ -287,6 +303,7 @@ async function mercInit(loadFun, saveFun) {
           } else {
             select(prev);
           }
+          cursor.scrollIntoView(true);
         }
         ev.preventDefault();
       }
@@ -300,6 +317,7 @@ async function mercInit(loadFun, saveFun) {
           } else {
             select(next);
           }
+          cursor.scrollIntoView(false);
         }
         ev.preventDefault();
       }
