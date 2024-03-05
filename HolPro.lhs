@@ -117,7 +117,7 @@ impAntisymRule
   = deduct (undisch th2) (undisch th1)
 \end{code}
 
-A sanity check. We prove ${x} \vdash x = T$ ("assuming x, x is true").
+A sanity check. We prove \({x} \vdash x = T\) ("assuming x, x is true").
 
 \begin{code}
 testEqt = eqtIntro $ assume $ basic "x:Bool"

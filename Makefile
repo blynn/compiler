@@ -2,9 +2,9 @@
 
 target: site
 
-NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web
+NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm doh.wasm
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm doh.wasm merc-main.js merc.css
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
@@ -19,6 +19,7 @@ eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compil
 
 menu.html: menu; ./stitch menu menu
 
+%.html: %.merc;MERC=1 stitch book menu $<
 %.html: %.lhs menu.html; ./stitch book menu $<
 %.html: %.txt menu.html; ./stitch book menu $<
 %:%.c;clang -O3 $^ -o $@
@@ -122,6 +123,8 @@ fol.js fol.wasm: fol.lhs
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
 
-# Get asciidoctor.min.js from:
-#   https://github.com/asciidoctor/asciidoctor.js/releases
-mercurry.html:merc-0.html ../../z/asciidoctor.min.js reply.js merc-main.js merc-1.html; cat $^ > $@
+%.merc: %.lhs;sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g;' $^|../compiler/mercer>$@
+mercurry.html:mercurry.merc
+
+mercer.c:inn/BasePrecisely.hs inn/System.hs mercer.hs;cat $^ | ./precisely > $@
+mercer:mercer.c;clang -O3 $^ -o $@ -lm

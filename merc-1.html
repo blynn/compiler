@@ -1,8 +1,10 @@
 async function init() {
-  mercInit
+  await mercInit
     ( ev => { loadConvo(localStorage.getItem("content")); }
     , ev => { localStorage.setItem("content", saveConvo()); }
     );
+  select(newCell());
+  convo.appendChild(cursor);
 }
 init();
 </script>

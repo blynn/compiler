@@ -53,5 +53,5 @@ mapM_ f = foldr ((>>) . f) (pure ());
 
 nats = iterate (1+) 0;
 
-export "draw" main;
+foreign export ccall "draw" main;
 main = mapM_ (\y -> (mapM_ (\x -> ife (douady (308*x - 2*prec, 375*y - 18022)) (plot x y) (pure ())) $ take 160 nats)) $ take 96 nats;

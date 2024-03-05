@@ -51,6 +51,9 @@ addType(tyCode);
 addType(tyRaw);
 addType(tyQuack);
 
+addcellmenu("&#x23f5;", ev => {
+  runOnly();
+});
 addcellmenu("&#x29c9;", ev => {
   cellmenuclipboard.appendChild(cellmenu);
   const n = newCell();
@@ -108,7 +111,6 @@ const tri = document.createElement("div");
 tri.innerHTML = "&#x25BE;";
 tri.style.float = "right";
 cellmenutype.appendChild(tri);
-
   cursor.prepend(cellmenu);
 }
 
@@ -133,13 +135,6 @@ function newCell() {
 
 let repl;
 
-function outhtml(s) {
-  const div = document.createElement("div");
-  div.style["margin-left"] = "4em";
-  div.innerHTML = s;
-  repl.outdiv.appendChild(div);
-}
-
 function runOnly() {
   if (!cursor) return;
   const ty = cursor.getAttribute("data-type");
@@ -157,7 +152,6 @@ function runOnly() {
   cursor.appendChild(div);
 
   if (ty == tyQuack) {
-    // https://mrduguo.github.io/asciidoctor.org/docs/install-and-use-asciidoctorjs/
     div.innerHTML = `<span class="outlabel"></span>`;
     const adoc = document.createElement("div");
     adoc.classList.add("adoc");
@@ -168,9 +162,9 @@ function runOnly() {
     return;
   }
 
-  const r = repl.run("chat", ["Main"], s + "\n");
   runCount++;
   cursor.getElementsByClassName("runcounter")[0].innerText = runCount;
+  const r = repl.run("chat", ["Main"], s + "\n");
   document.activeElement.blur();
   if (r.buf[0] == "error") {
     div.classList.add("errmsg");
@@ -178,9 +172,7 @@ function runOnly() {
     return;
   }
   if (r.out != "") {
-    div.innerHTML =
-`<span class="outlabel">[` + runCount + `]:</span>
-<pre class="outtext"></pre>`;
+    div.insertAdjacentHTML('afterbegin', `<div style="display:flex;"><span class="outlabel">[` + runCount + `]:</span><pre class="outtext"></pre></div>`);
     div.getElementsByClassName("outtext")[0].innerText = r.out;
   }
 }
@@ -219,15 +211,13 @@ function addTopButton(s, f) {
 
 async function mercInit(loadFun, saveFun) {
   repl = await mkRepl();
-  select(newCell());
-  convo.appendChild(cursor);
   addTopButton("&#x1F4BE;", saveFun);
   addTopButton("&#x1F4C2;", loadFun);
   addTopButton("&#x21BA;", async function(ev){
     await repl.reset();
     runCount = 0;
   });
-  addTopButton("&#x23f5;", ev => {
+  addTopButton("&#x23e9;", ev => {
     const bak = cursor;
     const cells = convo.getElementsByClassName("cell");
     for (const c of cells) {
@@ -303,7 +293,7 @@ async function mercInit(loadFun, saveFun) {
           } else {
             select(prev);
           }
-          cursor.scrollIntoView(true);
+          cursor.scrollIntoView({behavior:"smooth",block:"nearest"});
         }
         ev.preventDefault();
       }
@@ -317,7 +307,7 @@ async function mercInit(loadFun, saveFun) {
           } else {
             select(next);
           }
-          cursor.scrollIntoView(false);
+          cursor.scrollIntoView({behavior:"smooth",block:"nearest"});
         }
         ev.preventDefault();
       }

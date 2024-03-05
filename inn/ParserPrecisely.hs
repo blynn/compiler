@@ -457,7 +457,7 @@ sqExpr1 x =
       res ".." *> (A (A (V "enumFromTo") x) <$> expr <|> pure (A (V "enumFrom") x))
   <|> res "|" *> (foldr ($) (A (V "pure") x) <$> sepBy1 compQual comma)
   <|> (sqExpr2 x =<< comma *> expr)
-  <|> pure (A (V "pure") x)
+  <|> pure (listify [x])
 
 sqExpr = between lSquare rSquare $ (sqExpr1 =<< expr) <|> pure (V "[]")
 

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+post_mathjax=0
+attr_showtitle="-a showtitle"
+
 supdoc() {
-  sed 's/^\\begin{code}/[.hs,haskell]\n--------/' \
-  | sed 's/^\\end{code}/--------/' \
-  | asciidoctor -s -
+  sed 's/^\\begin{code}/[.hs,haskell]\n--------/;s/^\\end{code}/--------/' \
+  | asciidoctor $attr_showtitle -s -
 }
 
 doctitlepre=""
@@ -30,6 +32,10 @@ checklights();
 </script>
 '
 
+mathjax() {
+echo '<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>'
+}
+
 fulldoc() {
 echo '<!DOCTYPE html><html lang="en"><head>
 <!-- Google tag (gtag.js) -->
@@ -43,16 +49,15 @@ gtag("config", "G-G56YW5RFXN");
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/~blynn/b.png" type="image/png">
-<link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>'
+<link href="https://fonts.googleapis.com/css?family=Open+Sans%7CInconsolata%7CMuli" rel="stylesheet" type="text/css">'
+[[ "$post_mathjax" == "1" ]] || mathjax
 echo '<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/css/'$cssfile'">'
+[[ -z ${MERC+x} ]] || echo '<link rel="stylesheet" title="Default" type="text/css" href="/~blynn/compiler/merc.css">'
 doctitle=$(grep '^==* ' $1 | sed 1q | sed 's/^==* *//' | sed 's/ *=*=$//')
 echo "<title>$doctitlepre$doctitle</title>"
 echo '</head><body>'$bodypre
-if sed 1q $1 | grep -q '^= '
-then echo "<div style='padding-top:1ex;'><h1>$doctitle</h1></div>"
-fi
 cat $1 | supdoc
+[[ "$post_mathjax" != "1" ]] || mathjax
 echo '<script>
 var darkcss=document.createElement("style");
 darkcss.innerHTML="html{background-color:black;color:#aaaaaa;};body{background-color:black;color:#aaaaaa;}textarea{color:#e6e1dc;background-color:#232323;}pre{color:#e6e1dc;background-color:#232323;}svg{filter:invert(100%);}";
@@ -108,17 +113,18 @@ else
 s/\(.*\),\(.*\)/- link:\1.html[\2]/' $2 | sed 's/index.html/./' | asciidoctor -s - > ${2%.*}.html
       ;;
     book)
+      if [[ ! -z ${MERC+x} ]]
+      then
+        post_mathjax=1
+        attr_showtitle=""
+      fi
       cssfile=book.css
       prevline=$( (echo ; cat $2) | grep -B1 "^${3%.*}," | sed -n 1p | grep , || :)
       nextline=$( (cat $2 ; echo) | grep -A1 "^${3%.*}," | sed -n 2p | grep , || :)
       prev=""
       next=""
-      if [[ ! -z $prevline ]]
-      then prev="<span class='link-prev'><a href='$(tohref ${prevline%%,*})'>&#9204; ${prevline#*,}</a></span>"
-      fi
-      if [[ ! -z $nextline ]]
-      then next="<span class='link-next'><a href='$(tohref ${nextline%%,*})'>${nextline#*,} &#9205;</a></span>"
-      fi
+      [[ -z $prevline ]] || prev="<span class='link-prev'><a href='$(tohref ${prevline%%,*})'>&#9204; ${prevline#*,}</a></span>"
+      [[ -z $nextline ]] || next="<span class='link-next'><a href='$(tohref ${nextline%%,*})'>${nextline#*,} &#9205;</a></span>"
       menu=$(cat ${2%.*}.html)
       navbar='<div class="navbar">'$prev$next'<div class="link-contents"><a href="#contents">Contents</a></div></div> <!-- navbar -->'
 
