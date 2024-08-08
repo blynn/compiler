@@ -51,7 +51,7 @@ addType(tyCode);
 addType(tyRaw);
 addType(tyQuack);
 
-addcellmenu("&#x23f5;", ev => {
+addcellmenu("&#x25b6;", ev => {
   runOnly();
 });
 addcellmenu("&#x29c9;", ev => {
@@ -209,49 +209,7 @@ function addTopButton(s, f) {
   return b;
 }
 
-async function mercInit(loadFun, saveFun) {
-  repl = await mkRepl();
-  addTopButton("&#x1F4BE;", saveFun);
-  addTopButton("&#x1F4C2;", loadFun);
-  addTopButton("&#x21BA;", async function(ev){
-    await repl.reset();
-    runCount = 0;
-  });
-  addTopButton("&#x23e9;", ev => {
-    const bak = cursor;
-    const cells = convo.getElementsByClassName("cell");
-    for (const c of cells) {
-      cursor = c;
-      runOnly();
-    }
-    cursor = bak;
-  });
-  addTopButton("&#x2b71;", ev => {
-    importdialog.showModal();
-    ev.stopPropagation();
-    document.addEventListener("click", ev => {
-      if (ev.target == importdialog) {
-        importdialog.close();
-      }
-    });
-  });
-  importOKButton.addEventListener('click', async function(ev) {
-    const [file] = importfile.files;
-    if (file) loadConvo(await file.text());
-    importdialog.close();
-  });
-  addTopButton("&#x2b73;", ev => {
-    const file = new Blob([saveConvo()], {type: "application/octet-stream"});
-    const a = document.createElement("a"), url = URL.createObjectURL(file);
-    a.href = url;
-    a.download = "export.merc";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }, 0);
-  });
+function mercInitKeys() {
   document.addEventListener('keydown', ev => {
     if (!cursor) return;
     switch(ev.keyCode) {
@@ -326,4 +284,55 @@ async function mercInit(loadFun, saveFun) {
       break;
     }
   });
+}
+
+async function mercInitLite() {
+  repl = await mkRepl();
+  mercInitKeys();
+}
+
+async function mercInit(loadFun, saveFun) {
+  repl = await mkRepl();
+  addTopButton("&#x1F4BE;", saveFun);
+  addTopButton("&#x1F4C2;", loadFun);
+  addTopButton("&#x21BA;", async function(ev){
+    await repl.reset();
+    runCount = 0;
+  });
+  addTopButton("&#x23e9;", ev => {
+    const bak = cursor;
+    const cells = convo.getElementsByClassName("cell");
+    for (const c of cells) {
+      cursor = c;
+      runOnly();
+    }
+    cursor = bak;
+  });
+  addTopButton("&#x2b71;", ev => {
+    importdialog.showModal();
+    ev.stopPropagation();
+    document.addEventListener("click", ev => {
+      if (ev.target == importdialog) {
+        importdialog.close();
+      }
+    });
+  });
+  importOKButton.addEventListener('click', async function(ev) {
+    const [file] = importfile.files;
+    if (file) loadConvo(await file.text());
+    importdialog.close();
+  });
+  addTopButton("&#x2b73;", ev => {
+    const file = new Blob([saveConvo()], {type: "application/octet-stream"});
+    const a = document.createElement("a"), url = URL.createObjectURL(file);
+    a.href = url;
+    a.download = "export.merc";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 0);
+  });
+  mercInitKeys();
 }

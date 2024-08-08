@@ -33,7 +33,7 @@ x (\a -> f a) (\ -> g) (\b c -> h b c)
 ------------------------------------------------------------------------
 
 Here, a lambda abstraction with no variables has the obvious meaning, namely,
-`\ -> g` is the same as `g`.
+`+\ -> g+` is the same as `g`.
 
 Then the Scott encoding of the value `x` of type `Adt` is whatever it takes to
 make the above work like the original case expression.

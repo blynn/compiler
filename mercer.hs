@@ -47,10 +47,13 @@ Select type:
 include::../compiler/reply.js[]
 
 async function init() {
+/*
   await mercInit
     ( ev => { loadConvo(localStorage.getItem("content")); }
     , ev => { localStorage.setItem("content", saveConvo()); }
     );
+*/
+  await mercInitLite();
   // Remove text nodes.
   [...convo.childNodes].forEach(c => c.nodeType != 1 && c.remove());
   for (const c of convo.childNodes) {

@@ -556,6 +556,14 @@ product = foldr (*) 1
 max a b = if a <= b then b else a
 min a b = if a <= b then a else b
 
+gcd x y = gcd' (abs x) (abs y) where
+  gcd' a 0 = a
+  gcd' a b = gcd' b (a `rem` b)
+lcm = \cases
+  _ 0 -> 0
+  0 _ -> 0
+  x y -> abs ((x `quot` (gcd x y)) * y)
+
 readNatural = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
 readInteger ('-':t) = -(readNatural t)
 readInteger s = readNatural s
