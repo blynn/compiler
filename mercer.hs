@@ -57,7 +57,11 @@ async function init() {
   // Remove text nodes.
   [...convo.childNodes].forEach(c => c.nodeType != 1 && c.remove());
   for (const c of convo.childNodes) {
-    c.addEventListener('click', ev => {select(c);});
+    c.addEventListener('click', ev => {
+      const ae = document.activeElement;
+      if (ae && (ae.matches('input') || ae.matches('button'))) return;
+      select(c);
+    });
     cursor = c;
     runOnly();
   }

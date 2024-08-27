@@ -13,7 +13,9 @@ I first encountered an optimization in a book by Douglas Adams. Reply
 mathematically! When asked: "What is the answer to the meaning of life, the
 universe, and everything?", we say "42" and pre-empt those meddlesome
 contradictions. For if mathematics is flawed, then so is logical reasoning, and
-hence the Socratic method itself. Fight logic with logic.
+hence the Socratic method itself. Fight logic with logic. As Hilbert asked in
+his paper _On the infinite_: "And where else would reliability and truth be
+found if even mathematical thinking fails?"
 
 Now the problem is to find a mathematical definition that reflects what we have
 in mind. This can be difficult, but often in computer science, mathematical

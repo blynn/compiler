@@ -593,7 +593,9 @@ instance Show Double where
     (as, bs) = if d >= 1 then span (<= d) tens else span (>= d) tenths
     norm = if d >= 1 then d / last as else d / head bs
     dig = intFromDouble norm
-    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble (1000000 * (norm - doubleFromInt dig)))++) . ('e':) . shows (if d >= 1 then length as - 1 else 0 - length as)
+    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble (1000000 * (norm - doubleFromInt dig)))++) . showsE (length as)
+    showsE e = if e == 1 && d >= 1 then id
+      else ('e':) . shows (if d >= 1 then e - 1 else 0 - e)
 
 class Field a where
   recip :: a -> a

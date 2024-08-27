@@ -61,17 +61,6 @@ cat $1 | supdoc
 echo '<script>
 var darkcss=document.createElement("style");
 darkcss.innerHTML="html{background-color:black;color:#aaaaaa;};body{background-color:black;color:#aaaaaa;}textarea{color:#e6e1dc;background-color:#232323;}pre{color:#e6e1dc;background-color:#232323;}svg{filter:invert(100%);}";
-function lights() {
-if ("out" == sessionStorage.getItem("lights")) {
-sessionStorage.removeItem("lights");
-document.body.removeChild(darkcss);
-} else sessionStorage.setItem("lights", "out");
-checklights();
-}
-function checklights() {
-if ("out" == sessionStorage.getItem("lights")) document.body.appendChild(darkcss);
-}
-checklights();
 </script>'
 echo $bodypost'</body></html>'
 }

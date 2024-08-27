@@ -25,7 +25,9 @@ Prove that for any propositions P and Q:
 +++++++++++
 
 Easy, right? Just enumerate all possibilities \(P = 0, 1\) and \(Q = 0, 1\),
-and check we always get \(1\).
+and check we always get \(1\). From this, we can mechanically derive a logical
+proof in a link:hilbert.html[Hilbert system]; see Emil Post, _Introduction to a
+general theory of elementary propositions_.
 
 ------------------------------------------------------------------------
 easy = all (== 1) [max (1 - p) q --> (p --> q) | p <- [0, 1], q <- [0, 1]]
