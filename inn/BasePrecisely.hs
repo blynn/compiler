@@ -283,6 +283,11 @@ instance Enum Char where
 instance Enum Word where
   toEnum = wordFromInt
   fromEnum = intFromWord
+instance Enum Rational where
+  toEnum = (% 1) . toEnum
+  fromEnum (a :% b) = fromEnum $ a `div` b
+  succ = (+ 1)
+  pred = (- 1)
 instance Enum Double where
   toEnum = doubleFromInt
   fromEnum = intFromDouble
@@ -304,6 +309,8 @@ class Field a where
   recip = (1 /)
   (/) :: a -> a -> a
   a / b = a * recip b
+  fromRational :: Rational -> a
+  fromRational (a:%b) = fromInteger a / fromInteger b
 
 class Integral a where
   div :: a -> a -> a
@@ -578,6 +585,22 @@ lcm = \cases
 readNatural = foldl (\n d -> toInteger 10*n + toInteger (ord d - ord '0')) (toInteger 0)
 readInteger ('-':t) = -(readNatural t)
 readInteger s = readNatural s
+
+infixl 7 %
+data Rational = Integer :% Integer deriving Eq
+numerator (p :% _) = p
+denominator (_ :% q) = q
+x % y = reduce_ (x * signum y) (abs y)
+reduce_ x y = (x `quot` d) :% (y `quot` d) where d = gcd x y
+instance Ord Rational where (a :% b) <= (c :% d) = a*d <= b*c
+instance Ring Rational where
+  (a :% b) + (c :% d) = reduce_ (a*d + b*c) (b*d)
+  (a :% b) - (c :% d) = reduce_ (a*d - b*c) (b*d)
+  (a :% b) * (c :% d) = reduce_ (a*c) (b*d)
+  fromInteger n = n :% 1
+instance Show Rational where
+  showsPrec _ (a :% b) = shows a . (" % "++) . shows b
+instance Field Rational where recip (x :% y) = (y * signum x) :% abs x
 
 instance Ring Double where
   (+) = doubleAdd

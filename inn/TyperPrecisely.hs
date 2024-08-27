@@ -408,7 +408,7 @@ inferno searcher decls typed defmap syms = let
 defaultNum searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where
   defaults = foldr ($) Tip $ insDefault . fst <$> preds
   insDefault = \case
-    Pred "Field" (TV v) -> insert v (TC "Double")
+    Pred "Field" (TV v) -> insert v (TC "Rational")
     Pred "Ring" (TV v) -> insertWith (const id) v (TC "Integer")
     _ -> id
   go (ps, subs) p@(pred, dictVar) = case pred of
