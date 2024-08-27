@@ -283,6 +283,11 @@ instance Enum Char where
 instance Enum Word where
   toEnum = wordFromInt
   fromEnum = intFromWord
+instance Enum Double where
+  toEnum = doubleFromInt
+  fromEnum = intFromDouble
+  succ = (+ 1)
+  pred = (- 1)
 
 fromIntegral = fromInteger . toInteger
 
@@ -293,6 +298,12 @@ class Ring a where
   fromInteger :: Integer -> a
   negate :: a -> a
   negate = (0 -)
+
+class Field a where
+  recip :: a -> a
+  recip = (1 /)
+  (/) :: a -> a -> a
+  a / b = a * recip b
 
 class Integral a where
   div :: a -> a -> a
@@ -580,7 +591,6 @@ instance Ring Double where
       in case xt of
         [] -> dx
         y:yt -> foldr (const (sh*)) (dx*sh + doubleFromWord y) yt
-
 instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 instance Show Double where
@@ -596,13 +606,6 @@ instance Show Double where
     go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble (1000000 * (norm - doubleFromInt dig)))++) . showsE (length as)
     showsE e = if e == 1 && d >= 1 then id
       else ('e':) . shows (if d >= 1 then e - 1 else 0 - e)
-
-class Field a where
-  recip :: a -> a
-  recip = (1 /)
-  (/) :: a -> a -> a
-  a / b = a * recip b
-
 instance Field Double where (/) = doubleDiv
 
 floor = intFromDouble . doubleFloor

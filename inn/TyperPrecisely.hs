@@ -398,23 +398,25 @@ inferno searcher decls typed defmap syms = let
     ((stas, preds), (soln, _)) <- foldM principal (([], []), (Tip, 0)) syms
     let ps = zip preds $ ("anno*"++) . show <$> [0..]
     (stas, (ps, _)) <- foldM gatherPreds ([], (ps, 0)) $ second (typeAstSub soln) <$> stas
-    (ps, subs) <- foldM (defaultRing searcher) (ps, []) stas
+    (ps, subs) <- foldM (defaultNum searcher) (ps, []) stas
     -- Annotated types are tricky.
     let
       applyDicts preds dicts subs (s, (t, a)) = (s, (Qual preds t, foldr L (fill (subs ++ tab) a) dicts))
         where tab = maybe (map (\s -> (s, foldl A (V s) $ V <$> dicts)) syms) (const []) $ mlookup s decls
     pure $ applyDicts (fst <$> ps) (snd <$> ps) subs <$> stas
 
-defaultRing searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where
-  rings = concatMap isRing $ fst <$> preds
-  isRing (Pred "Ring" (TV v)) = [v]
-  isRing _ = []
+defaultNum searcher (preds, subs) (s, (t, a)) = foldM go ([], subs) preds where
+  defaults = foldr ($) Tip $ insDefault . fst <$> preds
+  insDefault = \case
+    Pred "Field" (TV v) -> insert v (TC "Double")
+    Pred "Ring" (TV v) -> insertWith (const id) v (TC "Integer")
+    _ -> id
   go (ps, subs) p@(pred, dictVar) = case pred of
-    Pred cl (TV v) | not $ v `elem` typeVars t ->
-      if v `elem` rings then do
-        (_, ast) <- findProof searcher (Pred cl $ TC "Integer") ([], 0)
+    Pred cl (TV v) | not $ v `elem` typeVars t -> case mlookup v defaults of
+      Just t -> do
+        (_, ast) <- findProof searcher (Pred cl t) ([], 0)
         pure $ (ps, (dictVar, ast):subs)
-      else Left $ "ambiguous: " ++ s ++ ": " ++ show pred
+      Nothing -> Left $ "ambiguous: " ++ s ++ ": " ++ show pred
     Pred _ x | not $ all (`elem` typeVars t) $ typeVars x -> Left $ "ambiguous: " ++ show pred
     _ -> pure $ (p:ps, subs)
 
