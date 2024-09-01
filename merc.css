@@ -1,0 +1,84 @@
+@media (min-width: 896px) {
+  .main { max-width: 57em; }
+}
+.adoc{width:100%;}
+.cell{
+border-left:solid transparent 0.5em;
+padding:0.5ex;
+}
+.inlabel{
+font-family:'Inconsolata',monospace;
+min-width:3em;
+text-align:right;
+}
+.incode{
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:solid lightgrey 1px;
+padding:0.2ex;
+}
+.incode:focus{
+background-color:white;
+}
+.outlabel{
+font-family:'Inconsolata',monospace;
+min-width:3em;
+text-align:right;
+}
+.outtext{
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:0;
+background-color:white;
+white-space:pre-wrap;
+word-wrap:break-word;
+min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-tag-width-inside-flex-container */
+}
+.errmsg{
+color:red;
+}
+.selectedcell{
+border-left:solid blue 0.5em;
+}
+.cellbutton{
+color:dimgrey;
+min-width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.cellbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
+}
+.popup{
+position:absolute;
+text-align: left;
+background-color:white;
+padding:0.5em;
+border:1px solid black;
+display:none;
+}
+.typemenuitem:hover{
+background-color:blue;
+color:white;
+}
+.topbutton{
+padding-left:0.5em;
+padding-right:0.5em;
+color:dimgrey;
+min-width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.topbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
+}
+.topdialog{
+padding:1em;background-color:whitesmoke;border:1px solid black;position:fixed;z-index:1;
+}
+.MathJax{font-size:111%;}

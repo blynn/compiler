@@ -123,7 +123,7 @@ fol.js fol.wasm: fol.lhs
 
 cmpmira.tar.gz: e4096.hs e4096.m q11.hs q11.m assembly.c rts.c; tar cfz $@ $^
 
-%.merc: %.lhs;sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g;' $^|../compiler/mercer>$@
+%.merc: %.lhs mercer;sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g;' $<|../compiler/mercer>$@
 mercurry.html:mercurry.merc
 
 mercer.c:inn/BasePrecisely.hs inn/System.hs mercer.hs;cat $^ | ./precisely > $@
