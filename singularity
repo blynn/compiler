@@ -1,9 +1,5 @@
 ------------------------------------------------------------------------
 -- Supports comments, spaces, variables consisting of lowercase letters.
---
--- To convert to a form suitable for my tools:
---  * Change @x to (x) but be aware of #@
---  * Change #x to 'x' but be aware of # followed by a newline.
 ------------------------------------------------------------------------
 
 or f g x y = f x (g x y);
@@ -12,12 +8,12 @@ foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 append = @C (foldr @:);
 pair x y f = f x y;
 just x f g = g x;
-pure x inp = just (pair x inp);
-sat f inp = inp @K (\h t -> f h (pure h t) @K);
+pure x s = just (pair x s);
+sat f s = s @K (\h t -> f h (pure h t) @K);
 bind f m = m @K (\x -> x f);
-ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
+ap x y = \s -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x s);
 fmap f x = ap (pure f) x;
-alt x y = \inp -> (x inp) (y inp) just;
+alt x y = \s -> (x s) (y s) just;
 
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
@@ -44,7 +40,7 @@ anyone = fmap (@C @: @K) (spc (sat (@K @K)));
 pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
 atom r = alt (alt (alt (liftki (spch #() (liftk r (spch #)))) (lam r)) (fmap lcr pre)) (fmap lcv var);
-apps = @Y \rr r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (rr r))) (pure @I);
+apps = @Y \f r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (f r))) (pure @I);
 expr = @Y \r -> liftaa @T (atom r) (apps r);
 
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));

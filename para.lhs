@@ -44,7 +44,7 @@ It must be `"SHOE"`.
 The function `foo` has black-box access to the elements of its input list, that
 is, it can only perform some combination of rearranging or duplicating or
 discarding the given letters. If `foo` were able to exploit some property of
-characters then it would instead have type `[Char] -> [Char]`. We relabeled
+characters then it would instead have type `+[Char] -> [Char]+`. We relabeled
 the input, so the output must be exactly what it was before, except relabeled.
 
 We could go beyond letters. If we replace each input letter with its ASCII

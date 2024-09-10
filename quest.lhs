@@ -49,12 +49,12 @@ pair x y f = f x y;
 (++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
 ifNull xs a b = xs a (\_ _ -> b);
 add r acc p = r (ifNull acc p ('`':(acc ++ p)));
-isPre h = h('#'(==)) || h('@'(==));
+isPre h = h((==)'#') || h((==)'@');
 suffix f h t = isPre h (t undefined (\a b -> pair (a:[]) b)) (pair [] t) (\x y -> f (h:x) y);
 atom r h acc t = suffix (add r acc) h t;
 sub r acc = uncurry (add r acc) . r "";
-closes h = h(';'(==)) || h(')'(==));
-if3 h x y z = closes h x (h('('(==)) y z);
+closes h = h((==)';') || h((==)')');
+if3 h x y z = closes h x (h((==)'(') y z);
 switch r a h t = if3 h pair (sub r) (atom r h) a t;
 term acc s = s undefined (\h t -> switch term acc h t);
 parse s = term "" s (\p t -> ifNull p ";" (p ++ (';':parse t)));
@@ -70,12 +70,12 @@ Thus the above becomes:
 `Y``B`CS``B`B`C``BB:C;
 ``B`R``BKK`BB;
 ``C``BBB``S``BS@#``B`B`:#`@";
-``S``B@!`T`##=`T`#@=;
+``S``B@!`=##`=#@;
 ``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;
 ``BC``B`B@&@$;
 ``S``BC``B`BB``B`BT@$`TK;
-``S``B@!`T`#;=`T`#)=;
-``S``BC``B`BB``B`BB@)`T`#(=;
+``S``B@!`=#;`=#);
+``S``BC``B`BB``B`BB@)`=#(;
 ``BC``S``BS``B`C``C@*@ @(@';
 `Y``B`B`C`T?@+;
 `Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
@@ -189,8 +189,8 @@ parse a lambda calculus expression such as `\x.(\y.Bx)`:
 
 ------------------------------------------------------------------------
 sat f inp = inp Nothing (\h t -> f h (pure h t) Nothing);
-char c = sat (\x -> x(c(==)));
-var = sat (\c -> flip (c(';'(==)) || c(')'(==))));
+char c = sat (\x -> x((==)c));
+var = sat (\c -> flip (c((==)';') || c((==)')')));
 pre = (:) <$> (char '#' <|> char '@') <*> (flip (:) const <$> sat (const const));
 atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (R <$> pre) <|> (V <$> var);
 apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
@@ -201,8 +201,8 @@ As combinators, we have:
 
 ------------------------------------------------------------------------
 B(C(TK))(B(B(RK))(C(BS(BB))@$));
-B@/(BT(T=));
-@/(BC(S(B@"(T(#;=)))(T(#)=))));
+B@/(BT=);
+@/(BC(S(B@"(=#;))(=#))));
 @&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));
 C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);
 Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));
@@ -214,7 +214,7 @@ The `babs` and `unlam` functions perform simple bracket abstraction, and
 
 ------------------------------------------------------------------------
 show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) undefined;
-unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x(v(==)) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
+unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x((==)v) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
 babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
 ------------------------------------------------------------------------
 
@@ -229,13 +229,17 @@ These last few functions are:
 
 ------------------------------------------------------------------------
 Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));
-BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT(T=))))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));
+BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT=)))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));
 Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));
 Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
 ------------------------------------------------------------------------
 
 We feed the combinators into our first compiler to produce an ION assembly
 program that compiles a primitive lambda calculus to ION assembly.
+
+I should confess that the above combinator terms were produced by a program I
+wrote, and I have only checked a few of them. Hopefully, it's plausible all
+can be verified by hand.
 
 == Practically ==
 
@@ -282,9 +286,9 @@ Our three compilers are the following:
 ------------------------------------------------------------------------
 ``BCT;``BS`BB;`Y``B`CS``B`B`C``BB:C;``B`R``BKK`BB;``C``BBB``S``BS@#``B`B`:#`@";``S``B@!`T`##=`T`#@=;``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;``BC``B`B@&@$;``S``BC``B`BB``B`BT@$`TK;``S``B@!`T`#;=`T`#)=;``S``BC``B`BB``B`BB@)`T`#(=;``BC``S``BS``B`C``C@*@ @(@';`Y``B`B`C`T?@+;`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
 
-BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT(T=));@/(BC(S(B@"(T(#;=)))(T(#)=))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT(T=))))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
+BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT=);@/(BC(S(B@"(=#;))(=#))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT=)))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
 
-BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT(T=));@/(BC(S(B@"(T(#;=)))(T(#)=))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));Y\a.\b.\c.c(\d.KI)(\d.d(b=))(\d.\e.@"(abd)(abe))?;Y\a.\b.\c.@7bc(c?(K(@,#I))(\d.\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));
+BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT=);@/(BC(S(B@"(=#;))(=#))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));Y\a.\b.\c.c(\d.KI)(\d.d(b=))(\d.\e.@"(abd)(abe))?;Y\a.\b.\c.@7bc(c?(K(@,#I))(\d.\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));
 ------------------------------------------------------------------------
 
 == Term rewriting; bootstrapping ==

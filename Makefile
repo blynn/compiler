@@ -29,8 +29,9 @@ check:check.c;clang -O3 $^ -o $@ -lm
 reply:reply.c;clang -O3 $^ -o $@ -lm
 reply-precompile:reply-precompile.c;clang -O3 $^ -o $@ -lm
 
+singularity.boot:singularity bootsingularity.sh;./bootsingularity.sh > $@
 vm:vm.c
-raw:vm;./vm > raw
+raw:vm singularity.boot;./vm > raw
 lonely.c:vm effectively.hs lonely.hs rts.c raw;(cat rts.c && ./vm run effectively.hs < lonely.hs) > lonely.c
 lonely:lonely.c
 
