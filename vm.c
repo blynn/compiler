@@ -265,38 +265,41 @@ void testCaseMore(char *prog, char *more, char *inp, char *want) {
 
 char *parenthetically =
 /*
-uncurry x y = y x;
-(.) x y z = x (y z);
+eq a b x y = if a == b then x else y
+fix f = f (fix f)
+cons = (:)
+b = (.)
+lst t x y = case t of {[] -> x; h:t -> y h t}
+must f s = case s of {[] -> undefined; h:t -> f h t}
 
-pair x y f = f x y;
-(||) f g x y = f x (g x y);
-(++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
-ifNull xs a b = xs a (\_ _ -> b);
-add r acc p = r (ifNull acc p ('`':(acc ++ p)));
-isPre h = h((==)'#') || h((==)'@');
-suffix f h t = isPre h (t undefined (\a b -> pair (a:[]) b)) (pair [] t) (\x y -> f (h:x) y);
-atom r h acc t = suffix (add r acc) h t;
-sub r acc = uncurry (add r acc) . r "";
-closes h = h((==)';') || h((==)')');
-if3 h x y z = closes h x (h((==)'(') y z);
-switch r a h t = if3 h pair (sub r) (atom r h) a t;
-term acc s = s undefined (\h t -> switch term acc h t);
-parse s = s "" (\_ _ -> term "" s (\p t -> p ++ (';':parse t)));
+orChurch f g x y = f x (g x y)
+isPre h = orChurch (eq '#' h) (eq '@' h)
+closes h = orChurch (eq ';' h) (eq ')' h)
+glom tk acc f t = tk (Just (b (maybe id (b (cons '`')) acc) f)) t
+esc g f t = must (\th tt -> g (b f (cons th)) tt) t
+atom h gl t = isPre h esc id gl (cons h) t
+comp gl a t = maybe undefined (flip gl t) a
+sub r gl t = r (comp gl) Nothing t
+more r h gl t = eq '(' h (sub r) (atom h) gl t
+switch r kon h a t = closes h kon (b (more r h) (glom (r kon))) a t
+term = fix (\r kon acc s -> must (\h t -> switch r kon h acc t) s)
+parseNonEmpty r s = term (\p t -> maybe id id p (cons ';' (r t))) Nothing s
+parse = fix (\r s -> lst s "" (\h t -> parseNonEmpty r s))
 */
-"``BCT;"
+"`C`TI;"
 "``BS`BB;"
-"`Y``B`CS``B`B`C``BB:C;"
-"``B`R``BKK`BB;"
-"``C``BBB``S``BS@#``B`B`:#`@\";"
 "``S``B@!`=##`=#@;"
-"``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;"
-"``BC``B`B@&@$;"
-"``S``BC``B`BB``B`BT@$`TK;"
 "``S``B@!`=#;`=#);"
-"``S``BC``B`BB``B`BB@)`=#(;"
-"``BC``S``BS``B`C``C@*@ @(@';"
-"`Y``B`B`C`T?@+;"
-"`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@\"`B`:#;;"
+"``R``B`B``BKT``BB`@ `B`:#```BBB;"
+"``B`B@ ``R``R:``BBB``BBB;"
+"``S``BC``RI``R@%@\":;"
+"``BC``B`B@ C;"
+"``B`RK``R@'B;"
+"``R@&``BS``B`C`=#(@(;"
+"``B`S``BS`C@#``S``BB``BC``B`BB@)`B@$;"
+"`Y``B`B`B@ ``B`BC@*;"
+"``RK``B@+``B`C``BB`@ I`B`:#;;"
+"`Y``B`S`TK``B`BK``B`BK@,;"
 ;
 
 char *exponentially =
@@ -603,7 +606,6 @@ int main(int argc, char **argv) {
   mem = malloc(TOP * sizeof(u)); altmem = malloc(TOP * sizeof(u));
   buf_end = buf + BUFMAX;
   spTop = mem + TOP - 1;
-
   if (argc > 1) {
     if (!strcmp(argv[1], "untyped")) return untyped(argv[2]), 0;
     if (!strcmp(argv[1], "test")) return runTests(), 0;

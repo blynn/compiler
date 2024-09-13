@@ -28,57 +28,104 @@ integer constants).
 In Haskell we could write:
 
 ------------------------------------------------------------------------
-term acc (h:t)
-  | h == ')' || h == ';' = (acc, t)
-  | h == '('             = uncurry (app acc) (term "" t)
-  | otherwise            = if h == '#' || h == '@'
-    then app acc (h:head t:"") (tail t)
-    else app acc (h:"") t
-  where app acc s = term (if null acc then s else '`':acc ++ s)
+term kon acc s = case s of
+  h:t
+    | h == ')' || h == ';' -> kon acc t
+    | h == '('             -> term comp Nothing t
+    | otherwise -> (if h == '#' || h == '@' then esc else id) glom (h:) t
+  where
+  glom f t = term kon (Just $ maybe id (('`':) .) acc . f) t
+  comp m t = maybe undefined (flip glom t) m
+
+esc g f t = case t of th:tt -> g (f . (th:)) tt
 
 parse "" = ""
-parse s = let (p, t) = term "" s in p ++ ';':parse t
+parse s = term (\p t -> maybe id id p $ ';':parse t) Nothing s
 ------------------------------------------------------------------------
 
-To translate to combinatory logic, we first break our code into more
-digestible pieces:
+We employ continuation-passing style. Typically, a function might return a pair
+consisting of the tree parsed so far and the remainder of the string to parse,
+and another function scrutinizes the pair and processes its contents. We fuse
+these steps, obtaining shorter code, though it takes some getting used to.
+
+To translate to combinatory logic, we break our code into more digestible
+pieces. We add some glue so our code works in GHC yet still resembles raw
+combinators.
 
 ------------------------------------------------------------------------
-pair x y f = f x y;
-(||) f g x y = f x (g x y);
-(++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
-ifNull xs a b = xs a (\_ _ -> b);
-add r acc p = r (ifNull acc p ('`':(acc ++ p)));
-isPre h = h((==)'#') || h((==)'@');
-suffix f h t = isPre h (t undefined (\a b -> pair (a:[]) b)) (pair [] t) (\x y -> f (h:x) y);
-atom r h acc t = suffix (add r acc) h t;
-sub r acc = uncurry (add r acc) . r "";
-closes h = h((==)';') || h((==)')');
-if3 h x y z = closes h x (h((==)'(') y z);
-switch r a h t = if3 h pair (sub r) (atom r h) a t;
-term acc s = s undefined (\h t -> switch term acc h t);
-parse s = term "" s (\p t -> ifNull p ";" (p ++ (';':parse t)));
+eq a b x y = if a == b then x else y
+fix f = f (fix f)
+cons = (:)
+b = (.)
+lst t x y = case t of {[] -> x; h:t -> y h t}
+must f s = case s of {[] -> undefined; h:t -> f h t}
+
+orChurch f g x y = f x (g x y)
+isPre h = orChurch (eq '#' h) (eq '@' h)
+closes h = orChurch (eq ';' h) (eq ')' h)
+glom tk acc f t = tk (Just (b (maybe id (b (cons '`')) acc) f)) t
+esc g f t = must (\th tt -> g (b f (cons th)) tt) t
+atom h gl t = isPre h esc id gl (cons h) t
+comp gl a t = maybe undefined (flip gl t) a
+sub r gl t = r (comp gl) Nothing t
+more r h gl t = eq '(' h (sub r) (atom h) gl t
+switch r kon h a t = closes h kon (b (more r h) (glom (r kon))) a t
+term = fix (\r kon acc s -> must (\h t -> switch r kon h acc t) s)
+parseNonEmpty r s = term (\p t -> maybe id id p (cons ';' (r t))) Nothing s
+parse = fix (\r s -> lst s "" (\h t -> parseNonEmpty r s))
 ------------------------------------------------------------------------
 
-Scott-encoding pairs implies `uncurry` is the T combinator, and `(.)` is
-an infix operator with the same meaning as the B combinator.
-Thus the above becomes:
+We implement Church booleans. For lists, deleting our `lst` helper makes the
+code appear to use Scott-encoded lists. We could have acted similarly for
+`Maybe`, but we save a few bytes with `must` and `maybe`: since we may
+substitute anything we like for `undefined`, each of `maybe undefined`, `maybe
+id`, and `must` become `C(TI)`.
+
+https://crypto.stanford.edu/~blynn/lambda/kiselyov.html[Bracket abstraction]
+yields:
+
+----------------------------------------------------------------
+must = C(TI)
+orChurch = B S(B B)
+isPre = S(B orChurch(eq ##))(eq #@)
+closes = S(B orChurch(eq #;))(eq #))
+glom = R(B(B Just)(B b(must(b(cons #`)))))(B B B)
+esc = B(B must)(R(R cons(B B b))(B B B))
+atom = S(B C(R id(R esc isPre))) cons
+comp = B C(B(B must) flip)
+sub = B(R Nothing)(R comp B)
+more = R atom(B S(B(C(eq #()) sub))
+switch = B(S(B S(C closes)))(S(B B(B C(B(B b) more)))(B glom))
+term = Y(B(B(B must))(B(B C) switch))
+parseNonEmpty = R Nothing(B term(B(C(B B(must id)))(B(cons #;))))
+parse = Y(B(S(T K))(B(B K)(B(B K) parseNonEmpty)))
+----------------------------------------------------------------
+
+We order parameters to reduce term sizes (via
+https://crypto.stanford.edu/~blynn/lambda/bohm.html[eta-equivalence]).
+Then we:
+
+  * Rewrite with prefix notation for application
+  * Replace `id const flip cons eq Nothing` with combinators `I K C : =`.
+  * Scott-encode `Nothing` and `Just` as `K` and `BKT`.
+  * Refer to the 'n'th function with `@` followed by the character with ASCII
+code 31 + 'n'.
 
 ------------------------------------------------------------------------
-``BCT;
+`C`TI;
 ``BS`BB;
-`Y``B`CS``B`B`C``BB:C;
-``B`R``BKK`BB;
-``C``BBB``S``BS@#``B`B`:#`@";
 ``S``B@!`=##`=#@;
-``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;
-``BC``B`B@&@$;
-``S``BC``B`BB``B`BT@$`TK;
 ``S``B@!`=#;`=#);
-``S``BC``B`BB``B`BB@)`=#(;
-``BC``S``BS``B`C``C@*@ @(@';
-`Y``B`B`C`T?@+;
-`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
+``R``B`B``BKT``BB`@ `B`:#```BBB;
+``B`B@ ``R``R:``BBB``BBB;
+``S``BC``RI``R@%@":;
+``BC``B`B@ C;
+``B`RK``R@'B;
+``R@&``BS``B`C`=#(@(;
+``B`S``BS`C@#``S``BB``BC``B`BB@)`B@$;
+`Y``B`B`B@ ``B`BC@*;
+``RK``B@+``B`C``BB`@ I`B`:#;;
+`Y``B`S`TK``B`BK``B`BK@,;
 ------------------------------------------------------------------------
 
 We added a newline after each semicolon for clarity; these must
@@ -284,7 +331,7 @@ terms.
 Our three compilers are the following:
 
 ------------------------------------------------------------------------
-``BCT;``BS`BB;`Y``B`CS``B`B`C``BB:C;``B`R``BKK`BB;``C``BBB``S``BS@#``B`B`:#`@";``S``B@!`T`##=`T`#@=;``B`S``BC``C``BS``C``BB@%``C`T?``B@ ``C:K`@ K``C``BBB:;``BC``B`B@&@$;``S``BC``B`BB``B`BT@$`TK;``S``B@!`T`#;=`T`#)=;``S``BC``B`BB``B`BB@)`T`#(=;``BC``S``BS``B`C``C@*@ @(@';`Y``B`B`C`T?@+;`Y``B`S`TK``B`BK``B`BK``B`C`@,K``B`C``BB@"`B`:#;;
+`C`TI;``BS`BB;``S``B@!`=##`=#@;``S``B@!`=#;`=#);``R``B`B``BKT``BB`@ `B`:#```BBB;``B`B@ ``R``R:``BBB``BBB;``S``BC``RI``R@%@":;``BC``B`B@ C;``B`RK``R@'B;``R@&``BS``B`C`=#(@(;``B`S``BS`C@#``S``BB``BC``B`BB@)`B@$;`Y``B`B`B@ ``B`BC@*;``RK``B@+``B`C``BB`@ I`B`:#;;`Y``B`S`TK``B`BK``B`BK@,;
 
 BKT;BCT;BS(BB);Y(B(CS)(B(B(C(BB:)))C));B(B@ )@!;B(C(TK))T;C(BB(B@%(C(BB(B@%(B@$))))));B@&@$;B@&(@'(KI));B@&(@'K);B(B(R@ ))S;B(BK)(B(BK)(B(BK)T));BK(B(BK)(B(BK)T));B(BK)(B(BK)(B(B(BK))(BCT)));B(BK)(B(BK)(B(BK)(BCT)));B(C(TK))(B(B(RK))(C(BS(BB))@$));B@/(BT=);@/(BC(S(B@"(=#;))(=#))));@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));Y(S(B@&(B(@'T)@3))@4);Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT=)))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));
 
