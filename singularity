@@ -46,12 +46,12 @@ expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
-rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
-show = @Y \r ds t -> t @I (rank ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
+rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)))) (@K v) ds # ;
+show f = @Y \r t -> t @I f (\x y -> @:#`(append (r x) (r y))) @?;
 
-isfree = @Y(\r v t -> t (\x -> @K @I) (\x -> lsteq v x) (\x y -> or (r v x) (r v y)) (\x y -> @C (or (lsteq v x) (@C (r v y)))));
-unlam = @Y(\r v t -> isfree v t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
+isfree f = @Y(\r t -> t (\x -> @K @I) f (\x y -> or (r x) (r y)) @?);
+unlam = @Y(\r v t -> isfree (lsteq v) t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
 babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
 
-dump = @Y \r tab ds -> ds @K \h t -> append (show tab (babs (h (@K @I)))) (@: #; (r tab t));
+dump = @Y \r tab ds -> ds @K \h t -> append (show (rank tab) (babs (h (@K @I)))) (@: #; (r tab t));
 main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));

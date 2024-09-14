@@ -275,13 +275,13 @@ must f s = case s of {[] -> undefined; h:t -> f h t}
 orChurch f g x y = f x (g x y)
 isPre h = orChurch (eq '#' h) (eq '@' h)
 closes h = orChurch (eq ';' h) (eq ')' h)
-glom tk acc f t = tk (Just (b (maybe id (b (cons '`')) acc) f)) t
+app rkon acc f t = rkon (Just (b (maybe id (b (cons '`')) acc) f)) t
 esc g f t = must (\th tt -> g (b f (cons th)) tt) t
 atom h gl t = isPre h esc id gl (cons h) t
 comp gl a t = maybe undefined (flip gl t) a
 sub r gl t = r (comp gl) Nothing t
 more r h gl t = eq '(' h (sub r) (atom h) gl t
-switch r kon h a t = closes h kon (b (more r h) (glom (r kon))) a t
+switch r kon h a t = closes h kon (b (more r h) (app (r kon))) a t
 term = fix (\r kon acc s -> must (\h t -> switch r kon h acc t) s)
 parseNonEmpty r s = term (\p t -> maybe id id p (cons ';' (r t))) Nothing s
 parse = fix (\r s -> lst s "" (\h t -> parseNonEmpty r s))
@@ -313,7 +313,6 @@ Nothing x _ = x;
 Just x f g = g x;
 P x y f = f x y;
 (||) f g x y = f x (g x y);
-(++) xs ys = xs ys (\x xt -> x : (xt ++ ys));
 pure x inp = Just (P x inp);
 bind f m = m Nothing (\x -> x f);
 (<*>) x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
@@ -328,75 +327,71 @@ L x y = \a b c d -> d x y;
 sat f inp = inp Nothing (\h t -> f h (pure h t) Nothing);
 char c = sat (\x -> x((==)c));
 var = sat (\c -> flip (c((==)';') || c((==)')')));
-pre = (:) <$> (char '#' <|> char '@') <*> (flip (:) const <$> sat (const const));
+pre = (.) . cons <$> (char '#' <|> char '@') <*> (cons <$> sat (const const))
 atom r = (char '(' *> (r <* char ')')) <|> (char '\\' *> (L <$> var) <*> (char '.' *> r)) <|> (R <$> pre) <|> (V <$> var);
 apps r = (((&) <$> atom r) <*> ((\vs v x -> vs (A x v)) <$> apps r)) <|> pure id;
 expr = ((&) <$> atom expr) <*> apps expr;
-show t = t id (\v -> v:[])(\x y -> '`':(show x ++ show y)) undefined;
-unlam v = fix (\r t -> t (\x -> A (V 'K') (R x)) (\x -> x((==)v) (V 'I') (A (V 'K') (V x))) (\x y -> A (A (V 'S') (r x)) (r y)) undefined);
-babs t = t R V (\x y -> A (babs x) (babs y)) (\x y -> unlam x (babs y));
-main s = (expr <* char ';') s "" (\p -> p (\x t -> show (babs x) ++ ";" ++ main t)));
+shows = fix(\r t -> t id cons (\x y -> b (b (cons '`') (r x)) (r y)) undefined);
+vCheck v x = eq v x (V 'I') (A (V 'K') (V x))
+unlam caseV = fix (\r t -> t (\x -> A (V 'K') (R x)) caseV (\x y -> A (A (V 'S') (r x)) (r y)) undefined)
+babs = fix (\r t -> t R V (\x y -> A (r x) (r y)) (\x y -> unlam (vCheck x) (r y)))
+main s = (fix (\r s -> (expr <* char ';') s id (\p -> p (\x t -> b (b (shows (babs x)) (cons ';')) (r t))))) s "";
 */
-"BKT;"
-"BCT;"
-"BS(BB);"
-"Y(B(CS)(B(B(C(BB:)))C));"
-"B(B@ )@!;"
+"B(B(BKT))(BCT);"
 "B(C(TK))T;"
-"C(BB(B@%(C(BB(B@%(B@$))))));"
-"B@&@$;"
-"B@&(@'(KI));"
-"B@&(@'K);"
-"B(B(R@ ))S;"
+"C(BB(B@!(C(BB(B@!(B@ ))))));"
+"B@\"@ ;"
+"B@\"(@#(KI));"
+"B@\"(@#K);"
+"B(B(R(BKT)))S;"
 "B(BK)(B(BK)(B(BK)T));"
 "BK(B(BK)(B(BK)T));"
 "B(BK)(B(BK)(B(B(BK))(BCT)));"
 "B(BK)(B(BK)(B(BK)(BCT)));"
-"B(C(TK))(B(B(RK))(C(BS(BB))@$));"
-"B@/(BT=);"
-"@/(BC(S(B@\"(=#;))(=#))));"
-"@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));"
-"C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);"
-"Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));"
-"Y(S(B@&(B(@'T)@3))@4);"
-"Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));"
-"BY(B(B(R?))(C(BB(BC(B(C(T(B(@-(@,#K))@+)))(C(BS(B(R(@,#I))(BT=)))(B(@-(@,#K))@,)))))(S(BC(B(BB)(B(B@-)(B(@-(@,#S))))))I)));"
-"Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@7)));"
-"Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@8))(:#;K)))))));"
+"B(C(TK))(B(B(RK))(C(BS(BB))@ ));"
+"B@+(BT=);"
+"@+(BC(S(B(BS(BB))(=#;))(=#))));"
+"@\"(@#(BB:)(@&(@,##)(@,#@)))(@#:(@+(KK)));"
+"C(B@&(C(B@&(S(B@&(B(@$(@,#())(C@%(@,#)))))(B(@\"(@$(@,#\\)(@#@*@-)))(@$(@,#.)))))(@#@'@.)))(@#@(@-);"
+"Y(B(R(@ I))(B(B@&)(B(S(B@\"(B(@#T)@/)))(B(@#(C(BBB)(C@))))))));"
+"Y(S(B@\"(B(@#T)@/))@0);"
+"Y(B(R?)(B(C(R:(TI)))(S(BC(B(BB)(B(BB)(B(B(:#`))))))I)));"
+"R(B(@)(@(#K))@()(BS(R(@(#I)));"
+"BY(B(B(R?))(R(S(BC(B(BB)(B(B@))(B(@)(@(#S))))))I)(BB(BC(C(T(B(@)(@(#K))@')))))));"
+"Y(S(BC(B(C(R@((T@')))(S(BC(B(BB)(B@))))I)))(C(BB(B@4(B@3=)))));"
+"RK(Y(B(C(RI(@%@1(@,#;))))(BT(C(BB(BB(R(:#;)(BB(B@2@5)))))))));"
 ;
 char *practically =
 // Same as above, except:
 /*
-occurs v t = t (\x -> (\_ y -> y)) (\x -> x(v(==))) (\x y -> occurs v x || occurs v y) undefined;
-unlam v t = occurs v t (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (unlam v x)) (unlam v y)) undefined) (A (V 'K') t);
+vCheck v = fix (\r t -> t (\x -> False) (\x -> v == x) (\x y -> r x || r y) undefined);
+unlam occurs = fix (\r t -> occurs t
+  (t undefined (const (V 'I')) (\x y -> A (A (V 'S') (r x)) (r y)) undefined)
+  (A (V 'K') t));
 */
-"BKT;"
-"BCT;"
-"BS(BB);"
-"Y(B(CS)(B(B(C(BB:)))C));"
-"B(B@ )@!;"
+"B(B(BKT))(BCT);"
 "B(C(TK))T;"
-"C(BB(B@%(C(BB(B@%(B@$))))));"
-"B@&@$;"
-"B@&(@'(KI));"
-"B@&(@'K);"
-"B(B(R@ ))S;"
+"C(BB(B@!(C(BB(B@!(B@ ))))));"
+"B@\"@ ;"
+"B@\"(@#(KI));"
+"B@\"(@#K);"
+"B(B(R(BKT)))S;"
 "B(BK)(B(BK)(B(BK)T));"
 "BK(B(BK)(B(BK)T));"
 "B(BK)(B(BK)(B(B(BK))(BCT)));"
 "B(BK)(B(BK)(B(BK)(BCT)));"
-"B(C(TK))(B(B(RK))(C(BS(BB))@$));"
-"B@/(BT=);"
-"@/(BC(S(B@\"(=#;))(=#))));"
-"@&(@':(@*(@0##)(@0#@)))(@'(C:K)(@/(KK)));"
-"C(B@*(C(B@*(S(B@*(B(@((@0#())(C@)(@0#)))))(B(@&(@((@0#\\)(@'@.@1)))(@((@0#.)))))(@'@+@2)))(@'@,@1);"
-"Y(B(R(@$I))(B(B@*)(B(S(B@&(B(@'T)@3)))(B(@'(C(BBB)(C@-)))))));"
-"Y(S(B@&(B(@'T)@3))@4);"
-"Y(B(R?)(B(C(C(TI)(C:K)))(B(B(B(:#`)))(S(BC(B(BB)(B@#)))I))));"
-"Y\\a.\\b.\\c.c(\\d.KI)(\\d.d(b=))(\\d.\\e.@\"(abd)(abe))?;"
-"Y\\a.\\b.\\c.@7bc(c?(K(@,#I))(\\d.\\e.@-(@-(@,#S)(abd))(abe))?)(@-(@,#K)c);"
-"Y(S(BC(B(C(C(T@+)@,))(S(BC(B(BB)(B@-)))I)))(C(BB@8)));"
-"Y(B(C(C(@)@5(@0#;))K))(BT(C(BB(B@#(C(B@#(B@6@9))(:#;K)))))));"
+"B(C(TK))(B(B(RK))(C(BS(BB))@ ));"
+"B@+(BT=);"
+"@+(BC(S(B(BS(BB))(=#;))(=#))));"
+"@\"(@#(BB:)(@&(@,##)(@,#@)))(@#:(@+(KK)));"
+"C(B@&(C(B@&(S(B@&(B(@$(@,#())(C@%(@,#)))))(B(@\"(@$(@,#\\)(@#@*@-)))(@$(@,#.)))))(@#@'@.)))(@#@(@-);"
+"Y(B(R(@ I))(B(B@&)(B(S(B@\"(B(@#T)@/)))(B(@#(C(BBB)(C@))))))));"
+"Y(S(B@\"(B(@#T)@/))@0);"
+"Y(B(R?)(B(C(R:(TI)))(S(BC(B(BB)(B(BB)(B(B(:#`))))))I)));"
+"\\f.Y(\\r.\\t.t(\\x.KI)f(\\x.\\y.BS(BB)(rx)(ry))?);"
+"\\f.Y(\\r.\\t.ft(t?(K(@(#I))(\\x.\\y.@)(@)(@(#S)(rx))(ry))?)(@)(@(#K)t));"
+"Y(S(BC(B(C(R@((T@')))(S(BC(B(BB)(B@))))I)))(C(BB(B@4(B@3=)))));"
+"RK(Y(B(C(RI(@%@1(@,#;))))(BT(C(BB(BB(R(:#;)(BB(B@2@5)))))))));"
 ;
 
 void runTests() {

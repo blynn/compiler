@@ -15,7 +15,7 @@ assembly.)
 
 Our language is now friendly enough that we are willing to work in it
 with our bare hands. However, bootstrapping to reach this singularity requires
-manual labour. To obtain input acceptable to our previous compiler, we must
+manual labour. To obtain input acceptable to our previous compiler, we:
 
   * Remove spaces and newlines.
   * Remove comments.
@@ -24,8 +24,8 @@ manual labour. To obtain input acceptable to our previous compiler, we must
   * Rewrite `foo x y =` as `\x.\y.`
   * Rewrite `+\x y ->+` as `\x.\y.`
   * Replace defined symbols with `@` and a character indicating where they
-  appeared: we refer to the _n_th definition with the character with ASCII code
-  _n_ + 31.
+  appeared: we refer to the nth definition with the character with ASCII code
+  n + 31.
 
 This can be done by hand, though it's probably best to use `sed` and `awk` to
 generate a lookup table.
@@ -82,10 +82,7 @@ by a space if and only if it's the equals sign of a definition.
 
 However, while it's feasible to manually convert our code to lambda terms and
 `@` references, this grows tiresome and error-prone if we often make changes
-to our source. Indeed, it is already difficult to keep the above lookup table
-in sync.
-
-Thus we use `sed` and `awk` to automate these edits.
+to our source. Thus we use `sed` and `awk` to automate these edits.
 
 ----------------------------------------------------------------
 include::bootsingularity.sh[]
