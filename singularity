@@ -39,7 +39,7 @@ var = spc ( some (sat (\x -> and (#z(x @L)) (x(#a @L)) )));
 anyone = fmap (@:) (spc (sat (@K @K)));
 pre = ap (alt (fmap (@K @I) (char #@)) (fmap (@B @B @:) (char ##))) anyone;
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
-atom r = alt (alt (fmap lcv var) (fmap lcr pre)) (alt (liftki (spch #() (liftk r (spch #)))) (lam r));
+atom r = alt (fmap lcv var) (alt (liftki (spch #() (liftk r (spch #)))) (alt (fmap lcr pre) (lam r)));
 apps = @Y \f r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (f r))) (pure @I);
 expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
@@ -52,5 +52,5 @@ isfree f = @Y \r t -> t (\x -> @K @I) f (\x y -> or (r x) (r y)) @?;
 unlam f = @Y \r t -> f t (t @? (@K (lcr (@:#I))) (\x y -> lca (lca (lcr (@:#S)) (r x)) (r y)) @?) (lca (lcr (@:#K)) t);
 babs = @Y \r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam (isfree (lsteq x)) (r y));
 
-dump tab = foldr (\h t -> @B (@B (shows (rank tab) (babs (h (@K @I)))) (@:#;)) t) @I tab;
-main s = program s (@:#?) (@B dump (@T @K)) @K;
+dump tab = foldr (\h t -> shows (rank tab) (babs (h (@K @I))) (@:#;t)) @K tab;
+main s = program s (@:#?@K) (@B dump (@T @K));
