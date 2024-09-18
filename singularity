@@ -3,55 +3,54 @@
 ------------------------------------------------------------------------
 
 or f g x y = f x (g x y);
-lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
-foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
-append = @C (foldr @:);
+lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 pair x y f = f x y;
 just x f g = g x;
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+
 pure x s = just (pair x s);
-sat f s = s @K (\h t -> f h (pure h t) @K);
 bind f m = m @K (\x -> x f);
 ap x y = \s -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x s);
 fmap f x = ap (pure f) x;
 alt x y = \s -> (x s) (y s) just;
-
 liftaa f x y = ap (fmap f x) y;
 many = @Y \r p -> alt (liftaa @: p (r p)) (pure @K);
 some p = liftaa @: p (many p);
-
-char c = sat (\x -> x(c(@=)));
 liftki = liftaa (@K @I);
 liftk = liftaa @K;
-com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
-(@=)))))) (char #
-)));
-sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
-(@=))))) com);
-spc f = liftk f sp;
-spch = @B spc char;
-and f g x y = @C f y (g x y);
-var = spc ( some (sat (\x -> and (#z(x(@L))) (x(#a(@L))) )));
+sat f s = s @K (\h t -> f h (pure h t) @K);
+char c = sat (\x -> x(c @=));
+
 lcr s   = \a b c d -> a s;
 lcv v   = \a b c d -> b v;
 lca x y = \a b c d -> c x y;
 lcl x y = \a b c d -> d x y;
 
-anyone = fmap (@C @: @K) (spc (sat (@K @K)));
-pre = alt (liftki (char #@) anyone) (liftaa @: (char ##) anyone);
+com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
+@=))))) (char #
+)));
+sp = many (alt (sat (\c -> or (c(# @=)) (c(#
+@=)))) com);
+spc f = liftk f sp;
+spch = @B spc char;
+and f g x y = @C f y (g x y);
+var = spc ( some (sat (\x -> and (#z(x @L)) (x(#a @L)) )));
+
+anyone = fmap (@:) (spc (sat (@K @K)));
+pre = ap (alt (fmap (@K @I) (char #@)) (fmap (@B @B @:) (char ##))) anyone;
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
-atom r = alt (alt (alt (liftki (spch #() (liftk r (spch #)))) (lam r)) (fmap lcr pre)) (fmap lcv var);
+atom r = alt (alt (fmap lcv var) (fmap lcr pre)) (alt (liftki (spch #() (liftk r (spch #)))) (lam r));
 apps = @Y \f r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (f r))) (pure @I);
 expr = @Y \r -> liftaa @T (atom r) (apps r);
-
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
-rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)))) (@K v) ds # ;
-show f = @Y \r t -> t @I f (\x y -> @:#`(append (r x) (r y))) @?;
+rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @B (@:#@) (@:n)) (@B t \n -> #0(#1 @-)(n @+))) @? ds # ;
+shows f = @Y \r t -> t @I f (\x y -> @B (@B (@:#`) (r x)) (r y)) @?;
 
-isfree f = @Y(\r t -> t (\x -> @K @I) f (\x y -> or (r x) (r y)) @?);
-unlam = @Y(\r v t -> isfree (lsteq v) t (t @? (@K (lcr (@:#I@K))) (\x y -> lca (lca (lcv (@:#S@K)) (r v x)) (r v y)) @?) (lca (lcv (@:#K@K)) t));
-babs = @Y(\r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam x (r y)));
+isfree f = @Y \r t -> t (\x -> @K @I) f (\x y -> or (r x) (r y)) @?;
+unlam f = @Y \r t -> f t (t @? (@K (lcr (@:#I))) (\x y -> lca (lca (lcr (@:#S)) (r x)) (r y)) @?) (lca (lcr (@:#K)) t);
+babs = @Y \r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam (isfree (lsteq x)) (r y));
 
-dump = @Y \r tab ds -> ds @K \h t -> append (show (rank tab) (babs (h (@K @I)))) (@: #; (r tab t));
-main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
+dump tab = foldr (\h t -> @B (@B (shows (rank tab) (babs (h (@K @I)))) (@:#;)) t) @I tab;
+main s = program s (@:#?) (@B dump (@T @K)) @K;
