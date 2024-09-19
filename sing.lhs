@@ -15,7 +15,7 @@ assembly.)
 
 Our language is now friendly enough that we are willing to work in it
 with our bare hands. However, bootstrapping to reach this singularity requires
-manual labour. To obtain input acceptable to our previous compiler, we:
+more effort. For the sake of our previous compiler, we:
 
   * Remove spaces and newlines.
   * Remove comments.
@@ -27,8 +27,11 @@ manual labour. To obtain input acceptable to our previous compiler, we:
   appeared: we refer to the nth definition with the character with ASCII code
   n + 31.
 
-This can be done by hand, though it's probably best to use `sed` and `awk` to
-generate a lookup table.
+Doing this by hand, while feasible, grows tiresome and error-prone if we often
+make changes. Thus we automate with `sed` and `awk`, which are great tools for
+the job. For example, we can generate a lookup table, where we assume an equals
+sign is preceded by a space if and only if it's the equals sign of a
+definition.
 
 ----------------------------------------------------------------
 $ cat singularity | sed  -n '/.* =/{s/ .*//;p}' | awk '{printf "@%c",NR+31; print " " $0}'
@@ -77,18 +80,13 @@ $ cat singularity | sed  -n '/.* =/{s/ .*//;p}' | awk '{printf "@%c",NR+31; prin
 @J main
 ----------------------------------------------------------------
 
-This is a little brittle, as our regex assumes the an equals sign is preceded
-by a space if and only if it's the equals sign of a definition.
-
-However, while it's feasible to manually convert our code to lambda terms and
-`@` references, this grows tiresome and error-prone if we often make changes
-to our source. Thus we use `sed` and `awk` to automate these edits.
+Then the following script performs our list of chores.
 
 ----------------------------------------------------------------
 include::bootsingularity.sh[]
 ----------------------------------------------------------------
 
-This comes at the expense of more brittleness and gotchas. For example:
+Caveats:
 
   * We assume there are at most 5 variables in a lambda. One regex
   rewrites `+\a .. y z ->+` as `+\a .. y -> \z.+`, and we simply repeat this

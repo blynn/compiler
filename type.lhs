@@ -69,6 +69,41 @@ rejecting duplicate definitions.
 include::typically.hs[]
 ---------
 
+Compilng this code takes (very roughly) three times as much time and memory to
+than its predecessor, which perhaps is reasonable as the source is
+substantially longer and we chose several slow algorithms for the sake of
+simplicity.
+
+However, this compiler takes about eight times more time and space to build
+its successor.
+
+The new type checking phase certainly deserves blame, as does the even larger
+size of the next compiler. But there is a subtler source of drag. More syntax
+sugar; more problems. While functions such as `($)` let us reduce clutter in
+our code, our bracket abstraction routine sees it as an opaque symbol,
+hampering optimization. Laziness helps somewhat: we find `($)` compiles to the
+I combinator, and the first time the VM reduces something like `Ifx` it
+replaces all references to it with `fx`.
+
+This is too little too late. As bracket abstraction fails to recognize `($)` is
+the identity, it adds superfluous combinators. For example:
+
+----------------------------------------------------------------
+\x y -> f x $ g y
+----------------------------------------------------------------
+
+becomes:
+
+----------------------------------------------------------------
+R g(B B(B ($) f))
+----------------------------------------------------------------
+
+when it should just be:
+
+----------------------------------------------------------------
+R g(B B f)
+----------------------------------------------------------------
+
 == Classy ==
 
 In the worst case, types are a burden, and force us to wrestle with the

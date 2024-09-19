@@ -100,8 +100,8 @@ Suppose two nodes X and Y point to the same subterm T. On reducing X, our
 left Y pointing to T (reminiscent of copy-on-write).
 
 Instead, we should simply replace T with U so that reducing either one of X
-or Y causes both to point to U afterwards. This strategy is known as 'lazy
-evaluation', and our `lazy` function below carries it out.
+or Y causes both to point to U afterwards. This strategy is known as _lazy
+evaluation_, and our `lazy` function below carries it out.
 
 Even though the result is the same, we see this order as different to normal
 order, because we reduce both X and Y (and possibly other nodes) even if they

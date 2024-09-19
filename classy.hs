@@ -138,8 +138,8 @@ eqAssoc x y = case x of
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
   ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
-precOf s precTab = fmaybe (lstLookup s precTab) 9 fst;
-assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
+precOf s precTab = maybe 9 fst (lstLookup s precTab);
+assocOf s precTab = maybe LAssoc snd (lstLookup s precTab);
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
 opFold precTab e xs = case xs of
   { [] -> e

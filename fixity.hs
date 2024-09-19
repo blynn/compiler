@@ -32,15 +32,12 @@ wrap c = c:[];
 
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
-fpair p = \f -> case p of { (,) x y -> f x y };
-second f p = fpair p \x y -> (x, f y);
-fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
+uncurry f p = case p of { (,) x y -> f x y };
+second f = uncurry \x y -> (x, f y);
+maybe n j m = case m of { Nothing -> n; Just x -> j x };
 
 pure x = \inp -> Just (x, inp);
-bind f m = case m of
-  { Nothing -> Nothing
-  ; Just x -> fpair x f
-  };
+bind f = maybe Nothing (uncurry f);
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 (<*>) = ap;
 fmap f x = ap (pure f) x;
@@ -110,13 +107,13 @@ isFree v expr = case expr of
   };
 maybeFix s x = (s, ife (isFree s x) (A (R "Y") (L s x)) x);
 def r = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
-addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) def)) x ls;
+addLets ls x = foldr (\p t -> uncurry (\name def -> A (L name t) def) p) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 
 atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
 aexp r = fmap (foldl1 A) (some (atom r));
 fix f = f (fix f);
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+lstLookup s = foldr (\h t -> uncurry (\k v -> ife (lstEq s k) (Just v) t) h) Nothing;
 
 data Assoc = NAssoc | LAssoc | RAssoc;
 eqAssoc x y = case x of
@@ -124,19 +121,19 @@ eqAssoc x y = case x of
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
   ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
-precOf s precTab = fmaybe (lstLookup s precTab) 9 fst;
-assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
+precOf s precTab = maybe 9 fst (lstLookup s precTab);
+assocOf s precTab = maybe LAssoc snd (lstLookup s precTab);
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
 opFold precTab e xs = case xs of
   { [] -> e
   ; (:) x xt -> case find (\y -> not (eqAssoc (assocOf (fst x) precTab) (assocOf (fst y) precTab))) xt of
     { Nothing -> case assocOf (fst x) precTab of
       { NAssoc -> case xt of
-        { [] -> fpair x (\op y -> A (A (V op) e) y)
+        { [] -> uncurry (\op y -> A (A (V op) e) y) x
         ; (:) y yt -> undefined
         }
-      ; LAssoc -> foldl (\a b -> fpair b (\op y -> A (A (V op) a) y)) e xs
-      ; RAssoc -> (foldr (\a b -> fpair a (\op y -> \e -> A (A (V op) e) (b y))) id xs) e
+      ; LAssoc -> foldl (\a b -> uncurry (\op y -> A (A (V op) a) y) b) e xs
+      ; RAssoc -> (foldr (\a b -> uncurry (\op y -> \e -> A (A (V op) e) (b y)) a) id xs) e
       }
     ; Just y -> undefined
     }
@@ -145,9 +142,9 @@ expr precTab = fix \r n -> ife (n <= 9) (liftA2 (opFold precTab) (r (succ n)) (m
 
 aType = (undefined <$> paren (some aType <* ((spch ',' *> some aType) <|> pure []) )) <|> (undefined <$> (conId <|> varId)) <|> (undefined <$> between (spch '[') (spch ']') aType);
 map = flip (foldr . ((.) (:))) [];
-dataDefs cs = map (\cas -> fpair cas (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs)))) cs;
+dataDefs cs = map (\cas -> uncurry (\c as -> (c, foldr L (foldl (\a b -> A a (V b)) (V c) as) (as ++ map fst cs))) cas) cs;
 
-dataArgs = (snd . foldl (\p u -> fpair p (\s l -> ('x':s, s : l))) ("x", [])) <$> many aType;
+dataArgs = (snd . foldl (\p u -> uncurry (\s l -> ('x':s, s : l)) p) ("x", [])) <$> many aType;
 adt = between (keyword "data") (spch '=') (conId *> many varId) *> (dataDefs <$> (sepBy ((,) <$> conId <*> dataArgs) (spch '|')));
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
@@ -233,4 +230,4 @@ shows f t = case t of
   ; L w t -> undefined
   };
 dump tab = foldr (\h t -> shows (rank tab) (nolam (snd h)) (';':t)) "" tab;
-compile s = fmaybe (program s) "?" (dump . insPrim . fst);
+compile s = maybe "?" (dump . insPrim . fst) (program s);

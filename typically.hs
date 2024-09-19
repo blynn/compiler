@@ -16,10 +16,11 @@ flip f x y = f y x;
 data Bool = True | False;
 data Maybe a = Nothing | Just a;
 fpair p = \f -> case p of { (,) x y -> f x y };
+uncurry f p = case p of { (,) x y -> f x y };
 fst p = case p of { (,) x y -> x };
 snd p = case p of { (,) x y -> y };
-first f p = fpair p \x y -> (f x, y);
-second f p = fpair p \x y -> (x, f y);
+first f = uncurry \x y -> (f x, y);
+second f = uncurry \x y -> (x, f y);
 ife a b c = case a of { True -> b ; False -> c };
 not a = case a of { True -> False; False -> True };
 (.) f g x = f (g x);
@@ -42,8 +43,8 @@ wrap c = c:[];
 map = flip (foldr . ((:) .)) [];
 concatMap = (concat .) . map;
 any f xs = foldr (\x t -> ife (f x) True t) False xs;
-fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
+maybe n j m = case m of { Nothing -> n; Just x -> j x };
+lstLookup s = foldr (\h t -> uncurry (\k v -> ife (lstEq s k) (Just v) t) h) Nothing;
 
 data Ast = R String | V String | A Ast Ast | L String Ast;
 
@@ -52,7 +53,7 @@ sat' f = \h t -> ife (f h) (pure h t) Nothing;
 sat f inp = flst inp Nothing (sat' f);
 bind f m = case m of
   { Nothing -> Nothing
-  ; Just x -> fpair x f
+  ; Just x -> uncurry f x
   };
 ap x y = \inp -> bind (\a t -> bind (\b u -> pure (a b) u) (y t)) (x inp);
 (<*>) = ap;
@@ -119,7 +120,7 @@ isFree v expr = case expr of
   };
 maybeFix s x = (s, ife (isFree s x) (A (V "\\Y") (L s x)) x);
 def r = liftA2 maybeFix var (liftA2 (flip (foldr L)) (many varId) (spch '=' *> r));
-addLets ls x = foldr (\p t -> fpair p (\name def -> A (L name t) def)) x ls;
+addLets ls x = foldr (\p t -> uncurry (\name def -> A (L name t) def) p) x ls;
 letin r = addLets <$> between (keyword "let") (keyword "in") (braceSep (def r)) <*> r;
 
 atom r = letin r <|> sqLst r <|> section r <|> cas r <|> lam r <|> (paren (spch ',') *> pure (V ",")) <|> fmap V (conId <|> var) <|> lit;
@@ -132,19 +133,19 @@ eqAssoc x y = case x of
   ; LAssoc -> case y of { NAssoc -> False ; LAssoc -> True  ; RAssoc -> False }
   ; RAssoc -> case y of { NAssoc -> False ; LAssoc -> False ; RAssoc -> True }
   };
-precOf s precTab = fmaybe (lstLookup s precTab) 9 fst;
-assocOf s precTab = fmaybe (lstLookup s precTab) LAssoc snd;
+precOf s precTab = maybe 9 fst (lstLookup s precTab);
+assocOf s precTab = maybe LAssoc snd (lstLookup s precTab);
 opWithPrec precTab n = wantWith (\s -> n == precOf s precTab) op;
 opFold precTab e xs = case xs of
   { [] -> e
   ; (:) x xt -> case find (\y -> not (eqAssoc (assocOf (fst x) precTab) (assocOf (fst y) precTab))) xt of
     { Nothing -> case assocOf (fst x) precTab of
       { NAssoc -> case xt of
-        { [] -> fpair x (\op y -> A (A (V op) e) y)
+        { [] -> uncurry (\op y -> A (A (V op) e) y) x
         ; (:) y yt -> undefined
         }
-      ; LAssoc -> foldl (\a b -> fpair b (\op y -> A (A (V op) a) y)) e xs
-      ; RAssoc -> (foldr (\a b -> fpair a (\op y -> \e -> A (A (V op) e) (b y))) id xs) e
+      ; LAssoc -> foldl (\a b -> uncurry (\op y -> A (A (V op) a) y) b) e xs
+      ; RAssoc -> (foldr (\a b -> uncurry (\op y -> \e -> A (A (V op) e) (b y)) a) id xs) e
       }
     ; Just y -> undefined
     }
@@ -187,7 +188,7 @@ conOf con = case con of { Constr s _ -> s };
 mkCase t cs = (concatMap (('|':) . conOf) cs,
   ( arr t $ foldr arr (TV "case") $ map (\c -> case c of { Constr _ ts -> foldr arr (TV "case") ts}) cs
   , L "x" $ V "x"));
-mkStrs = snd . foldl (\p u -> fpair p (\s l -> ('@':s, s : l))) ("@", []);
+mkStrs = snd . foldl (\p u -> uncurry (\s l -> ('@':s, s : l)) p) ("@", []);
 -- For example, creates `Just = \x a b -> b x`.
 scottEncode vs s ts = foldr L (foldl (\a b -> A a (V b)) (V s) ts) (ts ++ vs);
 scottConstr t cs c = case c of { Constr s ts -> (s,
@@ -284,13 +285,13 @@ nolam x = case babs (debruijn [] x) of
   };
 
 dump tab = foldr (\h t -> shows (rank tab) (nolam (snd h)) (';':t)) "" tab;
-asm prog = dump $ fpair prog \typed defs -> map (second snd) typed ++ defs;
+asm = dump . uncurry \typed defs -> map (second snd) typed ++ defs;
 
-compile s = fmaybe ((asm <$> program) s) "?" fst;
+compile s = maybe "?" fst $ (asm <$> program) s;
 
 apply sub t = case t of
   { TC v -> t
-  ; TV v -> fmaybe (lstLookup v sub) t id
+  ; TV v -> maybe t id $ lstLookup v sub
   ; TAp a b -> TAp (apply sub a) (apply sub b)
   };
 
@@ -322,9 +323,9 @@ mgu unify t u = case t of
     }
   };
 
-maybeMap f m = fmaybe m Nothing (Just . f);
+maybeMap f = maybe Nothing (Just . f);
 
-unify a b m = fmaybe m Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s b));
+unify a b = maybe Nothing \s -> maybeMap (@@ s) (mgu unify (apply s a) (apply s b));
 
 --instantiate' :: Type -> Int -> [(String, Type)] -> ((Type, Int), [(String, Type)])
 instantiate' t n tab = case t of
@@ -345,11 +346,13 @@ instantiate t n = fst (instantiate' t n []);
 --type SymTab = [(String, (Type, Ast))];
 --type Subst = [(String, Type)];
 --infer' :: SymTab -> Subst -> Ast -> (Maybe Subst, Int) -> (Type, (Maybe Subst, Int))
-infer' typed loc ast csn = fpair csn \cs n ->
+infer' typed loc ast = uncurry \cs n ->
   let { va = TV ('_':showInt n "") } in case ast of
-  { R s -> (TC "Int", csn)
-  ; V s -> fmaybe (lstLookup s loc) (fmaybe (lstLookup s typed) undefined
-    (\ta -> second (cs,) (instantiate (fst ta) n))) (, csn)
+  { R s -> (TC "Int", (cs, n))
+  ; V s -> maybe
+    (maybe undefined (\ta -> second (cs,) (instantiate (fst ta) n)) (lstLookup s typed))
+    (, (cs, n))
+    (lstLookup s loc)
   ; A x y ->
     fpair (infer' typed loc x (cs, n + 1)) \tx csn1 ->
     fpair (infer' typed loc y csn1) \ty csn2 ->
@@ -357,7 +360,7 @@ infer' typed loc ast csn = fpair csn \cs n ->
   ; L s x -> first (TAp (TAp (TC "->") va)) (infer' typed ((s, va):loc) x (cs, n + 1))
   };
 
-apSub tsn = fpair tsn \ty msn -> fpair msn \ms _ -> maybeMap (flip apply ty) ms;
+apSub = uncurry \ty -> uncurry \ms _ -> maybeMap (flip apply ty) ms;
 
 data Either a b = Left a | Right b;
 
@@ -367,7 +370,7 @@ inferDefs typed defs = flst defs (Right typed) \def rest -> fpair def \s expr ->
     ; Just t -> inferDefs ((s, (t, expr)) : typed) rest
     };
 
-infer prog = fpair prog inferDefs;
+infer = uncurry inferDefs;
 
 showType t = case t of
   { TC s -> s
@@ -375,14 +378,12 @@ showType t = case t of
   ; TAp a b -> concat ["(", showType a, " ", showType b, ")"]
   };
 
-dumpTypes s = fmaybe (program s) "parse error" \progRest ->
-  fpair progRest \prog rest -> case infer prog of
+dumpTypes s = maybe "parse error" (uncurry \prog rest -> case infer prog of
   { Left err -> err
-  ; Right typed -> concatMap (\p -> fpair p \s ta -> s ++ " :: " ++ showType (fst ta) ++ "\n") typed
-  };
+  ; Right typed -> concatMap (uncurry \s ta -> s ++ " :: " ++ showType (fst ta) ++ "\n") typed
+  }) (program s);
 
-typedCompile s = fmaybe (program s) "parse error" \progRest ->
-  fpair progRest \prog rest -> case infer prog of
+typedCompile s = maybe "parse error" (uncurry \prog rest -> case infer prog of
   { Left err -> err
   ; Right _ -> asm prog
-  };
+  }) (program s);

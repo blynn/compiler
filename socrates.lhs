@@ -143,7 +143,7 @@ demoOddXs = runDfa oddXs "xxxxx"
 
 How many states should we allow? We could say there is one state for every
 possible configuration of the computer save the input, but then we'd simply be
-pushing a problem elsewhere. How can we reason about a automaton with so
+pushing a problem elsewhere. How can we reason about an automaton with so
 many states? Thus the number of states should be relatively small.
 
 We quickly find
