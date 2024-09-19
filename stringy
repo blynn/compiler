@@ -5,16 +5,10 @@
 
 or f g x y = f x (g x y);
 and f g x y = @C f y (g x y);
-lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y(@=)) (r xt yt a b) b));
+lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 pair x y f = f x y;
 just x f g = g x;
 foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
-append = @C (foldr @:);
-
-lcr s   = \a b c d -> a s;
-lcv v   = \a b c d -> b v;
-lca x y = \a b c d -> c x y;
-lcl x y = \a b c d -> d x y;
 
 pure x inp = just (pair x inp);
 bind f m = m @K (\x -> x f);
@@ -28,34 +22,37 @@ liftki = liftaa (@K @I);
 liftk = liftaa @K;
 between x y p = liftki x (liftk p y);
 sat f inp = inp @K (\h t -> f h (pure h t) @K);
+char c = sat (\x -> x(c @=));
 
-char c = sat (\x -> x(c(@=)));
-com = liftki (char #-) (between (char #-) (char #
+lcr s   = \a b c d -> a s;
+lcv v   = \a b c d -> b v;
+lca x y = \a b c d -> c x y;
+lcl x y = \a b c d -> d x y;
+raw x = lcr (@: x);
+
+com = between (liftki (char #-) (char #-)) (char #
 ) (many (sat (\c -> @C (c(#
-(@=)))))));
+@=)))));
 sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
 (@=))))) com);
 spc f = liftk f sp;
 spch = @B spc char;
 var = spc (some (sat (\x -> or
-  (and (#z(x(@L))) (x(#a(@L))))
-  (and (#Z(x(@L))) (x(#A(@L))))
+  (and (#z(x @L)) (x(#a @L)))
+  (and (#Z(x @L)) (x(#A @L)))
   )));
-anyone = fmap (@C @: @K) (spc (sat (@K @K)));
-pre = liftki (char #@) anyone;
+pre = liftki (char #@) (fmap (@:) (spc (sat (@K @K))));
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
-rawcom x = lcr (@: x @K);
-consexpr = rawcom #:;
-constexpr = rawcom #K;
-listify = fmap (foldr (\h t -> lca (lca consexpr h) t) constexpr);
-escchar = liftki (char #\) (alt (sat (\c -> or (c(#"(@=))) (or (c(#\(@=))) (c(#'(@=)))))) (fmap (@K #
+listify = fmap (foldr (\h t -> lca (lca (raw #:) h) t) (raw #K));
+escchar = liftki (char #\) (alt (sat (\c -> or (c(#" @=)) (or (c(#\ @=)) (c(#' @=))))) (fmap (@K #
 ) (char #n)));
-litone delim = fmap (@B lcr (@B (@: ##) (@C @: @K))) (alt escchar (sat (\c -> @C (delim(c(@=))))));
+litone delim = fmap (\x -> lcr (@B (@: ##) (@: x))) (alt escchar (sat (\c -> @C (delim(c @=)))));
 litstr = listify (between (char #") (spch #") (many (litone #")));
 litchar = between (char #') (spch #') (litone #');
 lit = alt litstr litchar;
-atom r = alt (alt (alt (alt (between (spch #() (spch #)) r) (lam r)) (fmap lcr pre)) (fmap lcv var)) lit;
-apps = @Y \rr r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (rr r))) (pure @I);
+atom r = alt (fmap lcv var) (alt (between (spch #() (spch #)) r) (alt (fmap lcr pre) (alt (lam r) lit)));
+
+apps = @Y \f r -> alt (liftaa @T (atom r) (fmap (\vs v x -> vs (lca x v)) (f r))) (pure @I);
 expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
@@ -79,30 +76,30 @@ need = \x a b c d -> c x;
 weak = \x a b c d -> d x;
 
 ldef = \r y -> y
-  (need (closed (lca (lca (rawcom #S) (rawcom #I)) (rawcom #I))))
-  (\d -> need (closed (lca (rawcom #T) d)))
-  (\e -> need (r (closed (lca (rawcom #S) (rawcom #I))) e))
-  (\e -> need (r (closed (rawcom #T)) e))
+  (need (closed (lca (lca (raw #S) (raw #I)) (raw #I))))
+  (\d -> need (closed (lca (raw #T) d)))
+  (\e -> need (r (closed (lca (raw #S) (raw #I))) e))
+  (\e -> need (r (closed (raw #T)) e))
   ;
 
 lclo = \r d y -> y
   (need (closed d))
   (\dd -> closed (lca d dd))
-  (\e -> need (r (closed (lca (rawcom #B) d)) e))
+  (\e -> need (r (closed (lca (raw #B) d)) e))
   (\e -> weak (r (closed d) e))
   ;
 
 lnee = \r e y -> y
-  (need (r (r (closed (rawcom #S)) e) (closed (rawcom #I))))
-  (\d -> need (r (closed (lca (rawcom #R) d)) e))
-  (\ee -> need (r (r (closed (rawcom #S)) e) ee))
-  (\ee -> need (r (r (closed (rawcom #C)) e) ee))
+  (need (r (r (closed (raw #S)) e) (closed (raw #I))))
+  (\d -> need (r (closed (lca (raw #R) d)) e))
+  (\ee -> need (r (r (closed (raw #S)) e) ee))
+  (\ee -> need (r (r (closed (raw #C)) e) ee))
   ;
 
 lwea = \r e y -> y
   (need e)
   (\d -> weak (r e (closed d)))
-  (\ee -> need (r (r (closed (rawcom #B)) e) ee))
+  (\ee -> need (r (r (closed (raw #B)) e) ee))
   (\ee -> weak (r e ee))
   ;
 
@@ -118,16 +115,17 @@ babs = @Y \r t -> t
   (@B weak r)
   closed
   (\t -> r t
-    (closed (rawcom #I))
-    (\d -> closed (lca (rawcom #K) d))
+    (closed (raw #I))
+    (\d -> closed (lca (raw #K) d))
     @I
-    (babsa (closed (rawcom #K))))
+    (babsa (closed (raw #K))))
   (\x y -> babsa (r x) (r y))
   ;
 
 nolam x = babs (debruijn @K x) @? @I @? @?;
 
-rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @: #@ (@: n @K)) (@B t \n -> # (#!(@-))(n(@+)) )) (@K v) ds # ;
-show = @Y \r ds t -> t @I (rank ds) (\x y -> @:#`(append (r ds x) (r ds y))) @?;
-dump = @Y \r tab ds -> ds @K \h t -> append (show tab (nolam (h (@K @I)))) (@: #; (r tab t));
-main s = program s (@:#?@K) (@B (\ds -> dump ds ds) (@T @K));
+-- Code generator.
+rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @B (@:#@) (@:n)) (@B t \n -> #0(#1 @-)(n @+))) @? ds # ;
+shows f = @Y \r t -> t @I f (\x y -> @B (@B (@:#`) (r x)) (r y)) @?;
+dump tab = foldr (\h t -> shows (rank tab) (nolam (h (@K @I))) (@:#;t)) @K tab;
+main s = program s (@:#?@K) (@B dump (@T @K));

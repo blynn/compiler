@@ -226,7 +226,7 @@ code is silently produced.
 
 We add support for default methods as it involves the same code.  Our simple
 approach insists the type of the default implementation of a method in a class
-`Foo` to have the constraint of the form `Foo a =>`, because we always pass a
+`Foo` to have the constraint of the form `+Foo a =>+`, because we always pass a
 dictionary as the first argument. We could improve this slightly by inserting
 `const` in the syntax tree if we deduce no constraints are present.
 

@@ -32,7 +32,6 @@ snd p = case p of { Pair x y -> y };
 second f p = fpair p \x y -> Pair x (f y);
 data Maybe a = Nothing | Just a;
 fmaybe m n j = case m of { Nothing -> n; Just x -> j x };
-lstLookup s = foldr (\h t -> fpair h (\k v -> ife (lstEq s k) (Just v) t)) Nothing;
 
 pure x = \inp -> Just (Pair x inp);
 bind f m = case m of
@@ -79,7 +78,7 @@ var = varId <|> paren (spc opLex);
 lam r = spch '\\' *> liftA2 (flip (foldr L)) (some varId) (char '-' *> (spch '>' *> r));
 listify = fmap (foldr (\h t -> A (A (R ":") h) t) (R "K"));
 escChar = char '\\' *> ((sat (\c -> elem c "'\"\\")) <|> ((\c -> '\n') <$> char 'n'));
-litOne delim = fmap (\c -> R ('#':(wrap c))) (escChar <|> sat (\c -> not (c == delim)));
+litOne delim = fmap (\c -> R ('#':wrap c)) (escChar <|> sat (\c -> not (c == delim)));
 litInt = R . ('(':) . (++ ")") <$> spc (some digit);
 litStr = listify (between (char '"') (spch '"') (many (litOne '"')));
 litChar = between (char '\'') (spch '\'') (litOne '\'');
@@ -182,14 +181,13 @@ nolam x = case babs (debruijn [] x) of
   ; Weak e -> undefined
   };
 
-primTab = Pair "," "``BCT" : (Pair "ord" "I" : (Pair "succ" "`T`(1)+" : map (second ("``BT`T" ++)) [Pair "<=" "L", Pair "==" "=", Pair "-" "-", Pair "+" "+", Pair "*" "*"]));
-prim s = fmaybe (lstLookup s primTab) s id;
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
-show ds t = case t of
-  { R s -> s
-  ; V v -> rank ds v
-  ; A x y -> '`':(show ds x ++ show ds y)
+insPrim = (map (second R) ([Pair ":" ":", Pair "," "``BCT", Pair "ord" "I", Pair "succ" "`T`(1)+"] ++ map (second ("``BT`T" ++)) [Pair "<=" "L", Pair "==" "=", Pair "-" "-", Pair "+" "+", Pair "*" "*"]) ++);
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> ('@':) . (n:)) (t . succ)) undefined ds ' ';
+shows f t = case t of
+  { R s -> (s++)
+  ; V v -> f v
+  ; A x y -> ('`':) . shows f x . shows f y
   ; L w t -> undefined
   };
-dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
-compile s = fmaybe (program s) "?" ((\ds -> dump ds ds) . fst);
+dump tab = foldr (\h t -> shows (rank tab) (nolam (snd h)) (';':t)) "" tab;
+compile s = fmaybe (program s) "?" (dump . insPrim . fst);

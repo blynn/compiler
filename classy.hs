@@ -227,11 +227,11 @@ ifz n = ife (0 == n);
 showInt' n = ifz n id ((showInt' (n/10)) . ((:) (chr (48+(n%10)))));
 showInt n s = ifz n ('0':) (showInt' n) s;
 
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '[':showInt n "]") (t . succ)) undefined ds 0;
-show ds t = case t of
-  { R s -> s
-  ; V v -> rank ds v
-  ; A x y -> '`':show ds x ++ show ds y
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> ('[':) . showInt n . (']':)) (t . succ)) undefined ds 0;
+shows f t = case t of
+  { R s -> (s++)
+  ; V v -> f v
+  ; A x y -> ('`':) . shows f x . shows f y
   ; L w t -> undefined
   ; Proof _ -> undefined
   };
@@ -301,8 +301,7 @@ nolam x = case babs (debruijn [] x) of
   ; Need e -> undefined
   ; Weak e -> undefined
   };
-dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
-asm ds = dump ds ds;
+asm tab = foldr (\h t -> shows (rank tab) (nolam (snd h)) (';':t)) "" tab;
 
 apply sub t = case t of
   { TC v -> t

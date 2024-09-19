@@ -224,14 +224,13 @@ nolam x = case babs (debruijn [] x) of
   ; Weak e -> undefined
   };
 
-primTab = [(",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")];
-prim s = fmaybe (lstLookup s primTab) s id;
-rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> '@':(n:[])) (t . (\n -> succ n))) (\n -> prim v) ds ' ';
-show ds t = case t of
-  { R s -> s
-  ; V v -> rank ds v
-  ; A x y -> '`':(show ds x ++ show ds y)
+insPrim = (map (second R) ([(":", ":"), (",", "``BCT"), ("chr", "I"), ("ord", "I"), ("succ", "`T`(1)+")] ++ map (second ("``BT`T" ++)) [("<=", "L"), ("==", "="), ("-", "-"), ("/", "/"), ("%", "%"), ("+", "+"), ("*", "*")]) ++);
+rank ds v = foldr (\d t -> ife (lstEq v (fst d)) (\n -> ('@':) . (n:)) (t . (\n -> succ n))) undefined ds ' ';
+shows f t = case t of
+  { R s -> (s++)
+  ; V v -> f v
+  ; A x y -> ('`':) . shows f x . shows f y
   ; L w t -> undefined
   };
-dump tab ds = flst ds "" \h t -> show tab (nolam (snd h)) ++ (';':dump tab t);
-compile s = fmaybe (program s) "?" ((\ds -> dump ds ds) . fst);
+dump tab = foldr (\h t -> shows (rank tab) (nolam (snd h)) (';':t)) "" tab;
+compile s = fmaybe (program s) "?" (dump . insPrim . fst);
