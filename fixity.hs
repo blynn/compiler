@@ -59,7 +59,7 @@ satHelper f = \h t -> ife (f h) (pure h t) Nothing;
 sat f inp = flst inp Nothing (satHelper f);
 
 char c = sat \x -> x == c;
-com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
+com = char '-' *> char '-' <* many (sat \c -> not (c == '\n'));
 sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
 spc f = f <* sp;
 spch = spc . char;

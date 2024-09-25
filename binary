@@ -35,7 +35,7 @@ L x y = \a b c d -> d x y;
 raw s = R (append s);
 
 com = between (liftKI (char '-') (char '-')) (char '\n') (many (sat (\c -> @C (c('\n' @=)))));
-sp = many (alt (sat (\c -> or (c(' ' @=)) (c('\n' @=)))) com);
+sp = many (alt (char ' ') (alt (char '\n') com));
 spc f = liftK f sp;
 spch = @B spc char;
 paren = between (spch '(') (spch ')');

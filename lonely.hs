@@ -301,8 +301,8 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 
 char c = sat \x -> x == c;
 between x y p = x *> (p <* y);
-com = char '-' *> between (char '-') (char '\n') (many (sat \c -> not (c == '\n')));
-sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+com = char '-' *> char '-' <* many (sat \c -> not (c == '\n'));
+sp = many (char ' ' <|> char '\n' <|> com);
 spc f = f <* sp;
 spch = spc . char;
 

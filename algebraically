@@ -42,8 +42,8 @@ between x y p = x *> (p <* y);
 sat f inp = inp @K (\h t -> f h (pure h t) @K);
 
 char c = sat \x -> x == c;
-com = char '-' *> between (char '-') (char '\n') (many (sat (\c -> @C (c == '\n'))));
-sp = many ((sat (\c -> (c == ' ') || (c == '\n'))) <|> com);
+com = char '-' *> char '-' <* many (sat (\c -> @C (c == '\n')));
+sp = many (char ' ' <|> char '\n' <|> com);
 spc f = f <* sp;
 spch = @B spc char;
 satHelper f = \h t -> f h (pure h t) Nothing;

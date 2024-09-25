@@ -311,8 +311,8 @@ sepBy p sep = sepBy1 p sep <|> pure [];
 
 char c = sat (c ==);
 between x y p = x *> (p <* y);
-com = char '-' *> between (char '-') (char '\n') (many $ sat ('\n' /=));
-sp = many ((wrap <$> (sat (\c -> (c == ' ') || (c == '\n')))) <|> com);
+com = char '-' *> char '-' <* many (sat \c -> not (c == '\n'));
+sp = many (char ' ' <|> char '\n' <|> com);
 spc f = f <* sp;
 spch = spc . char;
 wantWith pred f = Parser \inp -> case parse f inp of

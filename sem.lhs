@@ -14,12 +14,10 @@ semantics can be viewed as a bracket abstraction algorithm.
 Much of our previous compiler remains the same. We have standard definitions:
 
 ------------------------------------------------------------------------
-or f g x y = f x (g x y);
-and f g x y = @C f y (g x y);
-lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 pair x y f = f x y;
 just x f g = g x;
 foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 ------------------------------------------------------------------------
 
 Parser combinators library:
@@ -55,11 +53,11 @@ Parser:
 com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
 @=))))) (char #
 )));
-sp = many (alt (sat (\c -> or (c(# @=)) (c(#
-(@=))))) com);
+sp = many (alt (char # ) (alt (char #
+) com));
 spc f = liftk f sp;
 spch = @B spc char;
-var = spc ( some (sat (\x -> and (#z(x @L)) (x(#a @L)) )));
+var = spc ( some (sat (\x -> (#z(x @L)) (x(#a @L)) (@K @I) )));
 anyone = fmap (@:) (spc (sat (@K @K)));
 pre = ap (alt (fmap (@K @I) (char #@)) (fmap (@B @B @:) (char ##))) anyone;
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));

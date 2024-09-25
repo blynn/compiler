@@ -5,10 +5,10 @@
 
 or f g x y = f x (g x y);
 and f g x y = @C f y (g x y);
-lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 pair x y f = f x y;
 just x f g = g x;
 foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
+lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 
 pure x inp = just (pair x inp);
 bind f m = m @K (\x -> x f);
@@ -30,11 +30,10 @@ lca x y = \a b c d -> c x y;
 lcl x y = \a b c d -> d x y;
 raw x = lcr (@: x);
 
-com = between (liftki (char #-) (char #-)) (char #
-) (many (sat (\c -> @C (c(#
-@=)))));
-sp = many (alt (sat (\c -> or (c(# (@=))) (c(#
-(@=))))) com);
+com = liftki (char #-) (liftk (char #-) (many (sat (\c -> @C (c(#
+@=))))));
+sp = many (alt (char # ) (alt (char #
+) com));
 spc f = liftk f sp;
 spch = @B spc char;
 var = spc (some (sat (\x -> or

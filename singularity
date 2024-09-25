@@ -2,11 +2,8 @@
 -- Supports comments, spaces, variables consisting of lowercase letters.
 ------------------------------------------------------------------------
 
-or f g x y = f x (g x y);
-lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 pair x y f = f x y;
 just x f g = g x;
-foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 
 pure x s = just (pair x s);
 bind f m = m @K (\x -> x f);
@@ -26,16 +23,15 @@ lcv v   = \a b c d -> b v;
 lca x y = \a b c d -> c x y;
 lcl x y = \a b c d -> d x y;
 
-com = liftki (char #-) (liftki (char #-) (liftki (many (sat (\c -> @C (c(#
-@=))))) (char #
-)));
-sp = many (alt (sat (\c -> or (c(# @=)) (c(#
-@=)))) com);
+com = liftki (char #-) (liftki (char #-) (many (sat (\c -> @C (c(#
+@=))))));
+sp = many (alt (char # ) (alt (char #
+) com));
 spc f = liftk f sp;
 spch = @B spc char;
-and f g x y = @C f y (g x y);
-var = spc ( some (sat (\x -> and (#z(x @L)) (x(#a @L)) )));
+var = spc ( some (sat (\x -> (#z(x @L)) (x(#a @L)) (@K @I) )));
 
+foldr = @Y \r c n l -> l n (\h t -> c h(r c n t));
 anyone = fmap (@:) (spc (sat (@K @K)));
 pre = ap (alt (fmap (@K @I) (char #@)) (fmap (@B @B @:) (char ##))) anyone;
 lam r = liftki (spch #\) (liftaa (@C (foldr lcl)) (some var) (liftki (char #-) (liftki (spch #>) r)));
@@ -45,10 +41,11 @@ expr = @Y \r -> liftaa @T (atom r) (apps r);
 def = liftaa pair var (liftaa (@C (foldr lcl)) (many var) (liftki (spch #=) expr));
 program = liftki sp (some (liftk def (spch #;)));
 
+lsteq = @Y \r xs ys a b -> xs (ys a (\u u -> b)) (\x xt -> ys b (\y yt -> x(y @=) (r xt yt a b) b));
 rank ds v = foldr (\d t -> lsteq v (d @K) (\n -> @B (@:#@) (@:n)) (@B t \n -> #0(#1 @-)(n @+))) @? ds # ;
 shows f = @Y \r t -> t @I f (\x y -> @B (@B (@:#`) (r x)) (r y)) @?;
 
-isfree f = @Y \r t -> t (\x -> @K @I) f (\x y -> or (r x) (r y)) @?;
+isfree f = @Y \r t -> t (\x -> @K @I) f (\x y -> (r x) @K (r y)) @?;
 unlam f = @Y \r t -> f t (t @? (@K (lcr (@:#I))) (\x y -> lca (lca (lcr (@:#S)) (r x)) (r y)) @?) (lca (lcr (@:#K)) t);
 babs = @Y \r t -> t lcr lcv (\x y -> lca (r x) (r y)) (\x y -> unlam (isfree (lsteq x)) (r y));
 
