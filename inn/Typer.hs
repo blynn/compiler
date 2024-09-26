@@ -287,10 +287,10 @@ prims = let
       , ("intRem", "MOD")
       ]
 
-tabulateModules mods = foldM ins (singleton "#" neatPrim) $ go <$> mods where
-  go (name, prog) = (name, foldr ($) neatNew prog)
-  ins tab (k, v) = case mlookup k tab of
-    Nothing -> Right $ insert k v tab
+tabulateModules mods = foldM ins (singleton "#" neatPrim) mods where
+  go = foldr ($) neatNew
+  ins tab (k, prog) = case mlookup k tab of
+    Nothing -> Right $ insert k (go prog) tab
     Just _ -> Left $ "duplicate module: " ++ k
 
 inferModule tab acc name = case mlookup name acc of

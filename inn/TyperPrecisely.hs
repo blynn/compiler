@@ -75,31 +75,45 @@ resolveFieldBinds searcher t = go t where
 fixFixity searcher t = case t of
   E _ -> pure t
   V _ -> pure t
-  A (E (Basic "{+")) ch -> infixer searcher =<< go ch
   A x y -> A <$> go x <*> go y
-  L s b -> L s <$> go b
+  L s b
+    | s == "(" -> infixer searcher =<< go b
+    | True -> L s <$> go b
   Pa vsxs -> Pa <$> mapM (\(ps, a) -> (,) <$> mapM pgo ps <*> go a) vsxs
   where
   go = fixFixity searcher
   pgo = pure . patFixFixity searcher
 
-infixer searcher (A (A (A s x) y) t) = go seed t where
-  seed = A (A s $ protect x) $ protect y
-  protect t = A (E (Basic "!")) t
-  unprotectAll = \case
-    A (E (Basic "!")) x -> unprotectAll x
-    A a b -> A (unprotectAll a) (unprotectAll b)
-    t -> t
-  go acc t = case t of
-    E (Basic "+}") -> pure $ unprotectAll acc
-    A (A op z) rest -> go (rebase op (protect z) acc) rest
+data OpTree = OpLeaf Ast | OpNode Ast Ast OpTree
+
+infixer searcher (A (A (A s x) y) t) = go (OpNode s x (OpLeaf y)) t
+  where
+  go acc = \case
+    A (A s z) rest -> go (ins s z acc) rest
+    V (")") -> pure $ decode acc
     _ -> error "unreachable"
-  rebase op z = \case
-    A (A op' x) y -> let
-      stay = A (A op $ A (A op' x) y) z
-      down = A (A op' x) $ rebase op z y
-      in extendChain searcher stay down op op'
-    x -> A (A op x) z
+  ins s z t = case t of
+    OpNode s' x y
+      | isStronger searcher s s' -> OpNode s' x (ins s z y)
+      | True -> OpNode s (decode t) (OpLeaf z)
+    OpLeaf x -> OpNode s x (OpLeaf z)
+  decode = \case
+    OpNode f x y -> A (A f x) (decode y)
+    OpLeaf x -> x
+
+isStronger searcher s s' = if prec <= prec'
+  then if prec == prec'
+    then if assoc == assoc'
+      then case assoc of
+        LAssoc -> False
+        RAssoc -> True
+        NAssoc -> error $ "adjacent NAssoc: " ++ show s ++ " vs " ++ show s'
+      else error $ "assoc mismatch: " ++ show s ++ " vs " ++ show s'
+    else False
+  else True
+  where
+  (prec, assoc) = findPrec searcher s
+  (prec', assoc') = findPrec searcher s'
 
 patFixFixity searcher p = case p of
   PatLit _ -> p
@@ -109,34 +123,21 @@ patFixFixity searcher p = case p of
   where
   go = patFixFixity searcher
 
-patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldl (flip rebase) seed rest where
-  seed = PatCon f [protect a, protect b]
-  protect x = PatCon "!" [x]
-  unprotectAll = \case
-    PatCon "!" [x] -> unprotectAll x
-    PatCon con args -> PatCon con $ unprotectAll <$> args
-    p -> p
-  rebase sz@(PatCon s [z]) = \case
-    PatCon s' [x, y] -> let
-      stay = PatCon s [PatCon s' [x, y], z]
-      down = PatCon s' [x, rebase sz y]
-      in extendChain searcher stay down (V s) (V s')
-    x -> PatCon s [x, z]
+data PopTree = PopLeaf Pat | PopNode String Pat PopTree
 
-extendChain searcher stay down op op' =
-  if prec <= prec'
-    then if prec == prec'
-      then if assoc == assoc'
-        then case assoc of
-          LAssoc -> stay
-          RAssoc -> down
-          NAssoc -> error $ "adjacent NAssoc: " ++ show op ++ " vs " ++ show op'
-        else error $ "assoc mismatch: " ++ show op ++ " vs " ++ show op'
-      else stay
-    else down
-  where
-  (prec, assoc) = findPrec searcher op
-  (prec', assoc') = findPrec searcher op'
+patFixer searcher (PatCon f [a, b]:rest) = go seed rest where
+  seed = PopNode f a (PopLeaf b)
+  go acc = \case
+    [] -> decode acc
+    PatCon s [z]:rest -> go (ins s z acc) rest
+  ins s z t = case t of
+    PopNode s' x y
+      | isStronger searcher (V s) (V s') -> PopNode s' x (ins s z y)
+      | True -> PopNode s (decode t) (PopLeaf z)
+    PopLeaf x -> PopNode s x (PopLeaf z)
+  decode = \case
+    PopNode f x y -> PatCon f [x, decode y]
+    PopLeaf x -> x
 
 secondM f (a, b) = (a,) <$> f b
 patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
@@ -574,10 +575,11 @@ expandTypeAliases neat = pure $ if size als == 0 then neat else neat
     A x y -> A (subAst x) (subAst y)
     t -> t
 
-tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go ((name, mexs), prog) = (name,) <$> (expandTypeAliases =<< maybe Right processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]}))
-  ins tab (k, v) = case mlookup k tab of
-    Nothing -> Right $ insert k v tab
+tabulateModules mods = foldM ins Tip mods where
+  ins tab (k, (mexs, prog)) = case mlookup k tab of
+    Nothing -> do
+      v <- expandTypeAliases =<< maybe pure processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]})
+      pure $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
   processExports exs neat = do
     mes <- Just . concat <$> mapM (processExport neat) exs

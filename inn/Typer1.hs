@@ -320,10 +320,10 @@ prims = let
 
 neatImportPrim = Neat Tip [] [] Tip [] [] ["#"]
 
-tabulateModules mods = foldM ins Tip $ go <$> mods where
-  go (name, prog) = (name, foldr ($) neatImportPrim prog)
-  ins tab (k, v) = case mlookup k tab of
-    Nothing -> Right $ insert k v tab
+tabulateModules mods = foldM ins Tip mods where
+  go = foldr ($) neatImportPrim
+  ins tab (k, prog) = case mlookup k tab of
+    Nothing -> Right $ insert k (go prog) tab
     Just _ -> Left $ "duplicate module: " ++ k
 
 inferModule tab acc name = case mlookup name acc of

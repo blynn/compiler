@@ -320,10 +320,10 @@ prims = let
       , ("intOr", "OR")
       ]
 
-tabulateModules mods = foldM ins Tip $ go <$> mods where
-  go (name, prog) = (name, foldr ($) neatEmpty{moduleImports = ["#"]} prog)
-  ins tab (k, v) = case mlookup k tab of
-    Nothing -> Right $ insert k v tab
+tabulateModules mods = foldM ins Tip mods where
+  go = foldr ($) neatEmpty{moduleImports = ["#"]}
+  ins tab (k, prog) = case mlookup k tab of
+    Nothing -> Right $ insert k (go prog) tab
     Just _ -> Left $ "duplicate module: " ++ k
 
 slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m

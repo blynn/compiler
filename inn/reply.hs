@@ -64,7 +64,7 @@ readInput mos name s = go mos . smoosh =<< fst <$> parse fmt s
     Right expr:rest -> do
       runme <- tryExpr mos name expr
       (Right runme:) <$> go mos rest
-  fmt = lexemePrelude *> mayModule *> braceSep (Left <$> topLevel <|> Right <$> expr) <* eof
+  fmt = lexemePrelude *> (snd . snd <$> mayModule (braceSep $ Left <$> topLevel <|> Right <$> expr)) <* eof
 
 tryExpr mos name sugary = do
   ast <- snd <$> patternCompile searcher sugary

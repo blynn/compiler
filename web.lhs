@@ -24,25 +24,23 @@ list, for example: `[1 + 2, * 3, - 4, + 5]`.
 
 For patterns, we use the list field of a `PatCon` value; a made-up data
 constructor `"{+"` indicates the beginning of such a list. Expressions are
-clumsier; we bookend chains with the made-up basic combinators `"{+"` and
-`"+}"`, and fashion a list out of `A` and `V` nodes.
+clumsier; we bookend chains with `L "("` and `V ")"`, and fashion a list out of
+`A` and `V` nodes.
 
 By the time we call `patternCompile`, we have access to all modules. During
 this phase, we traverse the syntax tree, and we re-associate each specially
 marked infix chain now that we can look up the fixities of all operators.
 
-The algorithm is conceptually straightforward. Starting from the first binary
-infix expression, that is, two operands and one operator, for each operator and
-operand we add on the right, we walk down the right spine of the current syntax
-tree until we reach a node of higher precedence; leaf nodes are considered to
-have maximum precedence. Then we insert the operator and operand at this point.
-We also check for illegal infix operator conflicts.
+The algorithm starts with the first binary infix expression, that is, two
+operands and one operator. For each operator and operand we add on the right,
+we walk down the right spine of the current syntax tree until we reach a node
+of higher precedence; leaf nodes are considered to have maximum precedence.
+Then we insert the operator and operand at this point. We also check for
+illegal infix operator conflicts.
 
 The code is messy due to a couple of wrinkles. Firstly, we have two distinct ad
 hoc representations of lists for holding infix chains. Secondly, we temporarily
-mark operands with more ad hoc conventions to avoid descending too far when
-reshaping syntax trees. For example, in the expression `1 + (2 + 3) * 4`, the
-subexpression `(2 + 3)` is atomic.
+store the AST being reshaped in one-off tree structures.
 
 We only allow top-level fixity declarations. We could add support for scoped
 fixity declarations with yet more ad hoc encodings that we later use to create
@@ -223,9 +221,39 @@ were added. I pushed it to a far later compiler for faster bootstrapping and
 more stable code. Another example is the `Show` typeclass, which I originally
 added in a surprisingly recent compiler.
 
-Built-in primitives were once in their own `#` module. This was replaced by
-code that pre-defined them for every module. But now I think I was right the
-first time, and hopefully there are no traces of my misadventure left.
+Built-in primitives started in their own `#` module, then were replaced by code
+that pre-defined them for every module. But I think I was right the first time,
+and switched it back. hopefully there are no traces of my misadventure left.
+
+At the same time, I'm introducing more chaos as I push forward with new
+experiments, especially those involving the web. The above only chronicles the
+start of adventures in the browser. A fuller account:
+
+  * The `crossly wasm` command modifies the output C so Clang can compile it to
+  wasm: it adds a minimal bump `malloc` implementation, and uses attributes to
+  declare exports.
+
+  * The `crossly warts` command also modifies the output C so Clang can compile
+  to wasm, though it avoids `malloc` for some reason. It only generates code
+  for FFIs and the RTS, and assumes a tool like `webby` will supply the initial
+  heap contents.
+
+  * The `Imp` compiler is like `webby` but with an extra hack to request the
+  source of modules tha it discovers are needed via `import` statements.
+
+  * The `reply` family of REPLs introduced more complications. To avoid
+  compiling `Base` every time, we want something like an object file, which not
+  only contains the bytecode for each definition, but also the symbols, types,
+  typeclasses, fixities, type aliases, and so on. The quickest way to achieve
+  this was to compile `Base` then save a snapshot of the heap; see
+  `reply-precompile`. Our REPL programs initialize the heap with such snapshotS
+  instead of compiling the same modules every startup. This is faster, but
+  takes a lot of memory.
+
+  * Related are `introspect.c`, which lets us examine the heap from the REPL,
+  and reduction function that is aware of "gas": a feature that allows us to
+  run a program for a limited number of steps, and resume execution later if
+  it has yet to finish.
 
 +++++++++
 include::toggleshow.js[]

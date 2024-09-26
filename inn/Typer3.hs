@@ -73,74 +73,79 @@ resolveFieldBinds searcher t = go t where
     A x y -> A (go x) (go y)
     L s x -> L s $ go x
 
-fixFixity searcher t = case t of
+fixFixity findPrec t = case t of
   E _ -> pure t
   V _ -> pure t
-  A (E (Basic "{+")) ch -> infixer searcher =<< go ch
   A x y -> A <$> go x <*> go y
-  L s b -> L s <$> go b
+  L s b
+    | s == "(" -> infixer findPrec =<< go b
+    | True -> L s <$> go b
   Pa vsxs -> Pa <$> mapM (\(ps, a) -> (,) <$> mapM pgo ps <*> go a) vsxs
   where
-  go = fixFixity searcher
-  pgo = pure . patFixFixity searcher
+  go = fixFixity findPrec
+  pgo = patFixFixity findPrec
 
-infixer searcher (A (A (A s x) y) t) = go seed t where
-  seed = A (A s $ protect x) $ protect y
-  protect t = A (E (Basic "!")) t
-  unprotectAll = \case
-    A (E (Basic "!")) x -> unprotectAll x
-    A a b -> A (unprotectAll a) (unprotectAll b)
-    t -> t
-  go acc t = case t of
-    E (Basic "+}") -> pure $ unprotectAll acc
-    A (A (V s) z) rest -> go (rebase s (protect z) acc) rest
+data OpTree = OpLeaf Ast | OpNode String Ast OpTree
+
+infixer findPrec (A (A (A (V s) x) y) t) = go (OpNode s x (OpLeaf y)) t
+  where
+  go acc = \case
+    A (A (V s) z) rest -> do
+      acc' <- ins s z acc
+      go acc' rest
+    V ")" -> pure $ decode acc
     _ -> error "unreachable"
-  rebase s z = \case
-    A (A (V s') x) y -> let
-      stay = A (A (V s) $ A (A (V s') x) y) z
-      down = A (A (V s') x) $ rebase s z y
-      in extendChain searcher stay down s s'
-    x -> A (A (V s) x) z
+  ins s z t = case t of
+    OpNode s' x y -> isStronger findPrec s s' >>= \case
+      True -> OpNode s' x <$> ins s z y
+      False -> pure $ OpNode s (decode t) (OpLeaf z)
+    OpLeaf x -> pure $ OpNode s x (OpLeaf z)
+  decode = \case
+    OpNode f x y -> A (A (V f) x) (decode y)
+    OpLeaf x -> x
 
-patFixFixity searcher p = case p of
-  PatLit _ -> p
-  PatVar s m -> PatVar s $ go <$> m
-  PatCon "{+" args -> patFixer searcher args
-  PatCon con args -> PatCon con $ go <$> args
+isStronger findPrec s s' = if prec <= prec'
+  then if prec == prec'
+    then if assoc == assoc'
+      then case assoc of
+        LAssoc -> pure False
+        RAssoc -> pure True
+        NAssoc -> Left $ "adjacent NAssoc: " ++ s ++ " vs " ++ s'
+      else Left $ "assoc mismatch: " ++ s ++ " vs " ++ s'
+    else pure False
+  else pure True
   where
-  go = patFixFixity searcher
+  (prec, assoc) = findPrec s
+  (prec', assoc') = findPrec s'
 
-patFixer searcher (PatCon f [a, b]:rest) = unprotectAll $ foldl (flip rebase) seed rest where
-  seed = PatCon f [protect a, protect b]
-  protect x = PatCon "!" [x]
-  unprotectAll = \case
-    PatCon "!" [x] -> unprotectAll x
-    PatCon con args -> PatCon con $ unprotectAll <$> args
-    p -> p
-  rebase sz@(PatCon s [z]) = \case
-    PatCon s' [x, y] -> let
-      stay = PatCon s [PatCon s' [x, y], z]
-      down = PatCon s' [x, rebase sz y]
-      in extendChain searcher stay down s s'
-    x -> PatCon s [x, z]
-
-extendChain searcher stay down s s' =
-  if prec <= prec'
-    then if prec == prec'
-      then if assoc == assoc'
-        then case assoc of
-          LAssoc -> stay
-          RAssoc -> down
-          NAssoc -> error $ "adjacent NAssoc: " ++ s ++ " vs " ++ s'
-        else error $ "assoc mismatch: " ++ s ++ " vs " ++ s'
-      else stay
-    else down
+patFixFixity findPrec p = case p of
+  PatLit _ -> pure p
+  PatVar s m -> PatVar s <$> maybe (pure Nothing) (fmap Just . go) m
+  PatCon "{+" args -> patFixer findPrec args
+  PatCon con args -> PatCon con <$> mapM go args
   where
-  (prec, assoc) = either (const (9, LAssoc)) id $ findPrec searcher s
-  (prec', assoc') = either (const (9, LAssoc)) id $ findPrec searcher s'
+  go = patFixFixity findPrec
+
+data PopTree = PopLeaf Pat | PopNode String Pat PopTree
+
+patFixer findPrec (PatCon f [a, b]:rest) = go seed rest where
+  seed = PopNode f a (PopLeaf b)
+  go acc = \case
+    [] -> pure $ decode acc
+    PatCon s [z]:rest -> do
+      acc' <- ins s z acc
+      go acc' rest
+  ins s z t = case t of
+    PopNode s' x y -> isStronger findPrec s s' >>= \case
+      True -> PopNode s' x <$> ins s z y
+      False -> pure $ PopNode s (decode t) (PopLeaf z)
+    PopLeaf x -> pure $ PopNode s x (PopLeaf z)
+  decode = \case
+    PopNode f x y -> PatCon f [x, decode y]
+    PopLeaf x -> x
 
 secondM f (a, b) = (a,) <$> f b
-patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity searcher t) 0 where
+patternCompile searcher t = astLink searcher $ resolveFieldBinds searcher $ evalState (go $ either error id $ fixFixity (findPrec searcher) t) 0 where
   go t = case t of
     E _ -> pure t
     V _ -> pure t
@@ -454,10 +459,11 @@ prims = let
       , ("wordRem", "U_MOD")
       ]
 
-tabulateModules mods = foldM ins Tip =<< mapM go mods where
-  go ((name, mexs), prog) = (name,) <$> maybe Right processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog)
-  ins tab (k, v) = case mlookup k tab of
-    Nothing -> Right $ insert k v tab
+tabulateModules mods = foldM ins Tip mods where
+  ins tab (k, (mexs, prog)) = case mlookup k tab of
+    Nothing -> do
+      v <- maybe pure processExports mexs (foldr ($) neatEmpty{moduleImports = ["#"]} prog)
+      pure $ insert k v tab
     Just _ -> Left $ "duplicate module: " ++ k
   processExports exs neat = do
     mes <- Just . concat <$> mapM (processExport neat) exs
@@ -482,7 +488,7 @@ tabulateModules mods = foldM ins Tip =<< mapM go mods where
 
 data Searcher = Searcher
   { astLink :: Ast -> Either String ([String], Ast)
-  , findPrec :: String -> Either String (Int, Assoc)
+  , findPrec :: String -> (Int, Assoc)
   , findCon :: String -> Either String [Constr]
   , findField :: String -> (String, [(String, Type)])
   , typeOfMethod :: String -> Either String Qual
@@ -503,7 +509,7 @@ slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f 
 
 searcherNew tab neat = Searcher
   { astLink = astLink'
-  , findPrec = \s -> if s == ":" then Right (5, RAssoc) else findAmong opFixity visible s
+  , findPrec = \s -> if s == ":" then (5, RAssoc) else either (const defPrec) id $ findAmong opFixity visible s
   , findCon = findAmong dataCons visible
   , findField = findField'
   , typeOfMethod = fmap fst . findAmong typedAsts visible
@@ -516,6 +522,7 @@ searcherNew tab neat = Searcher
   where
   mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map (tab !) imps
   mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\im -> (im, tab ! im)) imps]
+  defPrec = (9, LAssoc)
   findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
   importedNeats s@(h:_) = [(im, n) | im <- imps, let n = tab ! im, h == '{' || isExportOf s n]
   visible s = neat : (snd <$> importedNeats s)

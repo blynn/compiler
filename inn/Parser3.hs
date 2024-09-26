@@ -388,7 +388,7 @@ chain a = \case
   [] -> a
   A f b:rest -> case rest of
     [] -> A (A f a) b
-    _ -> A (E $ Basic "{+") $ A (A (A f a) b) $ foldr A (E $ Basic "+}") rest
+    _ -> L "(" $ A (A (A f a) b) $ foldr A (V ")") rest
   _ -> error "unreachable"
 expr = chain <$> aexp <*> many (A <$> (V <$> op) <*> aexp)
 
@@ -479,9 +479,9 @@ export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
 exports = Just <$> paren (export_ `sepBy` comma)
   <|> pure Nothing
 
-haskell = between lexemePrelude eof $ some $ liftA2 (,) mayModule tops
+haskell = between lexemePrelude eof $ some $ mayModule tops
 
-mayModule = res "module" *> ((,) <$> conId <*> exports <* res "where")
-  <|> pure ("Main", Nothing)
+mayModule p = res "module" *> ((,) <$> conId <*> ((,) <$> exports <* res "where" <*> p))
+  <|> ("Main",) . (Nothing,) <$> p
 
 parseProgram s = fmap fst $ parse haskell s
