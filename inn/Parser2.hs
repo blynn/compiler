@@ -1,5 +1,6 @@
 -- FFI across multiple modules.
 -- Rewrite with named fields.
+-- Fix fixities after parsing.
 module Parser where
 import Base
 import Ast
@@ -10,7 +11,6 @@ data ParserState = ParserState
   { readme :: [(Char, (Int, Int))]
   , landin :: String
   , indents :: [Int]
-  , precs :: Map String (Int, Assoc)
   }
 data Parser a = Parser { getParser :: ParserState -> Either String (a, ParserState) }
 instance Functor Parser where fmap f x = pure f <*> x
@@ -28,8 +28,6 @@ instance Monad Parser where
 instance Alternative Parser where
   empty = bad ""
   x <|> y = Parser \inp -> either (const $ getParser y inp) Right $ getParser x inp
-getPrecs = Parser \st -> Right (precs st, st)
-putPrecs ps = Parser \st -> Right ((), st { precs = ps })
 
 notFollowedBy p = do
   saved <- Parser \pasta -> Right (pasta, pasta)
@@ -37,7 +35,7 @@ notFollowedBy p = do
   Parser \_ -> Right ((), saved)
   ret
 
-parse f str = getParser f $ ParserState (rowcol str (1, 1)) [] [] $ singleton ":" (5, RAssoc) where
+parse f str = getParser f $ ParserState (rowcol str (1, 1)) [] [] where
   rowcol s rc = case s of
     [] -> []
     h:t -> (h, rc) : rowcol t (advanceRC (ord h) rc)
@@ -86,7 +84,7 @@ rawSat f = Parser \pasta -> case readme pasta of
   (h, _):t -> if f h then Right (h, pasta { readme = t }) else Left "unsat"
 
 eof = Parser \pasta -> case pasta of
-  ParserState [] [] _ _ -> Right ((), pasta)
+  ParserState [] [] _ -> Right ((), pasta)
   _ -> badpos pasta "want eof"
 
 comment = rawSat ('-' ==) *> some (rawSat ('-' ==)) *>
@@ -255,6 +253,7 @@ addForeignImport foreignname ourname t neat = let ffis = ffiImports neat in neat
 addForeignExport e f neat = neat { ffiExports = insertWith (error $ "duplicate export: " ++ e) e f $ ffiExports neat }
 addDefs ds neat = neat { topDefs = ds ++ topDefs neat }
 addImport im neat = neat { moduleImports = im:moduleImports neat }
+addFixities os prec neat = neat { opFixity = foldr (\o tab -> insert o prec tab) (opFixity neat) os }
 
 parseErrorRule = Parser \pasta -> case indents pasta of
   m:ms | m /= 0 -> Right ('}', pasta { indents = ms })
@@ -288,21 +287,6 @@ addLets ls x = foldr triangle x components where
     redef tns expr = foldr L (suball expr) tns
     in foldr (\(x:xt) t -> A (L x t) $ maybeFix x $ redef xt $ maybe undefined joinIsFail $ lookup x ls) (suball expr) tnames
 
-data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
-precOf s precTab = maybe 9 fst $ mlookup s precTab
-assocOf s precTab = maybe LAssoc snd $ mlookup s precTab
-
-opFold precTab f x xs = case xs of
-  [] -> pure x
-  (op, y):xt -> case find (\(op', _) -> assocOf op precTab /= assocOf op' precTab) xt of
-    Nothing -> case assocOf op precTab of
-      NAssoc -> case xt of
-        [] -> pure $ f op x y
-        y:yt -> bad "NAssoc repeat"
-      LAssoc -> pure $ foldl (\a (op, y) -> f op a y) x xs
-      RAssoc -> pure $ foldr (\(op, y) b -> \e -> f op e (b y)) id xs $ x
-    Just y -> bad "Assoc clash"
-
 qconop = conSym <|> res ":" <|> between backquote backquote conId
 
 qconsym = conSym <|> res ":"
@@ -329,8 +313,8 @@ fixityDecl w a = do
   res w
   n <- lexeme integer
   os <- sepBy op comma
-  precs <- getPrecs
-  putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
+  pure $ addFixities os (n, a)
+
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
 cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
@@ -404,16 +388,13 @@ atom = ifthenelse <|> doblock <|> letin <|> sqExpr <|> section
 
 aexp = foldl1 A <$> some atom
 
-withPrec precTab n p = p >>= \s ->
-  if n == precOf s precTab then pure s else Parser $ const $ Left ""
-
-exprP n = if n <= 9
-  then getPrecs >>= \precTab
-    -> exprP (succ n) >>= \a
-    -> many ((,) <$> withPrec precTab n op <*> exprP (succ n)) >>= \as
-    -> opFold precTab (\op x y -> A (A (V op) x) y) a as
-  else aexp
-expr = exprP 0
+chain a = \case
+  [] -> a
+  A f b:rest -> case rest of
+    [] -> A (A f a) b
+    _ -> L "(" $ A (A (A f a) b) $ foldr A (V ")") rest
+  _ -> error "unreachable"
+expr = chain <$> aexp <*> many (A <$> (V <$> op) <*> aexp)
 
 gcon = conId <|> paren (qconsym <|> (:"") <$> comma) <|> (lSquare *> rSquare *> pure "[]")
 
@@ -426,14 +407,14 @@ apat = PatVar <$> var <*> (res "@" *> (Just <$> apat) <|> pure Nothing)
   <|> paren (foldr1 pairPat <$> sepBy1 pat comma <|> pure (PatCon "()" []))
   where pairPat x y = PatCon "," [x, y]
 
-binPat f x y = PatCon f [x, y]
-patP n = if n <= 9
-  then getPrecs >>= \precTab
-    -> patP (succ n) >>= \a
-    -> many ((,) <$> withPrec precTab n qconop <*> patP (succ n)) >>= \as
-    -> opFold precTab binPat a as
-  else PatCon <$> gcon <*> many apat <|> apat
-pat = patP 0
+patChain a = \case
+  [] -> a
+  PatCon f [b]:rest -> case rest of
+    [] -> PatCon f [a, b]
+    _ -> PatCon "{+" $ PatCon f [a, b] : rest
+  _ -> error "unreachable"
+patAtom = PatCon <$> gcon <*> many apat <|> apat
+pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
@@ -486,7 +467,7 @@ topdecls = braceSep
     <|> res "export" *> var *> (addForeignExport <$> lexeme tokStr <*> var)
     )
   <|> addDefs <$> defSemi
-  <|> fixity *> pure id
+  <|> fixity
   <|> impDecl
 
 haskell = between lexemePrelude eof $ some $ (,) <$> (res "module" *> conId <* res "where" <|> pure "Main") <*> topdecls

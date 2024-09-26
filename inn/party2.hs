@@ -1,4 +1,3 @@
--- Separate fixity phase.
 -- Export lists.
 module Main where
 import Base

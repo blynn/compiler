@@ -1,4 +1,3 @@
--- Separate fixity phase.
 -- Export lists.
 -- Detect missing instances.
 -- Top-level type annotations.

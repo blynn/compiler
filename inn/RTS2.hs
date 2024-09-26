@@ -1,4 +1,3 @@
--- Separate fixity phase.
 -- Export lists.
 module RTS where
 

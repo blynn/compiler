@@ -57,6 +57,8 @@ data Instance = Instance
   -- Method definitions
   (Map String Ast)
 
+data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
+
 data Neat = Neat
   { typeclasses :: Map String [String]
   , instances :: Map String [Instance]
@@ -68,9 +70,10 @@ data Neat = Neat
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
   , moduleImports :: [String]
+  , opFixity :: Map String (Int, Assoc)
   }
 
-neatEmpty = Neat Tip Tip [] [] Tip Tip Tip []
+neatEmpty = Neat Tip Tip [] [] Tip Tip Tip [] Tip
 
 patVars = \case
   PatLit _ -> []

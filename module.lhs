@@ -375,6 +375,40 @@ include::inn/Unify1.hs[]
 
 == Party2 ==
 
+Recall we require a fixity declaration to precede the use of its corresponding
+operator, which forces us to concatenate module sources in a particular order.
+We remove this wart by adding a new phase. Once done, not only may we paste
+together modules in any order, but we may also declare fixities anywhere within
+a module.
+
+During parsing, operators have the same precedence. When a chain of two or more
+appear in a row, we abuse the syntax tree to store them in a right-associative
+list, for example: `[1 + 2, * 3, - 4, + 5]`.
+
+For patterns, we use the list field of a `PatCon` value; a made-up data
+constructor `"{+"` indicates the beginning of such a list. Expressions are
+clumsier; we bookend chains with `L "("` and `V ")"`, and fashion a list out of
+`A` and `V` nodes.
+
+Later, once all fixity declarations are known, we traverse the syntax tree, and
+we re-associate each specially marked infix chain. The algorithm starts with
+the first binary infix expression, that is, two operands and one operator such
+as `1 + 2`. For each operator and operand we add on the right, we walk down the
+right spine of the current syntax tree until we reach a node of higher
+precedence; leaf nodes are considered to have maximum precedence. Then we
+insert the operator and operand at this point. We also check for illegal infix
+operator conflicts.
+
+The code is messy due to a couple of wrinkles. Firstly, we have two distinct ad
+hoc representations of lists for holding infix chains. Secondly, we temporarily
+store the AST being reshaped in one-off tree structures.
+
+However, we're still cheating: we maintain one giant fixity declaration table
+for all operators across all modules, which relies on operators being distinct.
+Also, we only allow top-level fixity declarations. We could add support for
+scoped fixity declarations with yet more ad hoc encodings that we later use to
+create scoped fixity lookup tables that override the global ones.
+
 We fix the problem with foreign imports across multiple modules. In the
 lone-module days, we numbered the imports as we parsed the source. Now,
 the numbering must be consistent across all modules.

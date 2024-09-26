@@ -96,6 +96,74 @@ resolveFieldBinds dcs t = go t where
     A x y -> A (go x) (go y)
     L s x -> L s $ go x
 
+fixFixity precs t = case t of
+  E _ -> t
+  V _ -> t
+  A x y -> A (go x) (go y)
+  L s b
+    | s == "(" -> infixer precs $ go b
+    | True -> L s $ go b
+  Pa vsxs -> Pa $ map (\(ps, a) -> (patFixFixity precs <$> ps, go a)) vsxs
+  where
+  go = fixFixity precs
+
+data OpTree = OpLeaf Ast | OpNode String Ast OpTree
+
+infixer precs (A (A (A (V s) x) y) t) = go (OpNode s x (OpLeaf y)) t
+  where
+  go acc = \case
+    A (A (V s) z) rest -> go (ins s z acc) rest
+    V ")" -> decode acc
+    _ -> error "unreachable"
+  ins s z t = case t of
+    OpNode s' x y
+      | isStronger precs s s' -> OpNode s' x (ins s z y)
+      | True -> OpNode s (decode t) (OpLeaf z)
+    OpLeaf x -> OpNode s x (OpLeaf z)
+  decode = \case
+    OpNode f x y -> A (A (V f) x) (decode y)
+    OpLeaf x -> x
+
+isStronger precs s s' = if prec <= prec'
+  then if prec == prec'
+    then if assoc == assoc'
+      then case assoc of
+        LAssoc -> False
+        RAssoc -> True
+        NAssoc -> error $ "adjacent NAssoc: " ++ s ++ " vs " ++ s'
+      else error $ "assoc mismatch: " ++ s ++ " vs " ++ s'
+    else False
+  else True
+  where
+  (prec, assoc) = findPrec s
+  (prec', assoc') = findPrec s'
+  findPrec s = if s == ":" then (5, RAssoc) else maybe defPrec id $ mlookup s precs
+  defPrec = (9, LAssoc)
+
+patFixFixity precs p = case p of
+  PatLit _ -> p
+  PatVar s m -> PatVar s $ go <$> m
+  PatCon "{+" args -> patFixer precs args
+  PatCon con args -> PatCon con $ go <$> args
+  where
+  go = patFixFixity precs
+
+data PopTree = PopLeaf Pat | PopNode String Pat PopTree
+
+patFixer precs (PatCon f [a, b]:rest) = go seed rest where
+  seed = PopNode f a (PopLeaf b)
+  go acc = \case
+    [] -> decode acc
+    PatCon s [z]:rest -> go (ins s z acc) rest
+  ins s z t = case t of
+    PopNode s' x y -> case isStronger precs s s' of
+      True -> PopNode s' x $ ins s z y
+      False -> PopNode s (decode t) (PopLeaf z)
+    PopLeaf x -> PopNode s x (PopLeaf z)
+  decode = \case
+    PopNode f x y -> PatCon f [x, decode y]
+    PopLeaf x -> x
+
 secondM f (a, b) = (a,) <$> f b
 patternCompile dcs t = optiApp $ resolveFieldBinds dcs $ evalState (go t) 0 where
   go t = case t of
@@ -244,12 +312,12 @@ inferDefs tycl defs typed = do
 
 dictVars ps n = (zip ps $ map (('*':) . show) [n..], n + length ps)
 
-inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
+inferTypeclasses tycl typeOfMethod typed dcs precs linker iMap mergedSigs = foldM inferInstance typed [(classId, inst) | (classId, insts) <- toAscList iMap, inst <- insts] where
   inferInstance typed (classId, Instance ty name ps idefs) = let
     dvs = map snd $ fst $ dictVars ps 0
     perMethod s = do
       let rawExpr = maybe (V $ "{default}" ++ s) id $ mlookup s idefs
-      expr <- snd <$> linker (patternCompile dcs rawExpr)
+      expr <- snd <$> linker (patternCompile dcs $ fixFixity precs rawExpr)
       (ta, (sub, n)) <- either (Left . (name++) . (" "++) . (s++) . (": "++)) Right
         $ infer typed [] expr (Tip, 0)
       let
@@ -320,10 +388,10 @@ prims = let
       , ("intOr", "OR")
       ]
 
-tabulateModules mods = foldM ins Tip mods where
-  go = foldr ($) neatEmpty{moduleImports = ["#"]}
-  ins tab (k, prog) = case mlookup k tab of
-    Nothing -> Right $ insert k (go prog) tab
+tabulateModules mods = snd <$> foldM ins (Tip, Tip) mods where
+  go precs = foldr ($) neatEmpty{moduleImports = ["#"], opFixity = precs}
+  ins (accprecs, tab) (k, prog) = case mlookup k tab of
+    Nothing -> let v = go accprecs prog in Right (opFixity v, insert k v tab)
     Just _ -> Left $ "duplicate module: " ++ k
 
 slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
@@ -331,7 +399,7 @@ slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f 
 inferModule tab acc name = case mlookup name acc of
   Nothing -> do
     let
-      Neat mySigs iMap defs typedList adtTab ffis ffes imps = tab ! name
+      Neat mySigs iMap defs typedList adtTab ffis ffes imps precs = tab ! name
       typed = fromList typedList
       mergedSigs = foldr (slowUnionWith const) Tip $ mySigs : map (typeclasses . (tab !)) imps
       mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) m | (im, m) <- ("", iMap) : map (\im -> (im, instances $ tab ! im)) imps]
@@ -341,9 +409,9 @@ inferModule tab acc name = case mlookup name acc of
       typeOfMethod s = maybe undefined id $ foldr (<|>) (fst <$> mlookup s typed) [fmap fst $ lookup s $ typedAsts $ tab ! im | im <- imps]
     acc' <- foldM (inferModule tab) acc imps
     let linker = astLink typed locals imps acc'
-    depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs t)) defs
+    depdefs <- mapM (\(s, t) -> (s,) <$> linker (patternCompile dcs $ fixFixity precs t)) defs
     typed <- inferDefs tycl depdefs typed
-    typed <- inferTypeclasses tycl typeOfMethod typed dcs linker iMap mergedSigs
+    typed <- inferTypeclasses tycl typeOfMethod typed dcs precs linker iMap mergedSigs
     Right $ insert name (typed, (ffis, ffes)) acc'
   Just _ -> Right acc
 
@@ -351,4 +419,4 @@ untangle s = do
   tab <- insert "#" neatPrim <$> (parseProgram s >>= tabulateModules)
   foldM (inferModule tab) Tip $ keys tab
 
-neatPrim = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip []) primAdts
+neatPrim = foldr (\(a, b) -> addAdt a b []) (Neat Tip Tip [] prims Tip Tip Tip [] Tip) primAdts
