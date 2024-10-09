@@ -1,19 +1,3 @@
-static void putu(u n) {
-  if (!n) {
-    putchar('0');
-    return;
-  }
-  u b = 1;
-  while (b != 1000000000 && b * 10 <= n) b *= 10;
-  for(;;)  {
-    u q = n / b;
-    putchar(q + '0');
-    if (b == 1) return;
-    n = n - q * b;
-    b /= 10;
-  }
-}
-
 static u pdump;
 static void traverse(u n) {
   if (!isAddr(n)) return;
@@ -56,36 +40,3 @@ u unleb128(unsigned char **pp) {
     b += 7;
   }
 }
-#ifdef PRECOMPILED
-u precompiled() {
-  unsigned char *p = precompiled_bytecode;
-  for (u lim = unleb128(&p); lim; lim--) {
-    u sym_count = unleb128(&p);
-    while (sym_count--) *rootend++ = tagcheck(unleb128(&p));
-    u mem_count = unleb128(&p);
-    scratchpadend = scratchpad;
-    while (mem_count--) *scratchpadend++ = unleb128(&p);
-    vmheap(scratchpad);
-  }
-  scratchpadend = scratchpad;
-  u hp0 = hp;
-  unsigned char *pend = p + sizeof(precompiled_bytecode)/sizeof(*precompiled_bytecode);
-  while (p < pend) {
-    u x = unleb128(&p);
-    if (isAddr(x)) x = x - 128 + hp0;
-    mem[hp++] = x;
-    u y = unleb128(&p);
-    if (x == _NUM64) {
-      mem[hp++] = y;
-      mem[hp++] = unleb128(&p);
-      mem[hp++] = unleb128(&p);
-    } else {
-      if (isAddr(y) && x != _NUM) y = y - 128 + hp0;
-      mem[hp++] = y;
-    }
-  }
-  return hp0;
-}
-#else
-u precompiled() { return 0; }
-#endif

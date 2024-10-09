@@ -144,9 +144,10 @@ isSymbol = (`elem` "!#$%&*+./<=>?@\\^|-~:")
 isSmall c = c <= 'z' && 'a' <= c || c == '_'
 small = sat isSmall
 large = sat \x -> (x <= 'Z') && ('A' <= x)
-hexit = sat \x -> (x <= '9') && ('0' <= x)
+isHexit x = (x <= '9') && ('0' <= x)
   || (x <= 'F') && ('A' <= x)
   || (x <= 'f') && ('a' <= x)
+hexit = sat isHexit
 digit = sat \x -> (x <= '9') && ('0' <= x)
 nameTailChar = small <|> large <|> digit <|> char '\''
 nameTailed p = liftA2 (:) p $ many nameTailChar
@@ -259,7 +260,7 @@ addAdt t cs ders neat = foldr derive neat' ders where
   neat' = neat
     { typedAsts = mkAdtDefs t cs $ typedAsts neat
     , dataCons = updateDcs t cs $ dataCons neat
-    , type2Cons = insert (typeName t) (concatMap cnames cs) $ type2Cons neat
+    , exportStuff = (exportStuff neat) { type2Cons = insert (typeName t) (concatMap cnames cs) $ type2Cons $ exportStuff neat }
     }
   typeName = \case
     TAp x _ -> typeName x
@@ -613,12 +614,23 @@ export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
   (   paren ((:[]) <$> res ".." <|> sepBy (var <|> con) comma)
   <|> pure []
   )
-exports = Just <$> paren (export_ `sepBy` comma)
+addExportDecl decls neat = neat { exportStuff = (exportStuff neat) { exportDecl = decls } }
+
+exports = fmap addExportDecl $ Just <$> paren (export_ `sepBy` comma)
   <|> pure Nothing
 
-haskell = between lexemePrelude eof $ some $ mayModule tops
+haskell = between lexemePrelude eof $ some mods
 
-mayModule p = res "module" *> ((,) <$> conId <*> ((,) <$> exports <* res "where" <*> p))
-  <|> ("Main",) . (Nothing,) <$> p
+mods = res "module" *> ((,) <$> conId <*> (
+    charSeq "[x|" *> mrs *> (HexNeat <$> some hexByte) <* charSeq "|]" <* mrs
+    <|> (ParsedNeat .) . (.) <$> exports <* res "where" <*> tops)
+  ) <|> ("Main",) . ParsedNeat <$> tops
+  where
+  mrs = many $ rawSat isSpace
+  hexByte = do
+    x <- hexValue <$> rawSat isHexit
+    y <- hexValue <$> rawSat isHexit
+    mrs
+    pure $ x * 16 + y
 
 parseProgram s = fmap fst $ parse haskell s

@@ -1,4 +1,4 @@
-module Main where
+module Reply where
 import Ast
 import Base
 import System
@@ -7,21 +7,26 @@ import Kiselyov
 import Parser
 import Typer
 import RTS
+import Obj
 
 neatInit = neatEmpty {moduleImports = singleton "" $ (, const True) <$> ["#", "Base", "System"]}
 
-initialState = do
-  (topo, objs, ffiList) <- precompiled
-  let
-    libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
-    (libStart, lib) = foldl (genIndex objs) (0, libFFI) topo
+layoutObjects xs = (objs, (libStart, lib)) where
+  Right objs = compileModule (decodeObjectMap xs) ("#", neatPrim)
+  ffiList = concatMap (keys . ffiImports . _neat) $ elems objs
+  libFFI = fromList [("{foreign}", fromList $ zip ffiList [0..])]
+  (libStart, lib) = foldl genIndex (0, libFFI) $ toAscList objs
+
+engrave xs = do
+  let (objs, (libStart, lib)) = layoutObjects xs
+  mapM_ (scratchObj lib) $ elems objs
   pure (objs, (libStart, lib))
 
 moduleNew name (objs, (libStart, lib)) =
   (insert name (Module neatInit Tip []) objs, (libStart, insert name mempty lib))
 
-genIndex objs (start, mm) name = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
-  where syms = _syms $ objs ! name
+genIndex (start, mm) (name, obj) = (start + size syms, insert name (fromList $ zip (keys syms) [start..]) mm)
+  where syms = _syms obj
 
 scratchObj lib ob = do
   vmPutScratchpad $ fromIntegral $ size $ _syms ob
@@ -34,7 +39,6 @@ mergeFragment neat frag = neat
   , instances = foldr (uncurry $ insertWith (++)) (instances neat) $ toAscList $ instances frag
   , typedAsts = foldr (uncurry insert) (typedAsts neat) $ toAscList $ typedAsts frag
   , dataCons = foldr (uncurry insert) (dataCons neat) $ toAscList $ dataCons frag
-  , type2Cons = foldr (uncurry insert) (type2Cons neat) $ toAscList $ type2Cons frag
   , moduleImports = moduleImports frag
   , opFixity = foldr (uncurry insert) (opFixity neat) $ toAscList $ opFixity frag
   , typeAliases = foldr (uncurry insert) (typeAliases neat) $ toAscList $ typeAliases frag
@@ -64,7 +68,8 @@ readInput mos name s = go mos . smoosh =<< fst <$> parse fmt s
     Right expr:rest -> do
       runme <- tryExpr mos name expr
       (Right runme:) <$> go mos rest
-  fmt = lexemePrelude *> (snd . snd <$> mayModule (braceSep $ Left <$> topLevel <|> Right <$> expr)) <* eof
+  fmt = lexemePrelude *> ignoreModule *> (braceSep $ Left <$> topLevel <|> Right <$> expr) <* eof
+  ignoreModule = res "module" *> conId *> exports *> pure () <|> pure ()
 
 tryExpr mos name sugary = do
   ast <- snd <$> patternCompile searcher sugary

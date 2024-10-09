@@ -6,6 +6,7 @@ import Map
 import Ast
 import Parser
 import Unify
+import Obj
 
 -- Pattern compiler.
 rewritePats searcher = \case
@@ -575,20 +576,24 @@ expandTypeAliases neat = pure $ if size als == 0 then neat else neat
     A x y -> A (subAst x) (subAst y)
     t -> t
 
-tabulateModules mods = foldM ins Tip mods where
-  ins tab (k, (mexs, prog)) = case mlookup k tab of
-    Nothing -> do
-      v <- expandTypeAliases =<< maybe pure processExports mexs (prog neatEmpty {moduleImports = singleton "" [("#", const True)]})
-      pure $ insert k v tab
-    Just _ -> Left $ "duplicate module: " ++ k
-  processExports exs neat = do
-    mes <- Just . concat <$> mapM (processExport neat) exs
-    pure neat { moduleExports = mes }
+tabulateModules mods = foldM ins (Tip, Tip) mods where
+  ins (todo, done) (k, porh) = if member k todo || member k done
+    then Left $ "duplicate module: " ++ k
+    else case porh of
+      ParsedNeat f -> do
+        v <- expandTypeAliases =<< processExports (f neatEmpty {moduleImports = singleton "" [("#", const True)]})
+        pure (insert k v todo, done)
+      HexNeat s -> pure (todo, insert k (decodeObject s) done)
+  processExports neat = case exportDecl $ exportStuff neat of
+    Nothing -> pure neat
+    Just exs -> do
+      mes <- Just . concat <$> mapM (processExport neat) exs
+      pure neat { exportStuff = (exportStuff neat) { moduleExports = mes } }
   processExport neat = \case
     ExportVar v -> case mlookup v $ topDefs neat of
       Nothing -> Left $ "bad export " ++ v
       Just _ -> Right [v]
-    ExportCon c ns -> case mlookup c $ type2Cons neat of
+    ExportCon c ns -> case mlookup c $ type2Cons $ exportStuff neat of
       Just cnames
         | ns == [".."] -> Right cnames
         | null delta -> Right ns
@@ -612,7 +617,7 @@ data Searcher = Searcher
   , findInstances :: String -> [(String, Instance)]
   }
 
-isLegalExport s neat = case moduleExports neat of
+isLegalExport s neat = case moduleExports $ exportStuff neat of
   Nothing -> True
   Just es -> elem s es
 

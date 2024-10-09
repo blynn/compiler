@@ -542,62 +542,6 @@ warts opts ffis =
   . runFun opts (toAscList ffis)
   $ ""
 
-topoModules tab = reverse <$> go [] [] (keys tab) where
-  go todo done = \case
-    [] -> Right done
-    x:xt
-      | x `elem` map fst done -> go todo done xt
-      | x `elem` todo -> Left $ "cycle: " ++ x
-      | True -> do
-        neat <- maybe (Left $ "missing module: " ++ x) pure $ mlookup x tab
-        done <- go (x:todo) done $ dependentModules neat
-        go todo ((x, neat):done) xt
-
-data Module = Module
-  { _neat :: Neat
-  , _syms :: Map String (Either (String, String) Int)
-  , _mem :: [Either (String, String) Int]
-  }
-
-data Layout = Layout
-  { _offsets :: Map String Int
-  , _memFun :: [Int] -> [Int]
-  , _hp :: Int
-  , _ffes :: Map String (Int, Type)
-  }
-layoutNew = Layout Tip id 0 Tip
-
-agglomerate ffiMap objs lout name = lout
-  { _offsets = insert name off $ _offsets lout
-  , _ffes = ffes
-  , _memFun = _memFun lout . resolve (_mem ob)
-  , _hp = off + length (_mem ob)
-  }
-  where
-  ffes = foldr (\(expName, v) m -> insertWith (error $ "duplicate export: " ++ expName) expName v m) (_ffes lout)
-    [ (expName, (addr, mustType ourName))
-    | (expName, ourName) <- toAscList $ ffiExports neat
-    , let addr = adj $ _syms ob ! ourName
-    ]
-  mustType s = case mlookup s $ typedAsts neat of
-    Just (Qual [] t, _) -> t
-    _ -> error $ "TODO: bad export: " ++ s
-  off = _hp lout
-  ob = objs ! name
-  neat = _neat ob
-  adj = \case
-    Right n -> if n < 128 then n else n + off
-    Left global -> follow global
-  follow (m, s) = case _syms (objs ! m) ! s of
-    Right n -> if n < 128 then n else n + (_offsets lout ! m)
-    Left global -> follow global
-  resolve (l:r:rest) = case l of
-    Right c
-      | c == comEnum "NUM" -> (c:) . (either ((ffiMap !) . snd) id r:) . resolve rest
-      | c == comEnum "NUM64", Right lo:Right hi:rest' <- rest -> (c:) . (either (error "bad NUM64") id r:) . (lo:) . (hi:) . resolve rest'
-    _ -> (adj l:) . (adj r:) . resolve rest
-  resolve [] = id
-
 leShows n = foldr (.) id $ map go $ take 4 $ iterate (`div` 256) n where
   go b = shows (mod b 256) . (", "++)
 
@@ -607,20 +551,55 @@ leb128Shows n
   | otherwise, (q, r) <- divMod n w128 = shows (w128 + r) . (',':) . leb128Shows q
   where w128 = wordFromInt 128
 
+topoModules tab seed = reverse <$> go [] [] (keys tab) where
+  go todo done = \case
+    [] -> Right done
+    x:xt
+      | x `elem` map fst done || x `member` seed -> go todo done xt
+      | x `elem` todo -> Left $ "cycle: " ++ x
+      | True -> do
+        neat <- maybe (Left $ "missing module: " ++ x) pure $ mlookup x tab
+        done <- go (x:todo) done $ dependentModules neat
+        go todo ((x, neat):done) xt
+
+layout offobjs ffiMap (name, obj) (ffes, memF) = (ffes', memF . resolve (_mem obj)) where
+  (off, obj) = offobjs ! name
+  adj = \case
+    Right n -> if n < 128 then n else n + off
+    Left global -> follow global
+  follow (m, s) = case _syms (snd $ offobjs ! m) ! s of
+    Right n -> if n < 128 then n else n + (fst $ offobjs ! m)
+    Left global -> follow global
+  resolve (l:r:rest) = case l of
+    Right c
+      | c == comEnum "NUM" -> (c:) . (either ((ffiMap !) . snd) id r:) . resolve rest
+      | c == comEnum "NUM64", Right lo:Right hi:rest' <- rest -> (c:) . (either (error "bad NUM64") id r:) . (lo:) . (hi:) . resolve rest'
+    _ -> (adj l:) . (adj r:) . resolve rest
+  resolve [] = id
+
+  ffes' = foldr (\(s, v) m -> insertWith (error $ "duplicate export: " ++ s) s v m) ffes exps
+  exps = second (\s -> (adj $ _syms obj ! s, mustType s)) <$> toAscList (ffiExports $ _neat obj)
+  mustType s = case mlookup s $ typedAsts $ _neat obj of
+    Just (Qual [] t, _) -> t
+    _ -> error $ "TODO: bad export: " ++ s
+
+objectify s = do
+  (todo, done) <- singleFile s
+  todo <- pure $ (if member "#" done then id else insert "#" neatPrim) todo
+  foldM compileModule done =<< topoModules todo done
+
 compile topSize libc opts s = do
-  tab <- insert "#" neatPrim <$> singleFile s
-  ms <- topoModules tab
-  objs <- foldM compileModule Tip ms
+  objList <- toAscList <$> objectify s
   let
-    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports . _neat . snd) objList
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
-    mem = _memFun lout []
-    ffes = _ffes lout
+    offobjs = snd $ foldr (\(name, obj) (n, m) -> (n + length (_mem obj), insert name (n, obj) m)) (0, Tip) objList
+    (ffes, memFun) = foldr (layout offobjs ffiMap) (Tip, id) objList
+    mem = memFun []
     mayMain = do
-      mainOff <- mlookup "Main" $ _offsets lout
-      Right n <- mlookup "main" $ _syms $ objs ! "Main"
-      mainType <- fst <$> mlookup "main" (typedAsts $ _neat $ objs ! "Main")
+      (mainOff, mainObj) <- mlookup "Main" offobjs
+      Right n <- mlookup "main" $ _syms mainObj
+      mainType <- fst <$> mlookup "main" (typedAsts $ _neat mainObj)
       pure (mainOff + n, mainType)
   mainStr <- case mayMain of
     Nothing -> pure ""

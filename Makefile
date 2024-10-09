@@ -27,7 +27,6 @@ webby:webby.c;clang -O3 $^ -o $@ -lm
 precisely:precisely.c;clang -O3 $^ -o $@ -lm
 check:check.c;clang -O3 $^ -o $@ -lm
 reply:reply.c;clang -O3 $^ -o $@ -lm
-reply-precompile:reply-precompile.c;clang -O3 $^ -o $@ -lm
 
 singularity.boot:singularity bootsingularity.sh;./bootsingularity.sh > $@
 vm:vm.c
@@ -39,14 +38,18 @@ define rtsup
 $(1).c: $(2) $(1).hs rts.c;(cat rts.c && time ./$(2) < $(1).hs) > $$@
 endef
 
-REPLYHS=inn/AstPrecisely.hs inn/BasePrecisely.hs inn/KiselyovPrecisely.hs inn/Map1.hs inn/ParserPrecisely.hs inn/RTSPrecisely.hs inn/TyperPrecisely.hs inn/Unify1.hs inn/reply.hs
+COMMON=AstPrecisely BasePrecisely KiselyovPrecisely Map1 ParserPrecisely RTSPrecisely TyperPrecisely Unify1 Charser Obj
+COMMONHS=$(addprefix inn/, $(addsuffix .hs, $(COMMON)))
+COMMONOB=$(addsuffix .ob, Ast Base Kiselyov Map Parser RTS Typer Unify Charser Obj)
 
-reply.c: reply-precompile inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-native.hs; (cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-native.hs | ./precisely ; cat inn/BasePrecisely.hs inn/System.hs inn/ReplyImports.hs | ./reply-precompile | fold -s; cat inn/introspect.c) > $@
+SHELL=/usr/bin/env bash
+$(COMMONOB):precisely $(COMMONHS);sh <(cat $(COMMONHS) | ./precisely obj)
 
-reply-precompile.c: precisely inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs inn/introspect.c; ((cat inn/System.hs inn/ReplyImports.hs $(REPLYHS) inn/reply-precompile.hs) | ./precisely ; cat inn/introspect.c) > $@
+reply.c: inn/System.hs inn/ReplyImports.hs inn/reply.hs inn/reply-native.hs $(COMMONOB); (cat $^ | ./precisely ; cat inn/introspect.c; cat inn/System.hs inn/ReplyImports.hs Base.ob | ./precisely objc) > $@
 
-DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs
-doh.c: reply-precompile $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs; ((cat $(DOHSYS) inn/ReplyImports.hs $(REPLYHS) inn/reply-wasm.hs) | ./precisely wasm ; cat inn/BasePrecisely.hs $(DOHSYS) inn/ReplyImports.hs | ./reply-precompile | fold -s ; cat inn/introspect.c) > $@
+DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs inn/ReplyImports.hs
+
+doh.c: $(DOHSYS) inn/reply.hs inn/reply-wasm.hs $(COMMONOB); (cat $^ | ./precisely wasm ; cat inn/introspect.c ; cat $(DOHSYS) Base.ob | ./precisely objc) > $@
 
 doh.html:doh.txt menu.html;./stitch book menu $<
 
@@ -73,19 +76,16 @@ $(call party,multiparty.c,party,Base0 System Ast Map Parser Kiselyov Unify RTS T
 $(call party,party1.c,multiparty,Base0 System Ast1 Map Parser1 Kiselyov Unify1 RTS Typer1 party)
 $(call party,party2.c,party1,Base1 System Ast2 Map Parser2 Kiselyov Unify1 RTS1 Typer2 party1)
 $(call party,crossly.c,party2,Base1 System Ast3 Map Parser3 Kiselyov Unify1 RTS2 Typer3 party2)
-$(call party,crossly1.c,crossly,Base2 System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
-$(call party,precisely.c,crossly1,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
+$(call party,crossly1.c,crossly,Base2 System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Obj Charser precisely)
+$(call party,precisely.c,crossly1,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Obj Charser precisely)
 
 $(call party,check.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
 
-$(call party,webby.c,precisely,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
-$(call party,webby.wasm,webby,BasePrecisely SystemWasm AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Webby WartsBytes)
+webby.c:inn/System.hs inn/Webby.hs inn/WartsBytes.hs $(COMMONOB) | precisely; cat $^ | ./precisely > $@
+webby.wasm:inn/SystemWasm.hs inn/Webby.hs inn/WartsBytes.hs $(COMMONOB) | webby; cat $^ | ./webby > $@
 
-$(call party,imp.c,precisely wasm,BasePrecisely SystemWasm AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely Imp WartsBytes)
+imp.c:inn/SystemWasm.hs inn/Imp.hs inn/WartsBytes.hs $(COMMONOB); cat $^ | ./precisely wasm > $@
 
-$(call cat,tmp.hs,BasePrecisely System AstPrecisely Map1 ParserPrecisely KiselyovPrecisely Unify1 RTSPrecisely TyperPrecisely precisely)
-
-#warts.c:crossly;cat inn/Base1.hs inn/SystemWasm.hs | ./crossly warts > $@
 warts.c:precisely;cat inn/BasePrecisely.hs inn/SystemWasm.hs | ./precisely warts > $@
 $(call party,warts2hs.c,crossly,Base1 System warts2hs)
 inn/WartsBytes.hs:warts2hs warts.wasm;./$^ < warts.wasm > $@

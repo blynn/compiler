@@ -34,27 +34,28 @@ unxxd s = StrLen (go s) (length s `div` 2) where
 
 foreign export ccall "single_module" singleModule
 singleModule = interact $ \s -> case singleFile s of
-  Right tab -> case keys tab of
+  Right (tab, Tip) -> case keys tab of
     [s] -> s
     _ -> ""
   _ -> ""
 
 toWasm tab = do
-  ms <- topoModules tab
-  objs <- foldM compileModule Tip ms
+  objs <- foldM compileModule Tip =<< topoModules tab Tip
   let
+    objList = toAscList objs
     ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
-    mem = _memFun lout []
+    offobjs = snd $ foldr (\(name, obj) (n, m) -> (n + length (_mem obj), insert name (n, obj) m)) (0, Tip) objList
+    (ffes0, memFun) = foldr (layout offobjs ffiMap) (Tip, id) objList
+    mem = memFun []
   (mainOff, mainType) <- maybe (Left "bad main") Right $ do
-    m <- mlookup "Main" $ _offsets lout
-    Right n <- mlookup "main" $ _syms $ objs ! "Main"
-    q <- fst <$> mlookup "main" (typedAsts $ _neat $ objs ! "Main")
-    pure (m + n, q)
+    (mainOff, mainObj) <- mlookup "Main" offobjs
+    Right n <- mlookup "main" $ _syms mainObj
+    mainType <- fst <$> mlookup "main" (typedAsts $ _neat mainObj)
+    pure (mainOff + n, mainType)
   getIOType mainType
   let
-    ffes = ("main", mainOff) : toAscList (fst <$> _ffes lout)
+    ffes = ("main", mainOff) : toAscList (fst <$> ffes0)
     go (n, x)
       -- Function section: for each export, declare a function of type () -> ()..
       | n == 3  = leb n <> extendSection x (replicate (length ffes) $ leb funType00Idx)
@@ -119,9 +120,10 @@ complete tab = case needed tab of
     s <- getContents
     case singleFile s of
       Left e -> putStr $ f ++ ": " ++ e
-      Right tab' -> case foldM checkMerge tab $ assocs tab' of
+      Right (tab', Tip) -> case foldM checkMerge tab $ assocs tab' of
         Left e -> putStr e
         Right tab -> complete tab
+      _ -> putStr "TODO: object files"
 
 checkMerge tab (k, v)
   | member k tab = Left $ "duplicate: " ++ show k
@@ -132,4 +134,5 @@ main = do
   s <- getContents
   case singleFile s of
     Left e -> putStr e
-    Right tab -> complete $ insert "#" neatPrim tab
+    Right (tab, Tip) -> complete $ insert "#" neatPrim tab
+    _ -> putStr "TODO: object files"

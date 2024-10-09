@@ -60,8 +60,15 @@ data Instance = Instance
 
 data Assoc = NAssoc | LAssoc | RAssoc deriving Eq
 
+data ExportStuff = ExportStuff
+  { type2Cons :: Map String [String]
+  , moduleExports :: Maybe [String]
+  , exportDecl :: Maybe [ModExport]
+  }
+
 data Neat = Neat
-  { typeclasses :: Map String [String]
+  { exportStuff :: ExportStuff
+  , typeclasses :: Map String [String]
   , instances :: Map String [Instance]
   , topDefs :: Map String Ast
   , topDecls :: Map String Qual
@@ -69,16 +76,22 @@ data Neat = Neat
   -- e.g. (==), (Eq a => a -> a -> Bool, select-==)
   , typedAsts :: Map String (Qual, Ast)
   , dataCons :: Map String (Qual, [Constr])
-  , type2Cons :: Map String [String]
   , ffiImports :: Map String Type
   , ffiExports :: Map String String
   , moduleImports :: Map String [(String, String -> Bool)]
-  , moduleExports :: Maybe [String]
   , opFixity :: Map String (Int, Assoc)
   , typeAliases :: Map String Type
   }
 
-neatEmpty = Neat Tip Tip Tip Tip Tip Tip Tip Tip Tip (singleton "" []) Nothing Tip Tip
+neatEmpty = Neat (ExportStuff Tip Nothing Nothing) Tip Tip Tip Tip Tip Tip Tip Tip (singleton "" []) Tip Tip
+
+data ParsedOrHex = ParsedNeat (Neat -> Neat) | HexNeat [Int]
+
+data Module = Module
+  { _neat :: Neat
+  , _syms :: Map String (Either (String, String) Int)
+  , _mem :: [Either (String, String) Int]
+  }
 
 patVars = \case
   PatLit _ -> []

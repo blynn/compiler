@@ -7,10 +7,11 @@ import RTS
 import Typer
 import Kiselyov
 import System
+import Obj
 
 hide_prelude_here' = hide_prelude_here'
 
-dumpWith dumper s = case getObjs s of
+dumpWith dumper s = case objectify s of
   Left err -> err
   Right tab -> foldr ($) [] $ map (\(name, mod) -> ("module "++) . (name++) . ('\n':) . (foldr (.) id $ dumper $ _neat mod)) $ toAscList tab
 
@@ -29,40 +30,65 @@ dumpMatrix neat = map go combs where
   combs = toAscList $ matrixComb . optiApp . snd <$> typedAsts neat
   go (s, t) = (s++) . (" = "++) . shows t . (";\n"++)
 
-getObjs s = do
-  tab <- insert "#" neatPrim <$> singleFile s
-  foldM compileModule Tip =<< topoModules tab
-
 recomb objs = dumpCombs . toAscList $ fmap (toAscList . combTyped objs . typedAsts . _neat) objs
 
+instance Show Assoc where
+  showsPrec _ = \case
+    LAssoc -> ('L':)
+    RAssoc -> ('R':)
+    NAssoc -> ('N':)
+
+instance Show Constr where
+  showsPrec _ (Constr s sts) = shows s . (", "++) . shows sts
+
+instance Show Instance where
+  showsPrec _ (Instance ty name ctx _) =
+    shows ty . (", "++) . (name++) . (", "++) . shows ctx
+
 objDump s = do
-  tab <- insert "#" neatPrim <$> singleFile s
-  topo <- topoModules tab
-  objs <- foldM compileModule Tip topo
-  pure $ ("objs = fromList\n    [ "++)
-    . foldr (.) id (intersperse ("    , "++) $ go <$> toAscList objs)
-    . ("    ]\n"++)
+  objs <- objectify s
+  pure $ foldr (.) id (intersperse ("    , "++) $ go <$> toAscList objs)
   where
   go (k, m) = ("("++) . shows k . (", Module"++)
     . ("\n  { _syms = fromList "++)
     . shows (toAscList $ _syms m)
     . ("\n  , _mem = "++)
     . shows (_mem m)
+    . ("\n  , _neat =\n"++)
+    . goNeat (_neat m)
     . ("\n  })\n"++)
+  goNeat neat = ("{ typeclasses = fromList "++)
+    . shows (toAscList $ typeclasses neat)
+    . ("\n, instances = "++)
+    . shows (toAscList $ instances neat)
+    . ("\n, types = ["++)
+    . foldr (.) id (intersperse (',':) $ map goSTA $ toAscList $ typedAsts neat)
+    . ("]"++)
+    . ("\n, dataCons = "++)
+    . shows (dataCons neat)
+    . ("\n, moduleExports = "++)
+    . shows (moduleExports $ exportStuff neat)
+    . ("\n, opFixity = "++)
+    . shows (opFixity neat)
+    . ("\n, typeAliases = "++)
+    . shows (typeAliases neat)
+    . ("\n}\n"++)
+  goSTA (s, (t, a)) = ('(':) . shows s . (", "++) . shows t . (')':)
 
-allFFIs s = fromList . concatMap (toAscList . ffiImports) . elems <$> singleFile s
+allFFIs s = fromList . concatMap (toAscList . ffiImports) . elems . fst <$> singleFile s
+
+obj s = foldr (.) id . map scriptify . toAscList <$> objectify s
 
 main = getArgs >>= \case
-  "obj":_ -> interact $ either id ($ "") . objDump
+  "objdump":_ -> interact $ either id ($ "") . objDump
+  "obj":_ -> interact $ either id ($ "") . obj
+  "objc":_ -> interact $ either id (($ "") . toCsource . delete "#") . objectify
   "matrix":_ -> interact $ dumpWith dumpMatrix
-  "topo":_ -> interact \s -> either id show $ do
-    tab <- insert "#" neatPrim <$> singleFile s
-    map fst <$> topoModules tab
-  "comb":_ -> interact $ either id recomb . getObjs
+  "comb":_ -> interact $ either id recomb . objectify
   "rawcomb":_ -> interact $ dumpWith dumpRawCombs
   "lamb":_ -> interact $ dumpWith dumpLambs
   "parse":_ -> interact \s -> either id show $ do
-    tab <- singleFile s
+    (tab, _) <- singleFile s
     pure $ second (toAscList . topDefs) <$> toAscList tab
   "type":_ -> interact $ dumpWith dumpTypes
   "ffis":opts -> interact $ either id (($ "\n") . shows . keys) . allFFIs

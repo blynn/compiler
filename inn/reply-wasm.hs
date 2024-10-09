@@ -1,3 +1,12 @@
+module Main where
+
+import Base
+import Map
+import System
+import Reply
+
+foreign import ccall "objmapbytes" objmapbytes :: IO [Int]
+
 foreign export ccall "chat" chat
 chat :: IO ()
 chat = do
@@ -16,7 +25,7 @@ chat = do
     Left err -> putStr "error" >> nextOut >> putStrLn err
     Right good -> putStr "ok" >> nextOut >> interpret st good
 
-ref = unsafePerformIO $ newIORef =<< initialState
+ref = unsafePerformIO $ newIORef =<< engrave =<< objmapbytes
 
 foreign export ccall "chat_mv" chat_mv
 chat_mv = do

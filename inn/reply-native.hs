@@ -1,5 +1,14 @@
+module Main where
+
+import Base
+import Map
+import System
+import Reply
+
+foreign import ccall "objmapbytes" objmapbytes :: IO [Int]
+
 main :: IO ()
-main = loop . moduleNew ">" =<< initialState
+main = loop . moduleNew ">" =<< engrave =<< objmapbytes
 
 loop st@(mos, _) = do
   putStr "> "

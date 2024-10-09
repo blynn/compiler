@@ -25,18 +25,19 @@ unxxd s = StrLen (go s) (length s `div` 2) where
     [] -> id
     (d1:d0:rest) -> ((chr $ hexValue d1 * 16 + hexValue d0):) . go rest
 
-main = interact $ either id id . toWasm
+main = do
+  putStr "DEBUG\n"
+  interact $ either id id . toWasm
 
 toWasm s = do
-  tab <- insert "#" neatPrim <$> singleFile s
-  ms <- topoModules tab
-  objs <- foldM compileModule Tip ms
+  objList <- toAscList <$> objectify s
   let
-    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports) $ elems tab
+    ffis = foldr (\(k, v) m -> insertWith (error $ "duplicate import: " ++ k) k v m) Tip $ concatMap (toAscList . ffiImports . _neat . snd) objList
     ffiMap = fromList $ zip (keys ffis) [0..]
-    lout = foldl (agglomerate ffiMap objs) layoutNew $ fst <$> ms
-    mem = _memFun lout []
-    ffes = toAscList $ fst <$> _ffes lout
+    offobjs = snd $ foldr (\(name, obj) (n, m) -> (n + length (_mem obj), insert name (n, obj) m)) (0, Tip) objList
+    (ffeMap, memFun) = foldr (layout offobjs ffiMap) (Tip, id) objList
+    ffes = toAscList $ fst <$> ffeMap
+    mem = memFun []
     go (n, x)
       -- Function section: for each export, declare a function of type () -> ()..
       | n == 3  = leb n <> extendSection x (replicate (length ffes) $ unxxd "01")
