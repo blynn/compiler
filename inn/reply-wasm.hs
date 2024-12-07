@@ -5,8 +5,6 @@ import Map
 import System
 import Reply
 
-foreign import ccall "objmapbytes" objmapbytes :: IO [Int]
-
 foreign export ccall "chat" chat
 chat :: IO ()
 chat = do

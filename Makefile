@@ -43,11 +43,12 @@ COMMONHS=$(addprefix inn/, $(addsuffix .hs, $(COMMON)))
 COMMONOB=$(addsuffix .ob, Ast Base Kiselyov Map Parser RTS Typer Unify Charser Obj)
 
 SHELL=/usr/bin/env bash
-$(COMMONOB):precisely $(COMMONHS);sh <(cat $(COMMONHS) | ./precisely obj)
 
-reply.c: inn/System.hs inn/ReplyImports.hs inn/reply.hs inn/reply-native.hs $(COMMONOB); (cat $^ | ./precisely ; cat inn/introspect.c; cat inn/System.hs inn/ReplyImports.hs Base.ob | ./precisely objc) > $@
+%.ob:precisely inn/%.hs;sh <(cat $(COMMONHS) | ./precisely obj)
 
-DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs inn/ReplyImports.hs
+reply.c: inn/System.hs inn/ReplyImports.hs inn/ObjMapImports.hs inn/reply.hs inn/reply-native.hs $(COMMONOB); (cat $^ | ./precisely ; cat inn/introspect.c; cat inn/System.hs inn/ReplyImports.hs inn/ObjMapImports.hs Base.ob | ./precisely objc) > $@
+
+DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs inn/ReplyImports.hs inn/ObjMapImports.hs
 
 doh.c: $(DOHSYS) inn/reply.hs inn/reply-wasm.hs $(COMMONOB); (cat $^ | ./precisely wasm ; cat inn/introspect.c ; cat $(DOHSYS) Base.ob | ./precisely objc) > $@
 

@@ -5,8 +5,6 @@ import Map
 import System
 import Reply
 
-foreign import ccall "objmapbytes" objmapbytes :: IO [Int]
-
 main :: IO ()
 main = loop . moduleNew ">" =<< engrave =<< objmapbytes
 

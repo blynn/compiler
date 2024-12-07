@@ -664,3 +664,7 @@ http://www.cs.cornell.edu/~ross/publications/eqsat/[automating equational
 reasoning leads to emergent optimizations]. The computer systematically
 applies advanced optimizations traditionally discovered and implemented by
 experienced programmers.
+
+The https://crypto.stanford.edu/~blynn/lambda/diamond.html[Church-Rosser
+theorem] assures us that lambda calculus is confluent, which is important for
+programmers.
