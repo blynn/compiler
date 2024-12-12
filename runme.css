@@ -1,0 +1,60 @@
+.errmsg{color:red;}
+.inlabel{
+font-family:'Inconsolata',monospace;
+min-width:3em;
+text-align:right;
+}
+.incode{
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:solid lightgrey 1px;
+padding:0.2ex;
+background-color:whitesmoke;
+}
+.incode:focus{
+background-color:white;
+}
+.outlabel{
+font-family:'Inconsolata',monospace;
+min-width:3em;
+text-align:right;
+}
+.output{
+margin-bottom:1em;
+}
+.outtext{
+margin-bottom:0;
+font-family:'Inconsolata',monospace;
+flex-grow:1;
+border:0;
+background-color:white;
+white-space:pre-wrap;
+word-wrap:break-word;
+min-width:0; /* https://stackoverflow.com/questions/32035406/how-to-limit-pre-tag-width-inside-flex-container */
+}
+
+/* https://stackoverflow.com/questions/6040005/relatively-position-an-element-without-it-taking-up-space-in-document-flow -*/
+.cellmenu{
+float:right;
+height:0;
+}
+.cellmenukid{
+position:relative;right:0.5em;bottom:1.5em;
+background-color:white;padding:2px;
+border:1px solid lightgrey;border-radius:4px;
+font-family:'Open Sans',sans-serif;
+}
+.topbutton{
+padding-left:0.5em;
+padding-right:0.5em;
+color:dimgrey;
+min-width: 1.5em;
+display: inline-block;
+border-radius: 5px;
+text-align: center;
+}
+.topbutton:hover{
+color:black;
+background-color:whitesmoke;
+cursor:pointer;
+}

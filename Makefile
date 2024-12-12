@@ -4,7 +4,7 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm doh.wasm merc-main.js merc.css
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs cmpmira.tar.gz webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
