@@ -638,9 +638,10 @@ class Bits a where
   xor :: a -> a -> a
   (.&.) :: a -> a -> a
   (.|.) :: a -> a -> a
+  shiftL :: a -> Int -> a
   shiftR :: a -> Int -> a
-  rotateR :: a -> Int -> a
   rotateL :: a -> Int -> a
+  rotateR :: a -> Int -> a
   complement :: a -> a
   complement x = -1 - x
 
@@ -648,32 +649,38 @@ instance Bits Int where
   xor = intXor
   (.&.) = intAnd
   (.|.) = intOr
+  shiftL n i = intShl n $ fromIntegral i
   shiftR n i = intShr n $ fromIntegral i
-  rotateR n i = intOr (intShr n u) (intShl n $ 32 - u) where u = fromIntegral i
   rotateL n i = intOr (intShr n $ 32 - u) (intShl n u) where u = fromIntegral i
+  rotateR n i = intOr (intShr n u) (intShl n $ 32 - u) where u = fromIntegral i
 
 instance Bits Word where
   xor = wordXor
   (.&.) = wordAnd
   (.|.) = wordOr
+  shiftL n i = wordShl n $ fromIntegral i
   shiftR n i = wordShr n $ fromIntegral i
-  rotateR n i = wordOr (wordShr n u) (wordShl n $ 32 - u) where u = fromIntegral i
   rotateL n i = wordOr (wordShr n $ 32 - u) (wordShl n u) where u = fromIntegral i
+  rotateR n i = wordOr (wordShr n u) (wordShl n $ 32 - u) where u = fromIntegral i
 
 instance Bits Word64 where
   xor (Word64 a b) (Word64 c d) = Word64 (wordXor a c) (wordXor b d)
   (Word64 a b) .&. (Word64 c d) = Word64 (wordAnd a c) (wordAnd b d)
   (Word64 a b) .|. (Word64 c d) = Word64 (wordOr a c) (wordOr b d)
+  shiftL (Word64 a b) i
+    | u >= 32 = Word64 0 $ wordShl a $ u - 32
+    | otherwise = Word64 (wordShl a u) (wordShr a (32 - u) + wordShl b u)
+    where u = fromIntegral i
   shiftR (Word64 a b) i
     | u >= 32 = Word64 (wordShr b $ u - 32) 0
     | otherwise = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u)
     where u = fromIntegral i
+  rotateL (Word64 a b) i = let n = wordFromInt i in
+    uncurry Word64 (word64Shl a b n 0) .|.
+    uncurry Word64 (word64Shr a b (64 - n) 0)
   rotateR (Word64 a b) i
     | u >= 32 = small b a $ u - 32
     | otherwise = small a b u
     where
     u = fromIntegral i
     small a b u = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u + wordShl a (32 - u))
-  rotateL (Word64 a b) i = let n = wordFromInt i in
-    uncurry Word64 (word64Shl a b n 0) .|.
-    uncurry Word64 (word64Shr a b (64 - n) 0)

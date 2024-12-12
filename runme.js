@@ -1,3 +1,5 @@
+let runme_out;
+
 async function run_runmes() {
   const stash = document.createElement("div");
   const cellmenu = document.createElement("div");
@@ -10,9 +12,10 @@ async function run_runmes() {
   repl.runCount = 0;
   function run(runme) {
     const s = runme.getElementsByClassName("incode")[0].innerText;
-    const r = repl.run("chat", ["Main"], s);
     const oe = runme.getElementsByClassName("output")[0];
     oe.innerHTML = "";
+    runme_out = oe;
+    const r = repl.run("chat", ["Main"], s);
     if (r.buf[0] == "error") {
       oe.innerHTML = "<div class='errmsg'></div>";
       oe.getElementsByClassName("errmsg")[0].textContent = r.out;
@@ -21,7 +24,6 @@ async function run_runmes() {
       repl.runCount++;
       runme.getElementsByClassName("runcounter")[0].innerText = repl.runCount;
       if (r.out != "") {
-        const oe = runme.getElementsByClassName("output")[0];
         oe.innerHTML = `<div style="display:flex;">
 <span class="outlabel">[<span class="runcounter">` + repl.runCount + `</span>]:</span>
 <pre class="outtext"></pre>
