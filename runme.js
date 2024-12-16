@@ -5,7 +5,6 @@ async function run_runmes() {
   const cellmenu = document.createElement("div");
   cellmenu.classList.add("cellmenu");
   cellmenu.innerHTML = `<div class="cellmenukid"><div id="cellmenubuttons">
-<span class='topbutton' id='playbutton'>&#x25b6;</span>
 </div> </div>`;
 
   const repl = await mkRepl();
@@ -15,7 +14,7 @@ async function run_runmes() {
     const oe = runme.getElementsByClassName("output")[0];
     oe.innerHTML = "";
     runme_out = oe;
-    const r = repl.run("chat", ["Main"], s);
+    const r = repl.run("chat", ["Main"], s + '\n');
     if (r.buf[0] == "error") {
       oe.innerHTML = "<div class='errmsg'></div>";
       oe.getElementsByClassName("errmsg")[0].textContent = r.out;
@@ -24,19 +23,18 @@ async function run_runmes() {
       repl.runCount++;
       runme.getElementsByClassName("runcounter")[0].innerText = repl.runCount;
       if (r.out != "") {
-        oe.innerHTML = `<div style="display:flex;">
-<span class="outlabel">[<span class="runcounter">` + repl.runCount + `</span>]:</span>
-<pre class="outtext"></pre>
-</div>
-`;
+        const div = document.createElement("div");
+        div.style.display = "flex";
+        div.innerHTML = `<span class="outlabel">[<span class="runcounter">` + repl.runCount + `</span>]:</span>
+<pre class="outtext"></pre>`;
+        oe.appendChild(div);
         oe.getElementsByClassName("outtext")[0].textContent = r.out;
       }
     }
     return 0;
   }
 
-  const runthese = document.getElementsByClassName("runme");
-  for (const runme of runthese) {
+  function interpret(runme) {
     const s = runme.innerText;
     runme.innerHTML = `<div style="display:flex;">
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
@@ -49,10 +47,13 @@ async function run_runmes() {
       inco.innerText = s;
       inco.addEventListener('focus', ev => {
         runme.before(cellmenu);
+        document.getElementById("cellmenubuttons").innerHTML =
+`<span class='topbutton' id='playbutton'>&#x25b6;</span>`;
         const b = document.getElementById("playbutton");
         b.addEventListener('click', ev => {
           stash.appendChild(cellmenu);
           run(runme);
+          ev.preventDefault();
         });
       });
       inco.addEventListener('keydown', ev => {
@@ -84,6 +85,16 @@ async function run_runmes() {
     }
     init_incode(runme, s);
     run(runme);
+  }
+
+  let runmeClass = "runme";
+  for(;;) {
+    const runthese = document.getElementsByClassName(runmeClass);
+    if (runthese.length == 0) {
+      break;
+    }
+    for (const runme of runthese) interpret(runme);
+    runmeClass += "'";
   }
 }
 
