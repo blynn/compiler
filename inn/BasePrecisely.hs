@@ -269,7 +269,7 @@ instance Enum Int where
   toEnum = id
   fromEnum = id
   enumFrom = iterate succ
-  enumFromThen x y = iterate (+(y - x)) x
+  enumFromThen x y = iterate ((y - x)+) x
   enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
   enumFromThenTo x y lim = takeWhile ((if y < x then (<=) else (>=)) lim) $ enumFromThen x y
 instance Enum Bool where
@@ -293,6 +293,10 @@ instance Enum Double where
   fromEnum = intFromDouble
   succ = (+ 1)
   pred = (- 1)
+  enumFrom = iterate (1.0+)
+  enumFromThen x y = (x+) . ((y - x)*) . doubleFromInt <$> [0..]
+  enumFromTo lo hi = takeWhile (<= hi) $ enumFrom lo
+  enumFromThenTo x y lim = takeWhile ((if y < x then (<=) else (>=)) lim) $ enumFromThen x y
 
 fromIntegral = fromInteger . toInteger
 
@@ -618,17 +622,22 @@ instance Eq Double where (==) = doubleEq
 instance Ord Double where (<=) = doubleLE
 instance Show Double where
   showsPrec _ d = case compare d 0 of
-   EQ -> ('0':)
-   LT -> ('-':) . shows -d
-   GT -> go where
-    tens = iterate (10*) 1
-    tenths = iterate (0.1*) 1
-    (as, bs) = if d >= 1 then span (<= d) tens else span (>= d) tenths
-    norm = if d >= 1 then d / last as else d / head bs
-    dig = intFromDouble norm
-    go = shows dig . ('.':) . (tail (show $ 1000000 + intFromDouble (1000000 * (norm - doubleFromInt dig)))++) . showsE (length as)
-    showsE e = if e == 1 && d >= 1 then id
-      else ('e':) . shows (if d >= 1 then e - 1 else 0 - e)
+    EQ -> ('0':)
+    LT -> ('-':) . shows -d
+    GT
+      | d >= 9999999.5 -> big 7 10000000
+      | d >= 0.0000995 -> dotty d
+      | otherwise -> let
+        (as, bs) = span (>= d) $ iterate (0.1*) 1
+        in dotty (d / head bs) . ("e-"++) . shows (length as)
+      where
+      dotty norm = let
+        n = intFromDouble $ 0.0000005 + norm
+        in shows n . ('.':) . (tail (show $ 1000000 + intFromDouble (0.5 + 1000000 * (norm - doubleFromInt n)))++)
+      big e b
+        | 10.0*b > d = dotty (d / b) . ('e':) . shows e
+        | otherwise = big (e + 1::Int) (10*b)
+
 instance Field Double where (/) = doubleDiv
 
 floor = intFromDouble . doubleFloor

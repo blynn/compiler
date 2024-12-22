@@ -49,8 +49,7 @@ async function run_runmes() {
         runme.before(cellmenu);
         document.getElementById("cellmenubuttons").innerHTML =
 `<span class='topbutton' id='playbutton'>&#x25b6;</span>`;
-        const b = document.getElementById("playbutton");
-        b.addEventListener('click', ev => {
+        document.getElementById("playbutton").addEventListener('click', ev => {
           stash.appendChild(cellmenu);
           run(runme);
           ev.preventDefault();
