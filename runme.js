@@ -1,5 +1,7 @@
 let runme_out;
 
+let curl_module;
+
 async function run_runmes() {
   const stash = document.createElement("div");
   const cellmenu = document.createElement("div");
@@ -8,8 +10,14 @@ async function run_runmes() {
 </div> </div>`;
 
   const repl = await mkRepl();
+  let prom = undefined;
+  curl_module = function(url) { prom = repl.fetch_module(url); }
   repl.runCount = 0;
-  function run(runme) {
+  async function run(runme) {
+    if (prom) {
+      await prom;
+      prom = undefined;
+    }
     const s = runme.getElementsByClassName("incode")[0].innerText;
     const oe = runme.getElementsByClassName("output")[0];
     oe.innerHTML = "";
@@ -34,7 +42,7 @@ async function run_runmes() {
     return 0;
   }
 
-  function interpret(runme) {
+  async function interpret(runme) {
     const s = runme.innerText;
     runme.innerHTML = `<div style="display:flex;">
 <span class="inlabel">[<span class="runcounter"> </span>]:</span>
@@ -67,15 +75,14 @@ async function run_runmes() {
             ev.preventDefault();
             */
           } else if (ev.altKey) {
-            const status = run(runme);
-            if (!status) {
+            run(runme).then((status) => {if (!status) {
               const x = runme.cloneNode(true);
               x.getElementsByClassName("output")[0].innerHTML = "";
               x.getElementsByClassName("runcounter")[0].innerText = " ";
               init_incode(x, "");
               runme.after(x);
               x.getElementsByClassName("incode")[0].focus();
-            }
+            }});
             ev.preventDefault();
           }
           break;
@@ -83,7 +90,7 @@ async function run_runmes() {
       });
     }
     init_incode(runme, s);
-    run(runme);
+    await run(runme);
   }
 
   let runmeClass = "runme";
@@ -92,7 +99,7 @@ async function run_runmes() {
     if (runthese.length == 0) {
       break;
     }
-    for (const runme of runthese) interpret(runme);
+    for (const runme of runthese) await interpret(runme);
     runmeClass += "'";
   }
 }

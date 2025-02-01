@@ -161,9 +161,9 @@ async function loadRepl() {
 module_name = "Map";
 run("chat_new", [teen("Map")], "");
 const maphs = document.getElementById("Map.hs").textContent;
-const r = run("chat", [teen("Map")], maphs);
+const r = run("chat_module", [], maphs);
 const ie = document.createElement("pre");
-if (r.buf[0] == "ok") ie.classList.add('ok'); else console.log("error!", r);
+if (r.out == "") ie.classList.add('ok'); else console.log("error!", r.out);
 ie.innerText = maphs;
 convo.appendChild(ie);
 module_saved.set("Map", convo.innerHTML);

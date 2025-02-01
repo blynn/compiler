@@ -90,9 +90,7 @@ tryAddDefs mos name frag = do
     orig = mos!name
     mergedNeat = mergeFragment (_neat orig) (_neat fresh)
     mergedSyms = foldr (uncurry insert) (_syms orig) $ toAscList $ _syms fresh
-
     mergedMos = insert name (Module mergedNeat mergedSyms []) mos1
-
   pure (mergedMos, fresh)
   where
   rmSelfImportModule m = m {_neat = rmSelfImportNeat $ _neat m}
@@ -109,3 +107,23 @@ smoosh = go (const id, id) where
 scratch lib = mapM \case
   Left (moduleName, sym) -> (if moduleName == "{foreign}" then vmPutScratchpad else vmPutScratchpadRoot) $ fromIntegral $ lib ! moduleName ! sym
   Right x -> vmPutScratchpad $ fromIntegral x
+
+-- Load a module assuming all its dependencies have already been met.
+mustModule (mos, (libStart, lib)) s = case tabulateModules . (:[]) . fst =<< parse (between lexemePrelude eof mods) s of
+  Left e -> bad $ show e
+  Right (todo, done) -> case toAscList todo of
+    [(name, neat)] -> case compileModule mos (name, neat) of
+      Left s -> bad s
+      Right mos -> do
+        obj <- pure $ mos!name
+        (libStart, lib) <- pure $ genIndex (libStart, lib) (name, obj)
+        scratchObj lib obj
+        pure (mos, (libStart, lib))
+    _ -> case toAscList done of
+      [(name, obj)] -> do
+        (libStart, lib) <- pure $ genIndex (libStart, lib) (name, obj)
+        scratchObj lib obj
+        pure (insert name obj mos, (libStart, lib))
+      _ -> bad "want exactly one module"
+  where
+  bad s = putStr s *> pure (mos, (libStart, lib))

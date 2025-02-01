@@ -25,6 +25,11 @@ chat = do
 
 ref = unsafePerformIO $ newIORef =<< engrave =<< objmapbytes
 
+foreign export ccall "chat_module" chat_module
+chat_module = do
+  s <- getContents
+  writeIORef ref =<< flip mustModule s =<< readIORef ref
+
 foreign export ccall "chat_mv" chat_mv
 chat_mv = do
   [src, tgt] <- getArgs

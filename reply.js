@@ -39,6 +39,12 @@ async function mkRepl() {
   const p = await WebAssembly.instantiateStreaming(fetch('../compiler/doh.wasm'), importObj);
   repl.instance = p.instance;
   repl.module = p.module;
+  repl.fetch_module = async function(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Response status: ${response.status}`);
+    const bl = new Uint8Array(await (await response.blob()).arrayBuffer());
+    repl.runBlob("chat_module", [], bl);
+  }
   repl.reset = async function() {
     repl.instance = await WebAssembly.instantiate(repl.module, importObj);
     repl.run("chat_new", ["Main"], "");
