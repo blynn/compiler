@@ -79,7 +79,7 @@ cborNeat neat = CBORMap $ mayExport
   , (CBORText "instance", CBORMap $ map (CBORText *** CBORArray . map cborInstance) $ toAscList $ instances neat)
   , (CBORText "data", CBORMap $ map (CBORText *** \(q, cs) -> CBORArray (cborQual q:map cborConstr cs)) $ toAscList $ dataCons neat)
   , (CBORText "infix", CBORMap $ map (CBORText *** cborFixity) $ toAscList $ opFixity neat)
-  , (CBORText "alias", CBORMap $ map (CBORText *** cborType) $ toAscList $ typeAliases neat)
+  , (CBORText "alias", CBORMap $ map (CBORText *** \(vs, t) -> CBORArray [CBORArray (CBORText <$> vs), cborType t]) $ toAscList $ typeAliases neat)
   ]
   where
   mayExport = case moduleExports $ exportStuff neat of
@@ -157,7 +157,7 @@ uncborNeat ds m = neatEmpty
   , opFixity = must (\(CBORMap os) -> fromList $
     (\(CBORText k, CBORArray [CBORZ n, CBORZ a]) -> (k, (n, toFixity a))) <$> os) "infix" m
   , typeAliases = must (\(CBORMap ts) -> fromList $
-    (\(CBORText k, ty) -> (k, uncborType ty)) <$> ts) "alias" m
+    (\(CBORText k, CBORArray[CBORArray vs, ty]) -> (k, (uncborText <$> vs, uncborType ty))) <$> ts) "alias" m
   , exportStuff = (exportStuff neatEmpty) {
       moduleExports = case cborLookup "export" m of
         Nothing -> Nothing

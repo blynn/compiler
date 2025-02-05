@@ -80,7 +80,7 @@ data Neat = Neat
   , ffiExports :: Map String String
   , moduleImports :: Map String [(String, String -> Bool)]
   , opFixity :: Map String (Int, Assoc)
-  , typeAliases :: Map String Type
+  , typeAliases :: Map String ([String], Type)
   }
 
 neatEmpty = Neat (ExportStuff Tip Nothing Nothing) Tip Tip Tip Tip Tip Tip Tip Tip (singleton "" []) Tip Tip

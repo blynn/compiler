@@ -256,15 +256,13 @@ mkFFIHelper n t acc = case t of
 updateDcs t cs dcs = foldr (\(Constr s _) m -> insert s (q, cs) m) dcs cs where
   q = Qual [] $ arr t $ foldr arr (TV "case") $ map (\(Constr _ sts) -> foldr arr (TV "case") $ snd <$> sts) cs
 
-addAdt t cs ders neat = foldr derive neat' ders where
+addAdt (name, vs) cs ders neat = foldr derive neat' ders where
+  t = foldl TAp (TC name) (map TV vs)
   neat' = neat
     { typedAsts = mkAdtDefs t cs $ typedAsts neat
     , dataCons = updateDcs t cs $ dataCons neat
-    , exportStuff = (exportStuff neat) { type2Cons = insert (typeName t) (concatMap cnames cs) $ type2Cons $ exportStuff neat }
+    , exportStuff = (exportStuff neat) { type2Cons = insert name (concatMap cnames cs) $ type2Cons $ exportStuff neat }
     }
-  typeName = \case
-    TAp x _ -> typeName x
-    TC c -> c
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
   derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
     [("==", Pa $ map eqCase cs
@@ -567,7 +565,6 @@ braceDef = do
     Left e -> bad e
     Right tab -> pure $ toAscList tab
 
-simpleType c vs = foldl TAp (TC c) (map TV vs)
 conop = conSym <|> backquoted conId
 fieldDecl = (\vs t -> map (, t) vs) <$> sepBy1 var comma <*> (res "::" *> _type)
 constr = try ((\x c y -> Constr c [("", x), ("", y)]) <$> bType <*> conop <*> bType)
@@ -576,7 +573,8 @@ constr = try ((\x c y -> Constr c [("", x), ("", y)]) <$> bType <*> conop <*> bT
     <|> map ("",) <$> many aType)
 dclass = conId
 _deriving = (res "deriving" *> ((:[]) <$> dclass <|> paren (dclass `sepBy` comma))) <|> pure []
-adt = addAdt <$> between (res "data") (res "=") (simpleType <$> conId <*> many varId) <*> sepBy1 constr (res "|") <*> _deriving
+simpleType = (,) <$> conId <*> many varId
+adt = addAdt <$> between (res "data") (res "=") simpleType <*> sepBy1 constr (res "|") <*> _deriving
 
 impDecl = do
   res "import"
@@ -591,9 +589,9 @@ impDecl = do
     <|> pure (const True)
     )
 
-typeDecl = addTypeAlias <$> between (res "type") (res "=") conId <*> _type
+typeDecl = addTypeAlias <$> between (res "type") (res "=") simpleType <*> _type
 
-addTypeAlias s t neat = neat { typeAliases = insertWith (error $ "duplicate: " ++ s) s t $ typeAliases neat }
+addTypeAlias (s, vs) t neat = neat { typeAliases = insertWith (error $ "duplicate: " ++ s) s (vs, t) $ typeAliases neat }
 
 tops = foldr (.) id <$> braceSep topLevel
 

@@ -469,10 +469,10 @@ inferTypeclasses searcher iMap typed = foldM inferInstance typed [(classId, inst
       pure $ insert name (Qual [] $ TC "DICTIONARY", flip (foldr L) dvs $ L "@" $ foldl A (V "@") ms) typed
 
 primAdts =
-  [ (TC "()", [Constr "()" []])
-  , (TC "Bool", [Constr "True" [], Constr "False" []])
-  , (TAp (TC "[]") (TV "a"), [Constr "[]" [], Constr ":" $ map ("",) [TV "a", TAp (TC "[]") (TV "a")]])
-  , (TAp (TAp (TC ",") (TV "a")) (TV "b"), [Constr "," $ map ("",) [TV "a", TV "b"]])
+  [ (("()", []), [Constr "()" []])
+  , (("Bool", []), [Constr "True" [], Constr "False" []])
+  , (("[]", ["a"]), [Constr "[]" [], Constr ":" $ map ("",) [TV "a", TAp (TC "[]") (TV "a")]])
+  , ((",", ["a", "b"]), [Constr "," $ map ("",) [TV "a", TV "b"]])
   ]
 
 prims = let
@@ -559,18 +559,25 @@ prims = let
       , ("wordShr", "U_SHR")
       ]
 
+tySub binds = go where
+  go = \case
+    TAp x y -> TAp (go x) (go y)
+    TV v | Just ty <- lookup v binds -> ty
+    t -> t
+
 expandTypeAliases neat = pure $ if size als == 0 then neat else neat
   { typedAsts = (\(q, a) -> (subQual q, subAst a)) <$> typedAsts neat
   , topDecls = subQual <$> topDecls neat
   , dataCons = (\(q, cs) -> (subQual q, subConstr <$> cs)) <$> dataCons neat
   } where
   als = typeAliases neat
-  subQual (Qual ps ty0) = (Qual ps $ go ty0)
-  go ty = case ty of
-    TC s -> maybe ty id $ mlookup s als
-    TAp x y -> TAp (go x) (go y)
-    _ -> ty
-  subConstr (Constr s sts) = Constr s $ second go <$> sts
+  unalias = go []
+  go spine = \case
+    TAp x y -> go (unalias y:spine) x
+    TC s | Just (vs, ty) <- mlookup s als -> tySub (zip vs spine) ty
+    t -> foldl TAp t spine
+  subQual (Qual ps ty0) = (Qual ps $ unalias ty0)
+  subConstr (Constr s sts) = Constr s $ second unalias <$> sts
   subAst = \case
     E (XQual q) -> E $ XQual $ subQual q
     A x y -> A (subAst x) (subAst y)
