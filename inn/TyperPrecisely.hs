@@ -615,85 +615,87 @@ tabulateModules mods = foldM ins (Tip, Tip) mods where
           where delta = [n | n <- ns, not $ elem n methodNames]
 
 data Searcher = Searcher
-  { astLink :: Ast -> Either String ([String], Ast)
-  , findPrec :: Ast -> (Int, Assoc)
-  , findCon :: String -> Either String (Qual, [Constr])
-  , findField :: String -> (String, [(String, Type)])
-  , typeOfMethod :: String -> Either String Qual
-  , findSigs :: String -> [String]
-  , findInstances :: String -> [(String, Instance)]
+  { _thisModule :: String
+  , _neatTab :: Map String Neat
+  , _thisNeat :: Neat
+  , _mergedSigs :: Map String [[String]]
+  , _mergedInstances :: Map String [(String, Instance)]
   }
 
-isLegalExport s neat = case moduleExports $ exportStuff neat of
-  Nothing -> True
-  Just es -> elem s es
-
-findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s of
-  [] -> Left $ "missing: " ++ s
-  [unique] -> Right unique
-  _ -> Left $ "ambiguous: " ++ s
-
-assertType x t = L "=" $ A x (E $ XQual t)
-
-slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
-
-searcherNew thisModule tab neat = Searcher
-  { astLink = astLink'
-  , findPrec = findPrec'
-  , findCon = findAmong dataCons visible
-  , findField = findField'
-  , typeOfMethod = fmap fst . findAmong typedAsts visible
-  , findSigs = \s -> case mlookup s mergedSigs of
-    Nothing -> error $ "missing class: " ++ s
-    Just [sigs] -> sigs
-    _ -> error $ "ambiguous class: " ++ s
-  , findInstances = maybe [] id . (`mlookup` mergedInstances)
-  }
+searcherNew thisModule tab neat =
+    Searcher thisModule tab neat mergedSigs mergedInstances
   where
   mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map ((tab !) . fst) imps
   mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\(im, _) -> (im, tab ! im)) imps]
-  defPrec = (9, LAssoc)
-  findPrec' = \case
-    V s
-      | s == ":" -> (5, RAssoc)
-      | otherwise -> either (const defPrec) id $ findAmong opFixity visible s
-    E (Link q s)
-      | q == thisModule -> findPrec' $ V s
-      | otherwise -> either (const defPrec) id $ findAmong opFixity (map snd . qualNeats q) s
-    _ -> error "unreachable"
-  findImportSym s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats s]
-  findQualifiedSym q s = do
-    (im, n) <- qualNeats q s
-    maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n
-  qualNeats q s = [(im, n) | (im, isLegalImport) <- maybe [] id $ mlookup q $ moduleImports neat, let n = tab ! im, isLegalImport s && isLegalExport s n]
-  importedNeats s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = tab ! im, h == '{' || isLegalImport s && isLegalExport s n]
-  visible s = neat : (snd <$> importedNeats s)
-  findField' f = case [(con, fields) | dc <- dataCons <$> visible f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
-    [] -> error $ "no such field: " ++ f
-    h:_ -> h
   imps = moduleImports neat ! ""
-  astLink' ast = runDep $ go [] ast where
+
+astLink sea ast = runDep $ go [] ast where
     go bound ast = case ast of
       V s
         | elem s bound -> pure ast
-        | member s $ topDefs neat -> unlessAmbiguous s $ addDep s *> pure ast
-        | member s $ typedAsts neat -> unlessAmbiguous s $ pure ast
-        | True -> case findImportSym s of
+        | member s $ topDefs $ _thisNeat sea -> unlessAmbiguous s $ addDep s *> pure ast
+        | member s $ typedAsts $ _thisNeat sea -> unlessAmbiguous s $ pure ast
+        | True -> case findImportSym sea s of
           [] -> badDep $ "missing: " ++ s
           [(im, t)] -> pure $ assertType (E $ Link im s) t
           _ -> badDep $ "ambiguous: " ++ s
       A x y -> A <$> go bound x <*> go bound y
       L s t -> L s <$> go (s:bound) t
       E (Link q s)
-        | q == thisModule -> go bound $ V s
-        | otherwise -> case findQualifiedSym q s of
+        | q == _thisModule sea -> go bound $ V s
+        | otherwise -> case findQualifiedSym sea q s of
           [] -> badDep $ "missing: " ++ q ++ "." ++ s
           [(truename, t)] -> pure $ assertType (E $ Link truename s) t
           _ -> badDep $ "BUG! unreachable: " ++ q ++ "." ++ s
       _ -> pure ast
-    unlessAmbiguous s f = case findImportSym s of
+    unlessAmbiguous s f = case findImportSym sea s of
       [] -> f
-      [(im, _)] -> if im == thisModule then f else badDep $ "ambiguous: " ++ s
+      [(im, _)] -> if im == _thisModule sea then f else badDep $ "ambiguous: " ++ s
+
+visible sea s = _thisNeat sea : (snd <$> importedNeats sea s)
+
+importedNeats sea s@(h:_) = [(im, n) | (im, isLegalImport) <- imps, let n = _neatTab sea ! im, h == '{' || isLegalImport s && isLegalExport s n]
+  where
+  imps = moduleImports (_thisNeat sea) ! ""
+
+qualNeats sea q s = [(im, n) | (im, isLegalImport) <- maybe [] id $ mlookup q $ moduleImports $ _thisNeat sea, let n = _neatTab sea ! im, isLegalImport s && isLegalExport s n]
+
+isLegalExport s neat = case moduleExports $ exportStuff neat of
+  Nothing -> True
+  Just es -> elem s es
+
+findPrec sea = \case
+  V s
+    | s == ":" -> (5, RAssoc)
+    | otherwise -> either (const defPrec) id $ findAmong opFixity (visible sea) s
+  E (Link q s)
+    | q == _thisModule sea -> findPrec sea $ V s
+    | otherwise -> either (const defPrec) id $ findAmong opFixity (map snd . qualNeats sea q) s
+  _ -> error "unreachable"
+  where
+  defPrec = (9, LAssoc)
+findField sea f = case [(con, fields) | dc <- dataCons <$> visible sea f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
+    [] -> error $ "no such field: " ++ f
+    h:_ -> h
+findSigs sea = \s -> case mlookup s $ _mergedSigs sea of
+  Nothing -> error $ "missing class: " ++ s
+  Just [sigs] -> sigs
+  _ -> error $ "ambiguous class: " ++ s
+findImportSym sea s = concat [maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n | (im, n) <- importedNeats sea s]
+findQualifiedSym sea q s = do
+  (im, n) <- qualNeats sea q s
+  maybe [] (\(t, _) -> [(im, t)]) $ mlookup s $ typedAsts n
+findAmong fun viz s = case concat $ maybe [] (:[]) . mlookup s . fun <$> viz s of
+  [] -> Left $ "missing: " ++ s
+  [unique] -> Right unique
+  _ -> Left $ "ambiguous: " ++ s
+findInstances sea = maybe [] id . (`mlookup` _mergedInstances sea)
+typeOfMethod sea = fmap fst . findAmong typedAsts (visible sea)
+findCon sea = findAmong dataCons $ visible sea
+
+assertType x t = L "=" $ A x (E $ XQual t)
+
+slowUnionWith f x y = foldr go x $ toAscList y where go (k, v) m = insertWith f k v m
 
 neatPrim = foldr (\(a, b) -> addAdt a b []) neatEmpty { typedAsts = fromList prims } primAdts
 
