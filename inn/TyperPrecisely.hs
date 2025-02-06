@@ -630,27 +630,27 @@ searcherNew thisModule tab neat =
   imps = moduleImports neat ! ""
 
 astLink sea ast = runDep $ go [] ast where
-    go bound ast = case ast of
-      V s
-        | elem s bound -> pure ast
-        | member s $ topDefs $ _thisNeat sea -> unlessAmbiguous s $ addDep s *> pure ast
-        | member s $ typedAsts $ _thisNeat sea -> unlessAmbiguous s $ pure ast
-        | True -> case findImportSym sea s of
-          [] -> badDep $ "missing: " ++ s
-          [(im, t)] -> pure $ assertType (E $ Link im s) t
-          _ -> badDep $ "ambiguous: " ++ s
-      A x y -> A <$> go bound x <*> go bound y
-      L s t -> L s <$> go (s:bound) t
-      E (Link q s)
-        | q == _thisModule sea -> go bound $ V s
-        | otherwise -> case findQualifiedSym sea q s of
-          [] -> badDep $ "missing: " ++ q ++ "." ++ s
-          [(truename, t)] -> pure $ assertType (E $ Link truename s) t
-          _ -> badDep $ "BUG! unreachable: " ++ q ++ "." ++ s
-      _ -> pure ast
-    unlessAmbiguous s f = case findImportSym sea s of
-      [] -> f
-      [(im, _)] -> if im == _thisModule sea then f else badDep $ "ambiguous: " ++ s
+  go bound ast = case ast of
+    V s
+      | elem s bound -> pure ast
+      | member s $ topDefs $ _thisNeat sea -> unlessAmbiguous s $ addDep s *> pure ast
+      | member s $ typedAsts $ _thisNeat sea -> unlessAmbiguous s $ pure ast
+      | True -> case findImportSym sea s of
+        [] -> badDep $ "missing: " ++ s
+        [(im, t)] -> pure $ assertType (E $ Link im s) t
+        _ -> badDep $ "ambiguous: " ++ s
+    A x y -> A <$> go bound x <*> go bound y
+    L s t -> L s <$> go (s:bound) t
+    E (Link q s)
+      | q == _thisModule sea -> go bound $ V s
+      | otherwise -> case findQualifiedSym sea q s of
+        [] -> badDep $ "missing: " ++ q ++ "." ++ s
+        [(truename, t)] -> pure $ assertType (E $ Link truename s) t
+        _ -> badDep $ "BUG! unreachable: " ++ q ++ "." ++ s
+    _ -> pure ast
+  unlessAmbiguous s f = case findImportSym sea s of
+    [] -> f
+    [(im, _)] -> if im == _thisModule sea then f else badDep $ "ambiguous: " ++ s
 
 visible sea s = _thisNeat sea : (snd <$> importedNeats sea s)
 
@@ -675,8 +675,8 @@ findPrec sea = \case
   where
   defPrec = (9, LAssoc)
 findField sea f = case [(con, fields) | dc <- dataCons <$> visible sea f, (_, (_, cons)) <- toAscList dc, Constr con fields <- cons, (f', _) <- fields, f == f'] of
-    [] -> error $ "no such field: " ++ f
-    h:_ -> h
+  [] -> error $ "no such field: " ++ f
+  h:_ -> h
 findSigs sea = \s -> case mlookup s $ _mergedSigs sea of
   Nothing -> error $ "missing class: " ++ s
   Just [sigs] -> sigs
