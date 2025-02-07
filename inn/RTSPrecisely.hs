@@ -625,9 +625,10 @@ combTyped objs typed = rewriteCombs rawCombs <$> rawCombs where
   slid = mapWithKey (\k (_, t) -> slideY k t) typed
   rawCombs = optim . nolam . inlineLone objs <$> slid
 
-compileModule objs (name, neat) = do
+compileModule objs (name, neatAliased) = do
   let
-    searcher = searcherNew name (_neat <$> objs) neat
+    searcher = searcherNew name (_neat <$> objs) neatAliased
+    neat = _thisNeat searcher
     typed = typedAsts neat
   depdefs <- mapM (\(s, t) -> (s,) <$> patternCompile searcher t) $ toAscList $ topDefs neat
   typed <- inferDefs searcher depdefs (topDecls neat) typed

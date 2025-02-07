@@ -565,19 +565,19 @@ tySub binds = go where
     TV v | Just ty <- lookup v binds -> ty
     t -> t
 
-expandTypeAliases neat = pure $ if size als == 0 then neat else neat
+unaliasType als = go [] where
+  go spine = \case
+    TAp x y -> go (go [] y:spine) x
+    TC s | Just (vs, ty) <- mlookup s als -> tySub (zip vs spine) ty
+    t -> foldl TAp t spine
+
+expandTypeAliases als neat = if size als == 0 then neat else neat
   { typedAsts = (\(q, a) -> (subQual q, subAst a)) <$> typedAsts neat
   , topDecls = subQual <$> topDecls neat
   , dataCons = (\(q, cs) -> (subQual q, subConstr <$> cs)) <$> dataCons neat
   } where
-  als = typeAliases neat
-  unalias = go []
-  go spine = \case
-    TAp x y -> go (unalias y:spine) x
-    TC s | Just (vs, ty) <- mlookup s als -> tySub (zip vs spine) ty
-    t -> foldl TAp t spine
-  subQual (Qual ps ty0) = (Qual ps $ unalias ty0)
-  subConstr (Constr s sts) = Constr s $ second unalias <$> sts
+  subQual (Qual ps ty0) = (Qual ps $ unaliasType als ty0)
+  subConstr (Constr s sts) = Constr s $ second (unaliasType als) <$> sts
   subAst = \case
     E (XQual q) -> E $ XQual $ subQual q
     A x y -> A (subAst x) (subAst y)
@@ -588,7 +588,7 @@ tabulateModules mods = foldM ins (Tip, Tip) mods where
     then Left $ "duplicate module: " ++ k
     else case porh of
       ParsedNeat f -> do
-        v <- expandTypeAliases =<< processExports (f neatEmpty {moduleImports = singleton "" [("#", const True)]})
+        v <- processExports (f neatEmpty {moduleImports = singleton "" [("#", const True)]})
         pure (insert k v todo, done)
       HexNeat s -> pure (todo, insert k (decodeObject s) done)
   processExports neat = case exportDecl $ exportStuff neat of
@@ -622,12 +622,14 @@ data Searcher = Searcher
   , _mergedInstances :: Map String [(String, Instance)]
   }
 
-searcherNew thisModule tab neat =
+searcherNew thisModule tab neatAliased =
     Searcher thisModule tab neat mergedSigs mergedInstances
   where
+  imps = moduleImports neatAliased ! ""
+  mergedAliases = foldr (slowUnionWith const) Tip $ map typeAliases $ neatAliased : map ((tab !) . fst) imps
+  neat = expandTypeAliases mergedAliases neatAliased
   mergedSigs = foldr (slowUnionWith (++)) Tip $ map (fmap (:[]) . typeclasses) $ neat : map ((tab !) . fst) imps
   mergedInstances = foldr (slowUnionWith (++)) Tip [fmap (map (im,)) $ instances x | (im, x) <- ("", neat) : map (\(im, _) -> (im, tab ! im)) imps]
-  imps = moduleImports neat ! ""
 
 astLink sea ast = runDep $ go [] ast where
   go bound ast = case ast of
