@@ -383,15 +383,15 @@ _type = foldr1 arr <$> sepBy bType (res "->")
 fixityDecl w a = do
   res w
   n <- lexeme nat
-  os <- sepBy op comma
+  os <- sepBy1 op comma
   pure $ addFixities os (fromInteger n, a)
 
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc
 
 cDecls = first fromList . second fromList . foldr ($) ([], []) <$> braceSep cDecl
-cDecl = first . (:) <$> genDecl <|> second . (++) <$> defSemi
+cDecl = first . (++) <$> genDecl <|> second . (++) <$> defSemi
 
-genDecl = (,) <$> try (var <* res "::") <*> (Qual <$> fatArrows <*> _type)
+genDecl = (\vs t -> map (,t) vs) <$> try (sepBy1 var comma <* res "::") <*> (Qual <$> fatArrows <*> _type)
 
 classDecl = res "class" *> (addClass <$> conId <*> (TV <$> varId) <*> (res "where" *> cDecls))
 
@@ -553,7 +553,7 @@ coalesce = \case
       in if s == s' then coalesce $ (s, f x x'):t' else h:coalesce t
 defSemi = coalesce <$> liftA2 (:) def (many $ try $ some semicolon *> def) <|> gateGuard leftyPat pat "="
 braceDef = do
-  (defs, annos) <- foldr (\(f, g) (x, y) -> (f x, g y)) ([], []) <$> braceSep ((,id) . (++) <$> defSemi <|> (id,) . (:) <$> genDecl)
+  (defs, annos) <- foldr (\(f, g) (x, y) -> (f x, g y)) ([], []) <$> braceSep ((,id) . (++) <$> defSemi <|> (id,) . (++) <$> genDecl)
   let
     tab = fromList $ second (,Nothing) <$> defs
     go tab (s, t) = case mlookup s tab of
@@ -605,7 +605,7 @@ topLevel = adt
   <|> fixity
   <|> impDecl
   <|> typeDecl
-  <|> addTopDecl <$> genDecl
+  <|> foldr1 (.) . map addTopDecl <$> genDecl
   <|> addDefs <$> defSemi
 
 export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>

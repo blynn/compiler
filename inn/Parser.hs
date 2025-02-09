@@ -300,7 +300,7 @@ _type = foldr1 arr <$> sepBy bType (res "->")
 fixityDecl w a = do
   res w
   n <- lexeme integer
-  os <- sepBy op comma
+  os <- sepBy1 op comma
   precs <- getPrecs
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc

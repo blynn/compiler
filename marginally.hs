@@ -607,7 +607,7 @@ _type = foldr1 arr <$> sepBy bType (res "->");
 
 fixityDecl w a = res w >>
   lexeme integer >>= \n ->
-  sepBy op comma >>= \os ->
+  sepBy1 op comma >>= \os ->
   getPrecs >>= \precs ->
   putPrecs $ foldr (\o m -> insert o (n, a) m) precs os;
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;

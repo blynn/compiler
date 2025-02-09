@@ -149,7 +149,7 @@ adt = between (keyword "data") (spch '=') (conId *> many varId) *> (dataDefs <$>
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;
-fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
+fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy1 op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 funs precTab = concat <$> sepBy (adt <|> (wrap <$> def (expr precTab 0))) (spch ';');

@@ -166,7 +166,7 @@ adt = Adt <$> between (keyword "data") (spch '=') (simpleType <$> conId <*> many
 
 prec = (\c -> ord c - ord '0') <$> spc digit;
 fixityList a n os = map (\o -> (o, (n, a))) os;
-fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy op (spch ','));
+fixityDecl kw a = between (keyword kw) (spch ';') (fixityList a <$> prec <*> sepBy1 op (spch ','));
 fixity = fixityDecl "infix" NAssoc <|> fixityDecl "infixl" LAssoc <|> fixityDecl "infixr" RAssoc;
 
 arr a b = TAp (TAp (TC "->") a) b;

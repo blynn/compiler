@@ -524,7 +524,7 @@ adt = addAdt <$> between (tok "data") (spch '=') (simpleType <$> conId <*> many 
 
 fixityList a =
   (\c -> ord c - ord '0') <$> spc digit >>= \n ->
-  sepBy op (spch ',') >>= \os ->
+  sepBy1 op (spch ',') >>= \os ->
   getPrecs >>= \precs -> putPrecs (foldr (\o m -> insert o (n, a) m) precs os) >>
   pure id;
 fixityDecl kw a = tok kw *> fixityList a;
