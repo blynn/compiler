@@ -119,6 +119,7 @@ xs!!0 = head xs
 xs!!n = tail xs!!(n - 1)
 replicate 0 _ = []
 replicate n x = x : replicate (n - 1) x
+repeat x = x : repeat x
 null [] = True
 null _ = False
 reverse = foldl (flip (:)) []

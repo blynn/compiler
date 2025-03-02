@@ -67,7 +67,7 @@ class Ord a where
     EQ -> True
     GT -> False
   compare :: a -> a -> Ordering
-  compare x y = if x <= y then if y <= x then EQ else LT else GT
+  compare x y = if x <= y then if y == x then EQ else LT else GT
 instance Ord Int where (<=) = intLE
 instance Ord Char where (<=) = charLE
 data Ordering = LT | GT | EQ deriving (Eq, Show)
@@ -134,6 +134,7 @@ scanl1 f (x:xs) =  scanl f x xs
 scanl1 _ []     =  []
 
 elem k xs = foldr (\x t -> x == k || t) False xs
+notElem = (not .) . elem
 find f xs = foldr (\x t -> if f x then Just x else t) Nothing xs
 (++) = flip (foldr (:))
 concat = foldr (++) []
@@ -177,6 +178,11 @@ lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter p = foldr (\x -> bool id (x:) $ p x) []
 filterM p = foldr (\x -> liftA2 (bool id (x:)) $ p x) $ pure []
 union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
+nub = union []
+partition p = foldr go ([], []) where
+  go x (ts, fs)
+    | p x = (x:ts, fs)
+    | otherwise = (ts, x:fs)
 intersect xs ys = filter (\x -> maybe False (\_ -> True) $ find (x ==) ys) xs
 xs \\ ys = filter (not . (`elem` ys)) xs
 last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
@@ -498,8 +504,15 @@ mpBase b xs = go xs where
 
 instance Show Integer where showsPrec _ (Integer xsgn xs) = (if xsgn then id else ('-':)) . mpBase 10 xs
 
-instance (Ord a, Ord b) => Ord (a, b) where
-  (a1, b1) <= (a2, b2) = a1 <= a2 && (not (a2 <= a1) || b1 <= b2)
+instance (Ord a, Ord b, Eq a, Eq b) => Ord (a, b) where
+  (a1, b1) <= (a2, b2) = case compare a1 a2 of
+    LT -> True
+    EQ -> b1 <= b2
+    GT -> False
+  compare (a1, b1) (a2, b2) = case compare a1 a2 of
+    LT -> LT
+    EQ -> compare b1 b2
+    GT -> GT
 
 a < b = a <= b && a /= b
 a > b = b <= a && a /= b

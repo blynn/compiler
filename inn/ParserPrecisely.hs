@@ -264,13 +264,19 @@ addAdt (name, vs) cs ders neat = foldr derive neat' ders where
     , exportStuff = (exportStuff neat) { type2Cons = insert name (concatMap cnames cs) $ type2Cons $ exportStuff neat }
     }
   cnames (Constr s sts) = s : concatMap (\(s, _) -> if s == "" then [] else [s]) sts
-  derive "Eq" = addInstance "Eq" (mkPreds "Eq") t
-    [("==", Pa $ map eqCase cs
-    )]
-  derive "Show" = addInstance "Show" (mkPreds "Show") t
-    [("showsPrec", L "prec" $ Pa $ map showCase cs
-    )]
-  derive der = error $ "bad deriving: " ++ der
+  derive = \case
+    "Eq" -> addInstance "Eq" (mkPreds "Eq") t
+      [("==", Pa $ map eqCase cs
+      )]
+    "Ord" -> addInstance "Ord" (mkPreds "Ord") t
+      [("<=", Pa $ zipWith (cmpCase (V "True") (V "True") (V "False")) cs $ iterate (Just (V "False"):) $ (Nothing:) $ repeat $ Just $ V "True")
+      ,("compare", Pa $ zipWith (cmpCase (V "LT") (V "EQ") (V "GT")) cs $ iterate (Just (V "GT"):) $ (Nothing:) $ repeat $ Just $ V "LT")
+      ]
+    "Show" -> addInstance "Show" (mkPreds "Show") t
+      [("showsPrec", L "prec" $ Pa $ map showCase cs
+      )]
+    der -> error $ "bad deriving: " ++ der
+  rpats = map (\(Constr con args) -> [PatCon con $ mkPatVar "r" . show <$> [1..length args]]) cs
   prec0 = A (V "ord") (litchar '\0')
   showCase (Constr con args) = let as = show <$> [1..length args]
     in ([PatCon con $ mkPatVar "" <$> as], case args of
@@ -294,6 +300,14 @@ addAdt (name, vs) cs ders neat = foldr derive neat' ders where
       [ ([PatCon con $ mkPatVar "r" <$> as], foldr (\x y -> (A (A (V "&&") x) y)) (V "True")
          $ map (\n -> A (A (V "==") (V $ "l" ++ n)) (V $ "r" ++ n)) as)
       , ([PatVar "_" Nothing], V "False")])
+  cmpCase lt eq gt (Constr con args) xs = ([PatCon con $ mkPatVar "l" <$> as], Pa $ zip rpats $ maybe cmpArgs id <$> xs) where
+    cmpArgs = foldr go eq as
+    go a etc = flip A (A (A (V "compare") (V $ 'l':a)) (V $ 'r':a)) $ Pa
+      [ ([PatCon "LT" []], lt)
+      , ([PatCon "EQ" []], etc)
+      , ([PatCon "GT" []], gt)
+      ]
+    as = show <$> [1..length args]
 
 addClass classId v (sigs, defs) neat = if not $ member classId $ typeclasses neat then addDefs defaults neat
   { typeclasses = insert classId (keys sigs) $ typeclasses neat

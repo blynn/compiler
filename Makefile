@@ -6,7 +6,7 @@ NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js \
      cmpmira.tar.gz \
-     Charser.ob
+     Charser.ob Map.ob
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
