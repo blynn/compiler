@@ -4,13 +4,11 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js \
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) eq.js atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js \
      cmpmira.tar.gz \
      Charser.ob Map.ob
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
-
-differ.c: differ.lhs precisely $(BCS_HS); (./unlit < differ.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 atp.c: atp.lhs precisely $(BCS_HS); (./unlit < atp.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 
 %.wasm.o: %.c; clang --target=wasm32 -O2 -ffreestanding -c $^ -o $@
@@ -140,5 +138,5 @@ echo '<script src="../compiler/reply.js" defer></script>';\
 echo '<script src="../compiler/runme.js" defer></script>';\
 echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++') > $@
 
-RUNMES=para
+RUNMES=para differ
 $(foreach x,$(RUNMES),$(x).html):%.html:%.run

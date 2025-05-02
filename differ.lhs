@@ -8,31 +8,39 @@
 <button id='second'>second derivative</button>
 </p>
 <p>
-<textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea id='input' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 <p>
-<button id='go'>Evaluate</button>
+<button id='evalButton'>Evaluate</button>
 </p>
 <p>
-<textarea id='out' rows='4' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea id='output' rows='4' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
+<script>
+"use strict";
+function setup(name, t) {
+  function act() {
+    input.value = t;
+    output.value = "";
+  }
+  document.getElementById(name).addEventListener("click", act);
+  if (name == "example") act();
+}
+setup("example", "d((\\z -> z*z)(p*100 + q - 212))");
+setup("implicit", "d(\\x -> \\y -> sin(x + y) - cos(x*y) + 1)");
+setup("lambda", "d ((\\z -> z^3) (x*x + y^2) - (\\z -> z*z) (x^2 - y*y))");
+setup("second", "d (d y / d x) / d x");
+
+function initDemo(repl) {
+  evalButton.addEventListener("click", (event) => { repl.run("chat", ["Main"], "demo"); });
+}
+</script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 How do we convert Celsius to Farenheit? For the sake of argument, suppose
 we know to multiply by a constant `p` then add another constant `q`:
 
 \begin{code}
-module Main where
-import Base
-import Charser
-import System
-foreign export ccall "main" main
-{- GHC edition:
-import Text.Megaparsec
-import Text.Megaparsec.Char
-type Charser = Parsec () String
--}
-
 type R = Double
 convert:: R -> R -> R -> R
 convert p q x = p * x + q
@@ -261,6 +269,11 @@ instance Show Expr where
 We supply a parser so it's less painful to play with our functions.
 
 \begin{code}
+jsEval "curl_module('../compiler/Charser.ob')"
+\end{code}
+
+\begin{code}
+import Charser
 chainl1 p op = foldl (\x (f, y) -> f x y) <$> p <*> (many $ (,) <$> op <*> p)
 chainr1 p op = go id where
   go d = do
@@ -331,7 +344,7 @@ simplify = \case
     e -> e
 \end{code}
 
-Lastly, we add some code for the interactive demo at the top of this page:
+Glue code for the demo at the top of this page:
 
 \begin{code}
 go :: String -> String
@@ -339,7 +352,11 @@ go s = case parse line "" s of
   Left err -> "parse error: " ++ show err
   Right expr -> show $ simplify expr
 
-main = interact go
+demo = do
+  s <- jsEval "input.value;"
+  jsEval $ "output.value = `" ++ go s ++ "`;"
+
+jsEval "initDemo(repl);"
 \end{code}
 
 == A second opinion ==
@@ -563,42 +580,3 @@ algorithm].
 Automated theorem proving profits from turning this trick on its head. Early
 theorem provers exhaustively tried every possible value for every variable.
 Later provers improved on this by by computing with variables instead.
-
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script>
-function setup(name, t) {
-  function act() {
-    document.getElementById("in").value = t;
-    document.getElementById("out").value = "";
-  }
-  document.getElementById(name).addEventListener("click", act);
-  if (name == "example") act();
-}
-setup("example", "d((\\z -> z*z)(p*100 + q - 212))");
-setup("implicit", "d(\\x -> \\y -> sin(x + y) - cos(x*y) + 1)");
-setup("lambda", "d ((\\z -> z^3) (x*x + y^2) - (\\z -> z*z) (x^2 - y*y))");
-setup("second", "d (d y / d x) / d x");
-
-const ctx = {};
-function run() {
-  ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
-  ctx.out = [], ctx.cursor = 0;
-  ctx.instance.exports.main();
-  document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
-}
-async function loadWasm() {
-  try {
-    ctx.instance = (await WebAssembly.instantiateStreaming(fetch('differ.wasm'), {env:
-      { putchar: c  => ctx.out.push(c)
-      , eof    : () => ctx.cursor == ctx.inp.length
-      , getchar: () => ctx.inp[ctx.cursor++]
-      }})).instance;
-
-    document.getElementById("go").addEventListener("click", (event) => run());
-  } catch(err) {
-    console.log(err);
-  }
-}
-loadWasm();
-</script>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
