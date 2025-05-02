@@ -11,7 +11,7 @@ Want to see a magic trick? Pick a function, any function:
 <button id='fold'>fold</button>
 </p>
 <p>
-<textarea id='in' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea id='input' rows='1' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -22,8 +22,34 @@ Watch closely...
 <button id='magic'>Abracadabra!</button>
 </p>
 <p>
-<textarea id='out' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
+<textarea id='output' rows='8' style='box-sizing:border-box;width:100%;'></textarea>
 </p>
+<script>
+"use strict";
+function initDemo(repl) {
+
+  function setup(s) {
+    const name = s.substr(0, s.indexOf(" "));
+    function act() {
+      input.value = s;
+      output.value = "";
+    }
+    document.getElementById(name).addEventListener("click", act);
+    if (name == "concat") act();
+  }
+
+  setup("id :: a -> a");
+  setup("const :: a -> b -> a");
+  setup("concat :: [[a]] -> [a]");
+  setup("sort :: (a -> a -> Bool) -> [a] -> [a]");
+  setup("fold :: (a -> b -> b) -> b -> [a] -> b");
+
+  function presto() { repl.run("chat", ["Main"], "presto"); }
+
+  input.addEventListener("keydown", (event) => { if (event.key == "Enter") { presto(); event.preventDefault(); }});
+  magic.addEventListener("click", (event) => presto());
+}
+</script>
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 A good candidate for link:eq.html[equational reasoning]?
@@ -121,24 +147,22 @@ Lists of functions are irksome. We expediently introduce lambdas rather
 than figuring out how to write the relabeling condition with combinators.
 
 \begin{code}
-module Main where
-import Base
-import System
-import Charser
-foreign export ccall "main" main
-{- GHC edition:
-{-# LANGUAGE FlexibleContexts, LambdaCase #-}
-import Text.Megaparsec hiding (State)
-import Text.Megaparsec.Char
-import Control.Monad.State
-import Data.List
-type Charser = Parsec () String
--}
-
 infixr 5 :->
 data Type = TFunctor Type | TC String | TV String | Type :-> Type deriving Show
 data Expr = Var String | Expr :@ Expr | Lam String Expr
 data Theorem = Expr := Expr
+instance Show Expr where
+  show = \case
+    Var s -> s
+    a :@ b -> show a <> " " <> showR b
+    Lam s x -> "(\\" <> s <> " -> " <> show x <> ")"
+    where
+    showR x = case x of
+      _ :@ _ -> "(" <> show x <> ")"
+      _ -> show x
+
+instance Show Theorem where
+  show (l := r) = show l <> " = " <> show r
 
 data Scratch = Scratch  -- Scratch space.
   { varCount :: Int
@@ -199,18 +223,11 @@ That leaves the boring stuff: parsing types, pretty-printing theorems,
 interfacing with this webpage, and so on.
 
 \begin{code}
-instance Show Expr where
-  show = \case
-    Var s -> s
-    a :@ b -> show a <> " " <> showR b
-    Lam s x -> "(\\" <> s <> " -> " <> show x <> ")"
-    where
-    showR x = case x of
-      _ :@ _ -> "(" <> show x <> ")"
-      _ -> show x
+jsEval "curl_module('../compiler/Charser.ob')"
+\end{code}
 
-instance Show Theorem where
-  show (l := r) = show l <> " = " <> show r
+\begin{code}
+import Charser
 
 decl :: Charser (String, Type)
 decl = (,) <$> sp ((:) <$> lowerChar <*> many alphaNumChar)
@@ -251,54 +268,12 @@ go s = case parse (decl <* eof) "" s of
   Left err -> show err
   Right (s, t) -> pretty t $ theorize s t
 
-main :: IO ()
-main = interact go
+presto = do
+  s <- jsEval "input.value;"
+  jsEval $ "output.value = `" ++ go s ++ "`;"
+
+jsEval "initDemo(repl);"
 \end{code}
-
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-<script>
-function setup(s) {
-  const name = s.substr(0, s.indexOf(" "));
-  function act() {
-    document.getElementById("in").value = s;
-    document.getElementById("out").value = "";
-  }
-  document.getElementById(name).addEventListener("click", act);
-  if (name == "concat") act();
-}
-
-setup("id :: a -> a");
-setup("const :: a -> b -> a");
-setup("concat :: [[a]] -> [a]");
-setup("sort :: (a -> a -> Bool) -> [a] -> [a]");
-setup("fold :: (a -> b -> b) -> b -> [a] -> b");
-
-const ctx = {};
-
-function presto() {
-  ctx.inp = (new TextEncoder()).encode(document.getElementById("in").value);
-  ctx.out = []; ctx.cursor = 0;
-  ctx.instance.exports.main();
-  document.getElementById("out").value = (new TextDecoder()).decode(Uint8Array.from(ctx.out));
-}
-
-async function loadWasm() {
-  try {
-    ctx.instance = (await WebAssembly.instantiateStreaming(fetch('para.wasm'), {env:
-      { putchar: c  => ctx.out.push(c)
-      , eof    : () => ctx.cursor == ctx.inp.length
-      , getchar: () => ctx.inp[ctx.cursor++]
-      }})).instance;
-
-    document.getElementById("in").addEventListener("keydown", (event) => { if (event.key == "Enter") { presto(); event.preventDefault(); }});
-    document.getElementById("magic").addEventListener("click", (event) => presto());
-  } catch(err) {
-    console.log(err);
-  }
-}
-loadWasm();
-</script>
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 == Already paid for ==
 

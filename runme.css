@@ -10,6 +10,7 @@ flex-grow:1;
 border:solid lightgrey 1px;
 padding:0.2ex;
 background-color:whitesmoke;
+white-space:pre-wrap;
 }
 .incode:focus{
 background-color:white;

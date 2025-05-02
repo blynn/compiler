@@ -57,4 +57,8 @@ alphaNumChar = letterChar <|> digitChar
 space :: Charser ()
 space = many (sat isSpace) *> pure ()
 
-parse p _ = fmap fst . unCharser p
+parse p s inp = case unCharser p inp of
+  Left err -> Left $ case s of
+    "" -> err
+    _ -> s ++ ':':err
+  Right (r, _) -> Right r

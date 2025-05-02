@@ -4,13 +4,12 @@ target: site
 
 NAMES=index socrates lambda scott ION asm quest sing sem grind ioccc golf type c eq para logic differ atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
 
-SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) para.wasm eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js \
+SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) eq.js differ.wasm atp.wasm douady.wasm douady.html fol.js fol.wasm fol.lhs webby.wasm imp.wasm doh.wasm merc-main.js merc.css runme.css runme.js reply.js \
      cmpmira.tar.gz \
      Charser.ob Map.ob
 
 BCS_HS=inn/BasePrecisely.hs inn/SystemWasm.hs inn/Charser.hs
 
-para.c: para.lhs precisely $(BCS_HS); (./unlit < para.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 differ.c: differ.lhs precisely $(BCS_HS); (./unlit < differ.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 atp.c: atp.lhs precisely $(BCS_HS); (./unlit < atp.lhs && cat $(BCS_HS)) | ./precisely wasm > $@
 
@@ -22,6 +21,7 @@ eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compil
 menu.html: menu; ./stitch menu menu
 
 %.html: %.merc;MERC=1 stitch book menu $<
+%.html: %.run menu.html; ./stitch book menu $<
 %.html: %.lhs menu.html; ./stitch book menu $<
 %.html: %.txt menu.html; ./stitch book menu $<
 %:%.c;clang -O3 $^ -o $@
@@ -132,3 +132,13 @@ mercurry.html:mercurry.merc
 
 mercer.c:inn/BasePrecisely.hs inn/System.hs mercer.hs;cat $^ | ./precisely > $@
 mercer:mercer.c;clang -O3 $^ -o $@ -lm
+
+%.run: %.lhs;(sed 's/\\begin{code}/[.runme]\n--------/;s/\\end{code}/--------/' $< ;\
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++';\
+echo '<link href="../compiler/runme.css" rel="stylesheet" type="text/css">';\
+echo '<script src="../compiler/reply.js" defer></script>';\
+echo '<script src="../compiler/runme.js" defer></script>';\
+echo '++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++') > $@
+
+RUNMES=para
+$(foreach x,$(RUNMES),$(x).html):%.html:%.run
