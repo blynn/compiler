@@ -57,6 +57,11 @@ alphaNumChar = letterChar <|> digitChar
 space :: Charser ()
 space = many (sat isSpace) *> pure ()
 
+notFollowedBy :: Charser a -> Charser ()
+notFollowedBy (Charser f) = Charser \s -> case f s of
+  Left _ -> Right ((), s)
+  Right _ -> Left "notFollowedBy"
+
 parse p s inp = case unCharser p inp of
   Left err -> Left $ case s of
     "" -> err

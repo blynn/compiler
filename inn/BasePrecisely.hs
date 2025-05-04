@@ -241,6 +241,7 @@ takeWhile _ [] = []
 takeWhile p xs@(x:xt)
   | p x  = x : takeWhile p xt
   | True = []
+dropWhileEnd p = foldr (\x xs -> if p x && null xs then [] else x : xs) []
 
 a ^ b = case b of
   0 -> 1

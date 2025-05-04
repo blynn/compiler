@@ -21,5 +21,7 @@ jsEval s = do
   n <- eval_size
   mapM eval_at [0..n-1]
 
+jsEval_ = (*> pure ()) . jsEval
+
 foreign import ccall "get_global" global :: IO a
 foreign import ccall "set_global" setGlobal :: a -> IO ()
