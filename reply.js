@@ -5,6 +5,7 @@ function tedea(a) { return (new TextDecoder()).decode(Uint8Array.from(a)); }
 
 async function mkRepl() {
   const repl = {};
+  repl.postRun = () => {};
   repl.runBlob = function(f, args, blob) {
       repl.args = args.map(teen);
       repl.buf = [];
@@ -13,6 +14,7 @@ async function mkRepl() {
       repl.cursor = 0;
       repl.instance.exports[f]();
       repl.eval_in = [], repl.eval_out = [];
+      repl.postRun();
       return {
         buf : repl.buf.map(tedea),
         out : tedea(repl.out),

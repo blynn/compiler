@@ -37,6 +37,13 @@ class Monad m where
 liftA2 f x y = f <$> x <*> y
 (>>) f g = f >>= \_ -> g
 (=<<) = flip (>>=)
+instance Functor ((->) r) where fmap = (.)
+instance Applicative ((->) r) where
+  pure = const
+  f <*> x = \r -> f r (x r)
+instance Monad ((->) r) where
+  return = const
+  x >>= f = \r -> f (x r) r
 class Eq a where (==) :: a -> a -> Bool
 instance Eq () where () == () = True
 instance Eq Bool where
@@ -177,8 +184,12 @@ concatMap = (concat .) . map
 lookup s = foldr (\(k, v) t -> if s == k then Just v else t) Nothing
 filter p = foldr (\x -> bool id (x:) $ p x) []
 filterM p = foldr (\x -> liftA2 (bool id (x:)) $ p x) $ pure []
-union xs ys = foldr (\y acc -> (if elem y acc then id else (y:)) acc) xs ys
-nub = union []
+union xs ys = xs ++ filter (`notElem` xs) (nub ys)
+nub l = go l [] where
+  go [] _ = []
+  go (y:yt) xs
+    | elem y xs = go yt xs
+    | otherwise = y : go yt (y:xs)
 partition p = foldr go ([], []) where
   go x (ts, fs)
     | p x = (x:ts, fs)
