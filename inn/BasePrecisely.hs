@@ -220,9 +220,11 @@ instance Applicative (State s) where
 instance Monad (State s) where
   return a = State (a,)
   (State h) >>= f = State $ uncurry (runState . f) . h
-evalState m s = fst $ runState m s
+evalState m = fst . runState m
+execState m = snd . runState m
 get = State \s -> (s, s)
 put n = State \s -> ((), n)
+modify f = put =<< f <$> get
 either l r e = case e of Left x -> l x; Right x -> r x
 instance Functor (Either a) where fmap f e = either Left (Right . f) e
 instance Applicative (Either a) where

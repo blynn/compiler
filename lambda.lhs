@@ -80,16 +80,13 @@ _combinatory logic_ term, which is a full binary tree whose leaves can be one
 of 6 different values:
 
 \begin{code}
-{-# LANGUAGE FlexibleContexts #-}
-import Control.Monad.State
-
-data Com = S | K | I | B | C | T
+data Com = S | K | I | B | C | T deriving Show
 \end{code}
 
 We actually only need S and K; the others can be thought of as macros.
 
 \begin{code}
-data CL = Lf Com | CL :# CL | Ext String
+data CL = Lf Com | CL :# CL | Ext String deriving Show
 \end{code}
 
 The `Ext String` field comes into play later, when we want to mix external
@@ -261,6 +258,58 @@ We can now run a combinatory logic program:
 \begin{code}
 runCom :: CL -> String -> String
 runCom t s = decode (run (t :# encode s))
+\end{code}
+
+For example, consider the following list-reversing function:
+
+----------------------------------------------------------------
+reverse s = go s [] where
+  go = \case
+    x : xs -> go xs . (x:)
+    [] -> id
+----------------------------------------------------------------
+
+Scott-encoding and bracket abstraction turns this into:
+
+----------------------------------------------------------------
+R K (Y (B (C (T I)) (R (:) (B B (B C (B B))))))
+----------------------------------------------------------------
+
+where:
+
+----------------------------------------------------------------
+R = CC
+Y = B(S I I)(R(S I I) B)
+(:) = \h t f g -> g h t = B(B K)(B C T)
+----------------------------------------------------------------
+
+Making these substitutions and reducing one B combinator yields:
+
+----------------------------------------------------------------
+CCK(SII(CC(SII)B(B(C(TI))(CC(B(BK)(BCT))(BB(BC(BB)))))))
+----------------------------------------------------------------
+
+We write a crude parser to show it off:
+
+\begin{code}
+readCL = go id where
+  go acc s = case atom s of
+    Nothing -> Just (foldl1 (:#) $ acc [], s)
+    Just (a, t) -> go (acc . (a:)) t
+  atom = \case
+    [] -> Nothing
+    a:at -> case a of
+      '(' -> case readCL at of
+        Just (x, ')':s) -> Just (x, s)
+        _ -> Nothing
+      _ | Just c <- lookup a tab -> Just (Lf c, at)
+        | otherwise -> Nothing
+  tab = zip "BCIKST" [B,C,I,K,S,T]
+
+Just (demo, "") = readCL
+    "CCK(SII(CC(SII)B(B(C(TI))(CC(B(BK)(BCT))(BB(BC(BB)))))))"
+
+runCom demo "drawer"
 \end{code}
 
 If we believe it is easy to rewrite `runCom` and `reduce` in the target

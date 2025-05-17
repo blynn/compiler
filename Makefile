@@ -2,9 +2,9 @@
 
 target: site
 
-NAMES=index lambda scott ION asm quest sing sem grind ioccc golf type c eq logic atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
+NAMES=index scott ION asm quest sing sem grind ioccc golf type c eq logic atp fol pattern hilsys miranda Hol HolPro mvp module web mercurry
 
-RUNMES=para differ socrates
+RUNMES=para differ socrates lambda
 
 SITE=$(addsuffix .html, $(NAMES)) $(addsuffix .lhs, $(NAMES)) \
   $(addsuffix .html, $(RUNMES)) $(addsuffix .lhs, $(RUNMES)) \

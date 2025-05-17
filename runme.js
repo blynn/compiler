@@ -14,14 +14,14 @@ async function run_runmes() {
   curl_module = function(url) { prom = repl.fetch_module(url); }
   repl.runCount = 0;
   async function run(runme) {
-    if (prom) {
-      await prom;
-      prom = undefined;
-    }
     const s = runme.getElementsByClassName("incode")[0].innerText;
     const oe = runme.getElementsByClassName("output")[0];
     oe.innerHTML = "";
     runme_out = oe;
+    if (prom) {
+      await prom;
+      prom = undefined;
+    }
     const r = repl.run("chat", ["Main"], s + '\n');
     if (r.buf[0] == "error") {
       oe.innerHTML = "<div class='errmsg'></div>";
