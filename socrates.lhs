@@ -136,9 +136,8 @@ oddXs = (0, step, \state -> state == 1) where
   step 1 'x' = 0
   step _  _  = 2
 
--- This should return True.
-demoOddXs :: Bool
-demoOddXs = runDfa oddXs "xxxxx"
+runDfa oddXs "xxxxx"
+runDfa oddXs "xx"
 \end{code}
 
 How many states should we allow? We could say there is one state for every
@@ -212,9 +211,9 @@ balanced = (0, '-', step, \state -> state == 0) where
     )
   step _ _   = Reject
 
--- This should return True.
-demoBalanced :: Bool
-demoBalanced = runDpda balanced "(()())"
+runDpda balanced "("
+runDpda balanced "()"
+runDpda balanced "(()())"
 \end{code}
 
 It turns out DPDAs are incapable of basic tasks such as checking if the input

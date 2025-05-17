@@ -568,7 +568,7 @@ tySub binds = go where
 unaliasType als = go [] where
   go spine = \case
     TAp x y -> go (go [] y:spine) x
-    TC s | Just (vs, ty) <- mlookup s als -> tySub (zip vs spine) ty
+    TC s | Just (vs, ty) <- mlookup s als -> unaliasType als $ tySub (zip vs spine) ty
     t -> foldl TAp t spine
 
 expandTypeAliases als neat = if size als == 0 then neat else neat
