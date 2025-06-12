@@ -394,15 +394,14 @@ mpCompare (x:xt) (y:yt) = case mpCompare xt yt of
   EQ -> compare x y
   o -> o
 
-mpAdc [] [] c = ([], c)
-mpAdc xs ys c = first (lo:) $ mpAdc xt yt hi where
-  (x, xt) = mpView xs
-  (y, yt) = mpView ys
-  (lo,hi) = uncurry (word64Add c zeroWord) $ word64Add x zeroWord y zeroWord
-
-mpAdd xs ys | c == zeroWord = zs
-            | True = zs ++ [c]
-  where (zs, c) = mpAdc xs ys zeroWord
+mpAdd xs ys = mpAdc xs ys zeroWord where
+  mpAdc [] [] c
+    | c == zeroWord = []
+    | otherwise = [oneWord]
+  mpAdc xs ys c = lo : mpAdc xt yt hi where
+    (x, xt) = mpView xs
+    (y, yt) = mpView ys
+    (lo,hi) = uncurry (word64Add c zeroWord) $ word64Add x zeroWord y zeroWord
 
 mpSub xs ys = fst $ mpSbb xs ys zeroWord
 

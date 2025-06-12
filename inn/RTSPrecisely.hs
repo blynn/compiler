@@ -51,7 +51,6 @@ comdefsrc = [r|
 F x = "foreign(num(1));"
 Y x = x "sp[1]"
 Q x y z = z(y x)
-QQ f a b c d = d(c(b(a(f))))
 S x y z = x z(y z)
 B x y z = x (y z)
 BK x y z = x y
@@ -69,6 +68,20 @@ NUM64 x y = y "sp[1]"
 FLO x = "lazy2(1, _I, app64d((double) num(1)));"
 FLW x = "lazy2(1, _I, app64d((double) (u) num(1)));"
 OLF x = "_NUM" "((int) flo(1))"
+UUADD x y = "lazy2(2, _I, app64uu(uunum(1) + uunum(2)));"
+UUSUB x y = "lazy2(2, _I, app64uu(uunum(1) - uunum(2)));"
+UUMUL x y = "lazy2(2, _I, app64uu(uunum(1) * uunum(2)));"
+UUDIV x y = "lazy2(2, _I, app64uu(uunum(1) / uunum(2)));"
+UUMOD x y = "lazy2(2, _I, app64uu(uunum(1) % uunum(2)));"
+UUAND x y = "lazy2(2, _I, app64uu(uunum(1) & uunum(2)));"
+UUOR x y = "lazy2(2, _I, app64uu(uunum(1) | uunum(2)));"
+UUXOR x y = "lazy2(2, _I, app64uu(uunum(1) ^ uunum(2)));"
+UUSHL x y = "lazy2(2, _I, app64uu(uunum(1) << num(2)));"
+UUSHR x y = "lazy2(2, _I, app64uu(uunum(1) >> num(2)));"
+UUPAD x = "lazy2(1, _I, app64uu((u) num(1)));"
+UUEQ x y = "lazy2(2, _I, uunum(1) == uunum(2) ? _K : _KI);"
+UULE x y = "lazy2(2, _I, uunum(1) <= uunum(2) ? _K : _KI);"
+UULO x = "_NUM" "((u) uunum(1))"
 FADD x y = "lazy2(2, _I, app64d(flo(1) + flo(2)));"
 FSUB x y = "lazy2(2, _I, app64d(flo(1) - flo(2)));"
 FMUL x y = "lazy2(2, _I, app64d(flo(1) * flo(2)));"
@@ -78,13 +91,6 @@ FEQ x y = "lazy2(2, _I, flo(1) == flo(2) ? _K : _KI);"
 FFLOOR x = "lazy2(1, _I, app64d(__builtin_floor(flo(1))));"
 FSQRT x = "lazy2(1, _I, app64d(__builtin_sqrt(flo(1))));"
 PAIR64 x = "{uu n = (*((uu*) (mem + arg(1) + 2)));lazy2(1, app(_V, app(_NUM, n)), app(_NUM, n >> 32));}"
-DADD x y = "lazyDub(dub(1,2) + dub(3,4));"
-DSUB x y = "lazyDub(dub(1,2) - dub(3,4));"
-DMUL x y = "lazyDub(dub(1,2) * dub(3,4));"
-DDIV x y = "lazyDub(dub(1,2) / dub(3,4));"
-DMOD x y = "lazyDub(dub(1,2) % dub(3,4));"
-DSHL x y = "lazyDub(dub(1,2) << dub(3,4));"
-DSHR x y = "lazyDub(dub(1,2) >> dub(3,4));"
 ADD x y = "_NUM" "num(1) + num(2)"
 SUB x y = "_NUM" "num(1) - num(2)"
 MUL x y = "_NUM" "num(1) * num(2)"
@@ -172,7 +178,7 @@ genExport ourType n = ("void f"++) . shows n . ("("++)
   declare (t, x) = (cTypeName t ++) . (' ':) . x
 
 heapify t x = case t of
-  TC "Word64" -> ("app(app(_V, app(_NUM,"++) . x . (")),app(_NUM,"++) . x . (" >> 32))"++)
+  TC "Word64" -> ("app64uu("++) . x . (')':)
   TC "Char" -> num
   TC "Int" -> num
   TC "Word" -> num
@@ -296,15 +302,15 @@ static inline void lazy2(u height, u f, u x) {
 }
 static void lazy3(u height,u x1,u x2,u x3){u*p=mem+sp[height];sp[height-1]=*p=app(x1,x2);*++p=x3;*(sp+=height-2)=x1;}
 typedef unsigned long long uu;
-static inline u app64d(double d) {
+static inline u app64uu(uu n) {
   mem[hp] = _NUM64;
   mem[hp+1] = 0;
-  *((uu*) (mem + hp + 2)) = *((uu*) &d);
+  *((uu*) (mem + hp + 2)) = n;
   return (hp += 4) - 4;
 }
+static inline u app64d(double d) { return app64uu(*((uu*) &d)); }
 static inline double flo(u n) { return *((double*) (mem + arg(n) + 2)); }
-static inline void lazyDub(uu n) { lazy3(4, _V, app(_NUM, n), app(_NUM, n >> 32)); }
-static inline uu dub(u lo, u hi) { return ((uu)num(hi) << 32) + (u)num(lo); }
+static inline uu uunum(u n) { return *((uu*) (mem + arg(n) + 2)); }
 static int div(int a, int b) { int q = a/b; return q - (((u)(a^b)) >> 31)*(q*b!=a); }
 static int mod(int a, int b) { int r = a%b; return r + (((u)(a^b)) >> 31)*(!!r)*b; }
 static inline u tagcheck(u x) { return isAddr(x) ? x&1 ? vmroot[(x - 128 - 1)/2] : x - 128 + hp : x; }

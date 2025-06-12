@@ -377,24 +377,28 @@ instance Integral Word where
 instance Eq Word where (==) = wordEq
 instance Ord Word where (<=) = wordLE
 
-data Word64 = Word64 Word Word deriving Eq
 instance Ring Word64 where
-  Word64 a b + Word64 c d = uncurry Word64 $ word64Add a b c d
-  Word64 a b - Word64 c d = uncurry Word64 $ word64Sub a b c d
-  Word64 a b * Word64 c d = uncurry Word64 $ word64Mul a b c d
-  fromInteger (Integer xsgn xs) = if xsgn then Word64 x y else uncurry Word64 $ word64Sub 0 0 x y where
+  (+) = uuAdd
+  (-) = uuSub
+  (*) = uuMul
+  fromInteger (Integer xsgn xs) = (if xsgn then id else negate) $ uuPad x .|. shiftL (uuPad y) 32 where
     (x, xt) = mpView xs
     (y, _) = mpView xt
-instance Ord Word64 where
-  Word64 a b <= Word64 c d
-    | b == d = a <= c
-    | True = b <= d
+instance Eq Word64 where (==) = uuEq
+showsUU_ n
+  | 0 == n = id
+  | True = showsUU_ (n`div`10) . (chr (48+(fromIntegral $ n`mod`10)):)
+instance Show Word64 where
+  showsPrec _ n
+    | 0 == n = ('0':)
+    | True = showsUU_ n
+instance Ord Word64 where (<=) = uuLE
 instance Integral Word64 where
-  div (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
-  mod (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
-  quot (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Div a b c d
-  rem (Word64 a b) (Word64 c d) = uncurry Word64 $ word64Mod a b c d
-  toInteger (Word64 a b) = Integer True [a, b]
+  div = uuDiv
+  mod = uuMod
+  quot = uuDiv
+  rem = uuMod
+  toInteger x = mpCanon True [wordFromUU x, wordFromUU $ shiftR x 32]
 
 -- Multiprecision arithmetic.
 data Integer = Integer Bool [Word] deriving Eq
@@ -456,44 +460,48 @@ mpCompare (x:xt) (y:yt) = case mpCompare xt yt of
   EQ -> compare x y
   o -> o
 
-mpAdc [] [] c = ([], c)
-mpAdc xs ys c = first (lo:) $ mpAdc xt yt hi where
-  (x, xt) = mpView xs
-  (y, yt) = mpView ys
-  (lo,hi) = uncurry (word64Add c 0) $ word64Add x 0 y 0
-
-mpAdd xs ys | c == 0 = zs
-            | True = zs ++ [c]
-  where (zs, c) = mpAdc xs ys 0
+mpAdd xs ys = mpAdc xs ys 0 where
+  mpAdc [] [] c
+    | c == 0 = []
+    | otherwise = [1]
+  mpAdc xs ys c = wordFromUU n : mpAdc xt yt c' where
+    (x, xt) = mpView xs
+    (y, yt) = mpView ys
+    c' = shiftR n 32
+    n = uuPad x + uuPad y + c
 
 mpSub xs ys = fst $ mpSbb xs ys 0
 
-mpSbb xs ys b = go xs ys b where
+mpSbb = go where
   go [] [] b = ([], b)
-  go xs ys b = first (lo:) $ go xt yt $ 1 - hi where
+  go xs ys b = first (wordFromUU n:) $ go xt yt b' where
     (x, xt) = mpView xs
     (y, yt) = mpView ys
-    (lo,hi) = uncurry word64Sub (word64Sub x 1 y 0) b 0
+    b' = 1 - shiftR n 32
+    n = shiftL 1 32 + uuPad x - uuPad y - b
 
-mpMulWord _ []     c = if c == 0 then [] else [c]
-mpMulWord x (y:yt) c = lo:mpMulWord x yt hi where
-  (lo, hi) = uncurry (word64Add c 0) $ word64Mul x 0 y 0
+mpMulWord x ys = mpMulWord' x ys 0 where
+  mpMulWord' _ []     c = if c == 0 then [] else [wordFromUU c]
+  mpMulWord' x (y:yt) c = lo:mpMulWord' x yt hi where
+    lo = wordFromUU n
+    hi = shiftR n 32
+    n = uuPad x * uuPad y + c
 
 mpMul [] _ = []
-mpMul (x:xt) ys = case mpMulWord x ys 0 of
+mpMul (x:xt) ys = case mpMulWord x ys of
   [] -> []
   z:zs -> z:mpAdd zs (mpMul xt ys)
 
 mpDivModWord xs y = first (reverse . dropWhile (0 ==)) $ go 0 $ reverse xs where
   go r [] = ([], r)
   go n (x:xt) = first (q:) $ go r xt where
-    q = fst $ word64Div x n y 0
+    q = wordFromUU $ (uuPad x + shiftL (uuPad n) 32) `div` uuPad y
     r = x - q*y  -- Only lower bits matter.
 
 mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
   s = mpDivScale $ last ys
-  us = mpMulWord s (xs ++ [0]) 0
-  vs = mpMulWord s ys 0
+  us = mpMulWord s (xs ++ [0])
+  vs = mpMulWord s ys
   (v1:vt) = reverse vs
   vlen = length vs
   go us | ulen <= vlen = ([], fst $ mpDivModWord us s)
@@ -502,13 +510,13 @@ mpDivMod xs ys = first (reverse . dropWhile (== 0)) $ go us where
     ulen = length us
     (u0:u1:ut) = reverse us
     (lsbs, msbs) = splitAt (ulen - vlen - 1) us
-    (ql, qh) = word64Div u1 u0 v1 0
-    q0 = if 1 <= qh then -1 else ql
-    (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- 1) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs 0) 0, bor == 0]
+    quu = (uuPad u1 + shiftL (uuPad u0) 32) `div` uuPad v1
+    q0 = if shiftL 1 32 <= quu then -1 else wordFromUU quu
+    (q, ds) = foldr const undefined [(q, ds) | q <- iterate (- 1) q0, let (ds, bor) = mpSbb msbs (mpMulWord q vs) 0, bor == 0]
 
 mpDivScale n
   | n1 == 0 = 1
-  | otherwise = fst $ word64Div 0 1 n1 0
+  | otherwise = wordFromUU $ shiftL 1 32 `div` uuPad n1
   where n1 = succ n
 
 mpBase _ [] = ('0':)
@@ -569,8 +577,6 @@ instance Show Word where
   showsPrec _ n
     | 0 == n = ('0':)
     | True = showWord_ n
-instance Show Word64 where
-  showsPrec p (Word64 x y) = showsPrec p $ Integer True [x, y]
 showLitChar__ '\n' = ("\\n"++)
 showLitChar__ '\\' = ("\\\\"++)
 showLitChar__ c
@@ -685,10 +691,10 @@ instance Bits Int where
   xor = intXor
   (.&.) = intAnd
   (.|.) = intOr
-  shiftL n i = intShl n $ fromIntegral i
-  shiftR n i = intShr n $ fromIntegral i
-  rotateL n i = intOr (intShr n $ 32 - u) (intShl n u) where u = fromIntegral i
-  rotateR n i = intOr (intShr n u) (intShl n $ 32 - u) where u = fromIntegral i
+  shiftL n i = intShl n i
+  shiftR n i = intShr n i
+  rotateL n i = intOr (intShr n $ 32 - i) (intShl n i)
+  rotateR n i = intOr (intShr n i) (intShl n $ 32 - i)
 
 instance Bits Word where
   xor = wordXor
@@ -696,27 +702,14 @@ instance Bits Word where
   (.|.) = wordOr
   shiftL n i = wordShl n $ fromIntegral i
   shiftR n i = wordShr n $ fromIntegral i
-  rotateL n i = wordOr (wordShr n $ 32 - u) (wordShl n u) where u = fromIntegral i
-  rotateR n i = wordOr (wordShr n u) (wordShl n $ 32 - u) where u = fromIntegral i
+  rotateL n i = wordOr (wordShr n $ 32 - i) (wordShl n i)
+  rotateR n i = wordOr (wordShr n i) (wordShl n $ 32 - i)
 
 instance Bits Word64 where
-  xor (Word64 a b) (Word64 c d) = Word64 (wordXor a c) (wordXor b d)
-  (Word64 a b) .&. (Word64 c d) = Word64 (wordAnd a c) (wordAnd b d)
-  (Word64 a b) .|. (Word64 c d) = Word64 (wordOr a c) (wordOr b d)
-  shiftL (Word64 a b) i
-    | u >= 32 = Word64 0 $ wordShl a $ u - 32
-    | otherwise = Word64 (wordShl a u) (wordShr a (32 - u) + wordShl b u)
-    where u = fromIntegral i
-  shiftR (Word64 a b) i
-    | u >= 32 = Word64 (wordShr b $ u - 32) 0
-    | otherwise = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u)
-    where u = fromIntegral i
-  rotateL (Word64 a b) i = let n = wordFromInt i in
-    uncurry Word64 (word64Shl a b n 0) .|.
-    uncurry Word64 (word64Shr a b (64 - n) 0)
-  rotateR (Word64 a b) i
-    | u >= 32 = small b a $ u - 32
-    | otherwise = small a b u
-    where
-    u = fromIntegral i
-    small a b u = Word64 (wordShr a u + wordShl b (32 - u)) (wordShr b u + wordShl a (32 - u))
+  xor = uuXor
+  (.&.) = uuAnd
+  (.|.) = uuOr
+  shiftL n i = uuShl n $ fromIntegral i
+  shiftR n i = uuShr n $ fromIntegral i
+  rotateL n i = uuOr (uuShr n $ 64 - i) (uuShl n i)
+  rotateR n i = uuOr (uuShr n i) (uuShl n $ 64 - i)
