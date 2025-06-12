@@ -3,7 +3,7 @@
 link:.[I may have failed that stupid Compilers exam] but at least I can boast
 of authoring an award-winning compiler!
 
-(Even if the award is from the https://www.ioccc.org/2019/whowon.html[26th
+(Even if the award is from the https://www.ioccc.org/2019/lynn/index.html[26th
 International Obfuscated C Code Contest].)
 
 The source looks like the following. The original uses raw tabs, vertical tabs,
@@ -129,7 +129,7 @@ f <$> x <*> y
 
 I should have defined `liftA2` to save room.
 
-Perhaps defining `(<)` instead of `(<=)` would have shaved off a byte.
+Perhaps defining `(<)` instead of `+(<=)+` would have shaved off a byte.
 
 A different mixed-radix encoding would still be invisible to
 `iocccsize` but takes less room. The corresponding decoder needs more C, but
