@@ -102,5 +102,5 @@ The JavaScript variable `repl.outdiv` refers to a DIV element suitable for
 placing output, as it is refreshed every run.
 
 \begin{code}
-jsEval [r|repl.outdiv.innerHTML = `<svg version="1.1" height="100" width="100" xmlns="http://www.w3.org/2000/svg"><circle r="45" cx="50" cy="50" fill="peachpuff" /></svg>`;|]
+jsEval [r|repl.outdiv.innerHTML = `<svg height="100" width="100"><circle r="45" cx="50" cy="50" fill="peachpuff" /></svg>`;|]
 \end{code}

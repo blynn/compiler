@@ -428,15 +428,14 @@ pat = patChain <$> patAtom <*> many (PatCon <$> qconop <*> ((:[]) <$> patAtom))
 
 maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 
-gdSep s = maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
-guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
+gdSep s = maybeWhere $ res s *> expr <|> foldr (\x no -> A (L "no#" x) no) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
+guards = foldr1 (\f g -> \yes -> f (g yes)) <$> sepBy1 guard comma
 guard = guardPat <$> pat <*> (res "<-" *> expr) <|> guardExpr <$> expr
-  <|> guardLets <$> (res "let" *> braceDef)
-guardExpr x yes no = case x of
+  <|> addLets <$> (res "let" *> braceDef)
+guardExpr x yes = case x of
   V "True" -> yes
-  _ -> A (A (A (V "if") x) yes) no
-guardPat p x yes no = A (Pa [([p], yes), ([PatVar "_" Nothing], no)]) x
-guardLets defs yes no = addLets defs yes
+  _ -> A (A (A (V "if") x) yes) (V "no#")
+guardPat p x yes = A (Pa [([p], yes), ([PatVar "_" Nothing], V "no#")]) x
 
 onePat vs x = joinIsFail $ Pa [(vs, x)]
 defOnePat vs x = Pa [(vs, x)]

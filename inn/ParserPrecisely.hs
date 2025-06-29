@@ -533,18 +533,17 @@ maybeWhere p = (&) <$> p <*> (res "where" *> (addLets <$> braceDef) <|> pure id)
 gateGuard :: (a -> Ast -> b) -> Parser a -> String -> Parser b
 gateGuard f lhsParser s = do
   x <- try $ lhsParser <* lookahead (res s <|> res "|")
-  y <- maybeWhere $ res s *> expr <|> foldr ($) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
+  y <- maybeWhere $ res s *> expr <|> foldr (\x no -> A (L "no#" x) no) (V "join#") <$> some (between (res "|") (res s) guards <*> expr)
   pure $ f x y
 
-guards = foldr1 (\f g -> \yes no -> f (g yes no) no) <$> sepBy1 guard comma
+guards = foldr1 (\f g -> \yes -> f (g yes)) <$> sepBy1 guard comma
 guard = try (guardPat <$> pat <*> (res "<-" *> expr))
-  <|> guardLets <$> (res "let" *> braceDef)
+  <|> addLets <$> (res "let" *> braceDef)
   <|> guardExpr <$> expr
-guardExpr x yes no = case x of
+guardExpr x yes = case x of
   V "True" -> yes
-  _ -> A (A (A (V "if") x) yes) no
-guardPat p x yes no = A (Pa [([p], yes), ([PatVar "_" Nothing], no)]) x
-guardLets defs yes no = addLets defs yes
+  _ -> A (A (A (V "if") x) yes) (V "no#")
+guardPat p x yes = A (Pa [([p], yes), ([PatVar "_" Nothing], V "no#")]) x
 
 onePat vs x = joinIsFail $ Pa [(vs, x)]
 leftyPat p expr = case pvars of
