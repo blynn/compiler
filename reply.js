@@ -32,7 +32,8 @@ async function mkRepl() {
 
     , eval_put : c  => repl.eval_in.push(c)
     , eval_run : () => {
-        repl.eval_out = teen(eval(tedea(repl.eval_in)));
+        const a = eval(tedea(repl.eval_in));
+        repl.eval_out = a instanceof Uint8Array ? a : teen(a);
         repl.eval_in = [];
       }
     , eval_size: () => repl.eval_out.length

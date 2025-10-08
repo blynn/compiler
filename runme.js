@@ -2,6 +2,8 @@ let runme_out;
 
 let curl_module;
 
+let repl;
+
 async function run_runmes() {
   const stash = document.createElement("div");
   const cellmenu = document.createElement("div");
@@ -9,7 +11,7 @@ async function run_runmes() {
   cellmenu.innerHTML = `<div class="cellmenukid"><div id="cellmenubuttons">
 </div> </div>`;
 
-  const repl = await mkRepl();
+  repl = await mkRepl();
   let prom = undefined;
   curl_module = function(url) { prom = repl.fetch_module(url); }
   repl.runCount = 0;
