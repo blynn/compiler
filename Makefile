@@ -58,8 +58,6 @@ DOHSYS=inn/SystemWasm.hs inn/SystemArg.hs inn/ReplyImports.hs inn/ObjMapImports.
 
 doh.c: $(DOHSYS) inn/reply.hs inn/reply-wasm.hs $(COMMONOB); (cat $^ | ./precisely wasm ; cat inn/introspect.c ; cat $(DOHSYS) Base.ob | ./precisely objc) > $@
 
-doh.html:doh.txt menu.html;./stitch book menu $<
-
 chat.html:chat.txt menu.html;./stitch book menu $<
 
 $(call rtsup,patty,lonely)
