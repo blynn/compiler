@@ -1,5 +1,5 @@
 .errmsg{color:red;}
-.inlabel{
+.inlabel, .outlabel{
 font-family:'Inconsolata',monospace;
 min-width:3em;
 text-align:right;
@@ -14,11 +14,6 @@ white-space:pre-wrap;
 }
 .incode:focus{
 background-color:white;
-}
-.outlabel{
-font-family:'Inconsolata',monospace;
-min-width:3em;
-text-align:right;
 }
 .output{
 margin-bottom:1em;

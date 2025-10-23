@@ -1,7 +1,6 @@
+"use strict";
 let runme_out;
-
 let curl_module;
-
 let repl;
 
 async function run_runmes() {
