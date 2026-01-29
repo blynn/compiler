@@ -22,7 +22,7 @@ atp.c: atp.lhs precisely $(BCS_HS); (./unlit < atp.lhs && cat $(BCS_HS)) | ./pre
 
 eq.js: eq.lhs ; -mv Main.jsmod /tmp; hastec --opt-all -Wall $^ && closure-compiler $@ > $@.clo && mv $@.clo $@
 
-menu.html: menu; ./stitch menu menu
+menu.html: menu ; stitch menu $< && cat ../homepage/menustamp.html >> $@
 
 %.html: %.merc;MERC=1 stitch book menu $<
 %.html: %.run menu.html; ./stitch book menu $<
