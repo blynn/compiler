@@ -58,8 +58,8 @@ fix f = f (fix f)
 cons = (:)
 b = (.)
 lst t x y = case t of {[] -> x; h:t -> y h t}
-must f s = case s of {[] -> undefined; h:t -> f h t}
 
+must f s = case s of {[] -> undefined; h:t -> f h t}
 orChurch f g x y = f x (g x y)
 isPre h = orChurch (eq '#' h) (eq '@' h)
 closes h = orChurch (eq ';' h) (eq ')' h)

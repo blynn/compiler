@@ -270,8 +270,8 @@ fix f = f (fix f)
 cons = (:)
 b = (.)
 lst t x y = case t of {[] -> x; h:t -> y h t}
-must f s = case s of {[] -> undefined; h:t -> f h t}
 
+must f s = case s of {[] -> undefined; h:t -> f h t}
 orChurch f g x y = f x (g x y)
 isPre h = orChurch (eq '#' h) (eq '@' h)
 closes h = orChurch (eq ';' h) (eq ')' h)
@@ -421,13 +421,17 @@ void runTests() {
     "y",
     "`xy");
   testCase("`K``:#f``:#xK;", "", "fx");
-  // atom id 'x' "f"
-  testCaseMore(parenthetically, "`K```@'I#x``:#fK;", "", "`fx");
-  // if3 ')' "1" "2" "3"
-  testCaseMore(parenthetically, "`K````@*#)``:#1K``:#2K``:#3K;", "", "1");
-  // fst . term
-  testCaseMore(parenthetically, "``B`TK`@,K;",
-    "just(one);not(two);", "````just``one");
+
+  // isPre '@' "Y" "N"
+  testCaseMore(parenthetically, "`K```@\"#@``:#YK``:#NK;", "", "Y");
+  // isPre '#' "Y" "N"
+  testCaseMore(parenthetically, "`K```@\"##``:#YK``:#NK;", "", "Y");
+  // isPre ')' "Y" "N"
+  testCaseMore(parenthetically, "`K```@\"#)``:#YK``:#NK;", "", "N");
+  // closes ')' "Y" "N"
+  testCaseMore(parenthetically, "`K```@##)``:#YK``:#NK;", "", "Y");
+  // closes '@' "Y" "N"
+  testCaseMore(parenthetically, "`K```@##@``:#YK``:#NK;", "", "N");
   testCase(parenthetically, "par(en);(t(he)(ses));K;(I);", "```par`en;``t`he``ses;K;I;");
 }
 

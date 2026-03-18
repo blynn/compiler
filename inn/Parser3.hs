@@ -485,7 +485,7 @@ tops = braceSep
   <|> fixity
   <|> impDecl
 
-export_ = ExportVar <$> varId <|> ExportCon <$> conId <*>
+export_ = ExportVar <$> (varId <|> paren varSym) <|> ExportCon <$> conId <*>
   (   paren ((:[]) <$> res ".." <|> sepBy (var <|> con) comma)
   <|> pure []
   )

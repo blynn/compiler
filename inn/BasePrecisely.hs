@@ -200,6 +200,10 @@ last (x:xt) = go x xt where go x xt = case xt of [] -> x; y:yt -> go y yt
 init (x:xt) = case xt of [] -> []; _ -> x : init xt
 intercalate sep = \case [] -> []; x:xt -> x ++ concatMap (sep ++) xt
 intersperse sep = \case [] -> []; x:xt -> x : foldr ($) [] (((sep:) .) . (:) <$> xt)
+subsequences xs         =  [] : nonEmptySubsequences xs
+nonEmptySubsequences []      =  []
+nonEmptySubsequences (x:xs)  =  [x] : foldr f [] (nonEmptySubsequences xs)
+  where f ys r = ys : (x : ys) : r
 all f = and . map f
 any f = or . map f
 and = foldr (&&) True
