@@ -88,6 +88,11 @@ static u evac(u n) {
   mem[n + 1] = z;
   altmem[z] = x;
   altmem[z + 1] = y;
+  if (x == _NUM64) {
+    hp += 2;
+    altmem[z + 2] = mem[n + 2];
+    altmem[z + 3] = mem[n + 3];
+  }
   return z;
 }
 
@@ -100,7 +105,8 @@ static void gc() {
   while (di < hp) {
     u x = altmem[di] = evac(altmem[di]);
     di++;
-    if (x != _NUM) altmem[di] = evac(altmem[di]);
+    if (x == _NUM64) di += 2;
+    else if (x != _NUM) altmem[di] = evac(altmem[di]);
     di++;
   }
   spTop = sp;
