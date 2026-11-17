@@ -414,7 +414,9 @@ rtsReduce opts =
 void rts_reduce(u n) {
   rts_init(), *(sp = spTop) = app(app(n, _UNDEFINED), _END);
 |]++)
-  . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++) else ("run();"++))
+  . (if "pre-post-run" `elem` opts then ("pre_run();run();post_run();"++)
+    else if "warts" `elem` opts || "no-main" `elem` opts then ("run();"++)
+    else ("u status = run();if(status == 3)fputs(\"heap full\\n\", stderr);if(status != 1)exit(1);"++))
   . ("\n}\n"++)
 
 -- Hash consing.
