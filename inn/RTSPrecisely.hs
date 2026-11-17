@@ -217,6 +217,43 @@ void *malloc(unsigned long);
 enum { FORWARD = 127, REDUCING = 126 };
 static u *mem, *altmem, *sp, *spTop, hp;
 static inline u isAddr(u n) { return n>=128; }
+static u evac(u n);
+
+static u evac_chain(u n) {
+  u head = n, r;
+  for(;;) {
+    mem[n] = REDUCING;
+    n = mem[n + 1];
+    if (!isAddr(n)) { r = n; break; }
+    u x = mem[n];
+    while (isAddr(x) && mem[x] == _T) {
+      mem[n] = mem[n + 1];
+      mem[n + 1] = mem[x + 1];
+      x = mem[n];
+    }
+    if (isAddr(x) && mem[x] == _K) {
+      mem[n + 1] = mem[x + 1];
+      x = mem[n] = _I;
+    }
+    if (x == REDUCING) {
+      r = hp;
+      hp += 2;
+      altmem[r] = _I;
+      altmem[r + 1] = r;
+      break;
+    }
+    if (x != _I) { r = evac(n); break; }
+  }
+  n = head;
+  while (isAddr(n) && mem[n] == REDUCING) {
+    u next = mem[n + 1];
+    mem[n] = FORWARD;
+    mem[n + 1] = r;
+    n = next;
+  }
+  return r;
+}
+
 static u evac(u n) {
   if (!isAddr(n)) return n;
   u x = mem[n];
@@ -237,17 +274,7 @@ static u evac(u n) {
       mem[n + 1] = hp;
       hp += 2;
       return mem[n + 1];
-    case _I:
-      mem[n] = REDUCING;
-      y = evac(y);
-      if (mem[n] == FORWARD) {
-        altmem[mem[n + 1]] = _I;
-        altmem[mem[n + 1] + 1] = y;
-      } else {
-        mem[n] = FORWARD;
-        mem[n + 1] = y;
-      }
-      return mem[n + 1];
+    case _I: return evac_chain(n);
     default: break;
   }
   u z = hp;
